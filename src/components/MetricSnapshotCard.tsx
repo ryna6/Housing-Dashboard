@@ -1,7 +1,7 @@
 import React from "react";
 import type { PanelPoint } from "../data/types";
 
-interface Snapshot {
+export interface Snapshot {
   metric: string;
   latest: PanelPoint;
   prev: PanelPoint | null;
@@ -13,28 +13,45 @@ interface Props {
 
 export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
   const { metric, latest, prev } = snapshot;
-  const deltaAbs = prev ? latest.value - prev.value : null;
-  const deltaPct = prev && prev.value !== 0
-    ? (latest.value / prev.value - 1) * 100
-    : null;
+
+  const deltaAbs =
+    prev && prev.value !== undefined ? latest.value - prev.value : null;
+  const deltaPct =
+    prev && prev.value
+      ? ((latest.value / prev.value - 1) * 100)
+      : null;
 
   const signClass =
-    deltaPct == null ? "" : deltaPct > 0 ? "metric-card__delta--up" : "metric-card__delta--down";
+    deltaPct == null
+      ? ""
+      : deltaPct > 0
+      ? "metric-card__delta--up"
+      : "metric-card__delta--down";
 
-  const formatVal = (v: number) =>
-    metric.includes("price") || latest.unit.startsWith("$")
-      ? v.toLocaleString("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 })
-      : latest.unit === "percent"
-      ? `${v.toFixed(1)}%`
-      : v.toLocaleString("en-CA", { maximumFractionDigits: 1 });
+  const formatVal = (v: number) => {
+    if (metric.includes("price") || latest.unit.startsWith("$")) {
+      return v.toLocaleString("en-CA", {
+        style: "currency",
+        currency: "CAD",
+        maximumFractionDigits: 0
+      });
+    }
+
+    if (latest.unit === "percent") {
+      return `${v.toFixed(1)}%`;
+    }
+
+    return v.toLocaleString("en-CA", { maximumFractionDigits: 1 });
+  };
 
   return (
     <div className="metric-card">
       <div className="metric-card__label">{metric}</div>
       <div className="metric-card__value">
-        {formatVal(latest.value)}{" "}
+        {formatVal(latest.value)}
         <span className="metric-card__unit">{latest.unit}</span>
       </div>
+
       {deltaPct != null && (
         <div className={`metric-card__delta ${signClass}`}>
           {deltaAbs !== null ? formatVal(deltaAbs) : ""} (
@@ -43,6 +60,7 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
           <span className="metric-card__delta-label"> MoM</span>
         </div>
       )}
+
       {latest.yoy_pct != null && (
         <div className="metric-card__secondary">
           YoY: {latest.yoy_pct > 0 ? "+" : ""}
@@ -52,4 +70,3 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
     </div>
   );
 };
-
