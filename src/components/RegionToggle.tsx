@@ -6,14 +6,14 @@ const REGION_LABELS: Record<RegionCode, string> = {
   on: "Ontario",
   bc: "British Columbia",
   gta: "Toronto (GTA)",
-  metro_vancouver: "Metro Vancouver",
+  metro_vancouver: "Metro Vancouver"
 };
 
 interface Props {
   value: RegionCode;
   onChange: (value: RegionCode) => void;
-  allowedRegions: RegionCode[];   // e.g. ["canada","on","bc"]
-  disabledRegions?: RegionCode[]; // for metrics that are national only
+  allowedRegions: RegionCode[];
+  disabledRegions?: RegionCode[];
   note?: string;
 }
 
@@ -22,21 +22,25 @@ export const RegionToggle: React.FC<Props> = ({
   onChange,
   allowedRegions,
   disabledRegions = [],
-  note,
+  note
 }) => {
   return (
     <div className="region-toggle">
-      {allowedRegions.map(region => {
+      {allowedRegions.map((region) => {
         const disabled = disabledRegions.includes(region);
+        const classes = [
+          "region-toggle__btn",
+          value === region ? "region-toggle__btn--active" : "",
+          disabled ? "region-toggle__btn--disabled" : ""
+        ]
+          .filter(Boolean)
+          .join(" ");
+
         return (
           <button
             key={region}
             disabled={disabled}
-            className={
-              "region-toggle__btn" +
-              (value === region ? " region-toggle__btn--active" : "") +
-              (disabled ? " region-toggle__btn--disabled" : "")
-            }
+            className={classes}
             onClick={() => !disabled && onChange(region)}
           >
             {REGION_LABELS[region]}
@@ -47,4 +51,3 @@ export const RegionToggle: React.FC<Props> = ({
     </div>
   );
 };
-
