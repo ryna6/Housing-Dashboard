@@ -40,4 +40,3 @@ export const MarketSelector: React.FC<Props> = ({ value, onChange }) => {
     </div>
   );
 };
-
