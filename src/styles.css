@@ -32,6 +32,11 @@ body {
   margin-bottom: 12px;
 }
 
+.tab__note {
+  font-size: 13px;
+  color: #6b7280;
+}
+
 /* Region toggle */
 
 .region-toggle {
@@ -108,7 +113,7 @@ body {
   gap: 10px;
 }
 
-/* Larger screens: two-column charts, 2-3 cards per row */
+/* Larger screens: two-column charts, cards per row */
 
 @media (min-width: 768px) {
   .card-grid {
@@ -171,6 +176,13 @@ body {
   border-radius: 10px;
   padding: 8px 8px 2px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  min-height: 180px;
+}
+
+.chart-panel__empty {
+  font-size: 12px;
+  color: #6b7280;
+  padding: 16px;
 }
 
 /* Bottom nav */
@@ -211,4 +223,3 @@ body {
   font-size: 18px;
   line-height: 1;
 }
-
