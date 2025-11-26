@@ -3,14 +3,14 @@ import type { PanelPoint, RegionCode } from "../data/types";
 import { loadTabData, getLatestByMetric } from "../data/dataClient";
 import { RegionToggle } from "../components/RegionToggle";
 import { MarketSelector } from "../components/MarketSelector";
-import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
+import { MetricSnapshotCard, Snapshot } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 
 export const PricesTab: React.FC = () => {
   const [data, setData] = useState<PanelPoint[]>([]);
   const [region, setRegion] = useState<RegionCode>("canada");
   const [market, setMarket] = useState<RegionCode | null>(null);
-  const [segment, setSegment] = useState<string>("all");
+  const [segment] = useState<string>("all");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,22 +23,24 @@ export const PricesTab: React.FC = () => {
 
   const baseMetrics = ["hpi_benchmark", "avg_price_gvr", "avg_price_trreb"];
 
-  const latestSnapshots = getLatestByMetric(data, region, baseMetrics, segment);
+  const latestSnapshots = getLatestByMetric(
+    data,
+    market ?? region,
+    baseMetrics,
+    segment
+  ) as Snapshot[];
 
-  // Filter series for current region / market
   const regionFilter = (p: PanelPoint) =>
     p.segment === segment &&
-    (
-      (market === null && p.region === region) ||
-      (market !== null && p.region === market)
-    );
+    ((market === null && p.region === region) ||
+      (market !== null && p.region === market));
 
   const hpiSeries = data.filter(
-    p => regionFilter(p) && p.metric === "hpi_benchmark"
+    (p) => regionFilter(p) && p.metric === "hpi_benchmark"
   );
 
-  const hpiMomSeries = hpiSeries.filter(p => p.mom_pct !== null);
-  const hpiYoySeries = hpiSeries.filter(p => p.yoy_pct !== null);
+  const hpiMomSeries = hpiSeries.filter((p) => p.mom_pct != null);
+  const hpiYoySeries = hpiSeries.filter((p) => p.yoy_pct != null);
 
   return (
     <div className="tab">
@@ -52,24 +54,18 @@ export const PricesTab: React.FC = () => {
       </div>
 
       <div className="card-grid">
-        {latestSnapshots.map(snap => (
-          <MetricSnapshotCard key={snap!.metric} snapshot={snap!} />
+        {latestSnapshots.length === 0 && (
+          <div className="tab__note">No price data yet.</div>
+        )}
+        {latestSnapshots.map((snap) => (
+          <MetricSnapshotCard key={snap.metric} snapshot={snap} />
         ))}
       </div>
 
       <div className="chart-grid">
-        <ChartPanel
-          title="HPI MoM %"
-          series={hpiMomSeries}
-          valueKey="mom_pct"
-        />
-        <ChartPanel
-          title="HPI YoY %"
-          series={hpiYoySeries}
-          valueKey="yoy_pct"
-        />
+        <ChartPanel title="HPI MoM %" series={hpiMomSeries} valueKey="mom_pct" />
+        <ChartPanel title="HPI YoY %" series={hpiYoySeries} valueKey="yoy_pct" />
       </div>
     </div>
   );
 };
-
