@@ -34,7 +34,7 @@ jobs:
         working-directory: ./etl
         run: python main.py
 
-      - name: Validate there are changes
+      - name: Check for changes in processed data
         id: git-status
         run: |
           if [[ -z "$(git status --porcelain data/processed)" ]]; then
@@ -53,4 +53,3 @@ jobs:
           git add data/processed
           git commit -m "chore: monthly data refresh"
           git push
-
