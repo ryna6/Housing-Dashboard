@@ -1,1 +1,6 @@
+pandas
+requests
+openpyxl
+python-dateutil
+pydantic
 
