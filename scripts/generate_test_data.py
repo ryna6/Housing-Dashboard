@@ -20,11 +20,13 @@ from __future__ import annotations
 import json
 import math
 import urllib.request
+from urllib.error import HTTPError, URLError
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
+
 
 
 
@@ -84,44 +86,52 @@ def fetch_boc_series_monthly(
     """
     Fetch one or more Bank of Canada Valet series and aggregate to monthly averages.
 
+    We use one HTTP call *per series* using the documented pattern:
+      https://www.bankofcanada.ca/valet/observations/{seriesId}/json?start_date=...
+
     Returns a dict:
         {
           "YYYY-MM-01": { "V39079": 4.75, "V122538": 3.10, ... },
           ...
         }
+
+    Any HTTP/connection errors are logged but do NOT raise, so builds don't fail.
     """
     base = "https://www.bankofcanada.ca/valet/observations"
-    sid_str = ",".join(series_ids)
-    params = f"?start_date={start}"
-    if end:
-        params += f"&end_date={end}"
-    url = f"{base}/{sid_str}/json{params}"
-
-    with urllib.request.urlopen(url, timeout=30) as resp:
-        payload = json.load(resp)
-
-    observations = payload.get("observations", [])
 
     # month_key -> series_id -> list of daily values to average
-    monthly: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+    monthly_lists: Dict[str, Dict[str, List[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
 
-    for o in observations:
-        d_str = o.get("d")
-        if not d_str:
+    for sid in series_ids:
+        params = f"?start_date={start}"
+        if end:
+            params += f"&end_date={end}"
+        url = f"{base}/{sid}/json{params}"
+
+        try:
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                payload = json.load(resp)
+        except (HTTPError, URLError, TimeoutError, ValueError) as e:
+            # Don't kill the build if BoC is down or series is missing
+            print(f"[WARN] BoC Valet fetch failed for {sid}: {e}")
             continue
 
-        # Dates are usually ISO like "2025-10-31"
-        try:
-            d = datetime.fromisoformat(d_str).date()
-        except Exception:
+        observations = payload.get("observations", [])
+        for o in observations:
+            d_str = o.get("d")
+            if not d_str:
+                continue
+
+            # Dates are ISO like "2025-10-31"
             try:
-                d = datetime.strptime(d_str[:10], "%Y-%m-%d").date()
+                d = datetime.fromisoformat(d_str[:10]).date()
             except Exception:
                 continue
 
-        month_key = date(d.year, d.month, 1).isoformat()
+            month_key = date(d.year, d.month, 1).isoformat()
 
-        for sid in series_ids:
             v_obj = o.get(sid)
             if not isinstance(v_obj, dict):
                 continue
@@ -132,17 +142,221 @@ def fetch_boc_series_monthly(
                 v = float(v_str)
             except Exception:
                 continue
-            monthly[month_key][sid].append(v)
 
-    result: Dict[str, Dict[str, float]] = {}
-    for month_key, per_sid in monthly.items():
-        result[month_key] = {}
+            monthly_lists[month_key][sid].append(v)
+
+    # Collapse lists to averages
+    monthly: Dict[str, Dict[str, float]] = {}
+    for month_key, per_sid in monthly_lists.items():
+        monthly[month_key] = {}
         for sid, values in per_sid.items():
-            if not values:
-                continue
-            result[month_key][sid] = sum(values) / len(values)
+            if values:
+                monthly[month_key][sid] = sum(values) / len(values)
 
-    return result
+    return monthly
+
+# synthetic rates if boc valet does not return
+def generate_rates_synthetic() -> List[PanelRow]:
+    """
+    Synthetic fallback for rates if BoC Valet is unavailable.
+    This is essentially your original test-data version.
+    """
+    rows: List[PanelRow] = []
+    region = "canada"
+
+    # Policy rate (slow decline)
+    base = 4.5
+    vals: List[float] = []
+    for i, dt in enumerate(MONTHS):
+        vals.append(base - i * 0.05)
+    mom, yoy, ma3 = compute_changes(vals)
+    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
+        rows.append(
+            PanelRow(
+                date=dt.isoformat(),
+                region=region,
+                segment="all",
+                metric="policy_rate",
+                value=round(val, 3),
+                unit="pct",
+                source="test_rates",
+                mom_pct=round(m, 3) if m is not None else None,
+                yoy_pct=round(y, 3) if y is not None else None,
+                ma3=round(ma, 3),
+            )
+        )
+
+    # 5y mortgage
+    base = 5.0
+    vals = []
+    for i, dt in enumerate(MONTHS):
+        vals.append(base - i * 0.03)
+    mom, yoy, ma3 = compute_changes(vals)
+    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
+        rows.append(
+            PanelRow(
+                date=dt.isoformat(),
+                region=region,
+                segment="all",
+                metric="mortgage_5y",
+                value=round(val, 3),
+                unit="pct",
+                source="test_rates",
+                mom_pct=round(m, 3) if m is not None else None,
+                yoy_pct=round(y, 3) if y is not None else None,
+                ma3=round(ma, 3),
+            )
+        )
+
+    def add_yield(metric: str, start: float, step: float) -> None:
+        vals: List[float] = []
+        for i, dt in enumerate(MONTHS):
+            vals.append(start - i * step)
+        mom, yoy, ma3 = compute_changes(vals)
+        for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt.isoformat(),
+                    region=region,
+                    segment="all",
+                    metric=metric,
+                    value=round(val, 3),
+                    unit="pct",
+                    source="test_rates",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+
+    add_yield("gov_2y_yield", 4.0, 0.04)
+    add_yield("gov_5y_yield", 3.8, 0.03)
+    add_yield("gov_10y_yield", 3.5, 0.02)
+
+    # Spread = mortgage_5y - gov_5y_yield
+    mort_by_date = {
+        r.date: r
+        for r in rows
+        if r.metric == "mortgage_5y" and r.region == region
+    }
+    gov5_by_date = {
+        r.date: r
+        for r in rows
+        if r.metric == "gov_5y_yield" and r.region == region
+    }
+
+    vals = []
+    for dt in MONTHS:
+        ds = dt.isoformat()
+        mv = mort_by_date[ds].value
+        gv = gov5_by_date[ds].value
+        vals.append(mv - gv)
+    mom, yoy, ma3 = compute_changes(vals)
+    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
+        rows.append(
+            PanelRow(
+                date=dt.isoformat(),
+                region=region,
+                segment="all",
+                metric="mortgage_5y_spread",
+                value=round(val, 3),
+                unit="pct",
+                source="test_rates",
+                mom_pct=round(m, 3) if m is not None else None,
+                yoy_pct=round(y, 3) if y is not None else None,
+                ma3=round(ma, 3),
+            )
+        )
+
+    return rows
+
+
+# generating real rates
+def generate_rates_from_boc() -> List[PanelRow]:
+    """
+    Generate rates data using *real* Bank of Canada series via the Valet API.
+
+    Metrics → BoC series:
+      - policy_rate      -> V39079   (Target for the overnight rate, %)
+      - gov_2y_yield     -> V122538  (2-year GoC benchmark bond yield, %)
+      - gov_5y_yield     -> V122540  (5-year GoC benchmark bond yield, %)
+      - gov_10y_yield    -> V122487  (Long-term GoC bond yield >10y, %)
+      - mortgage_5y      -> V122521  (Conventional mortgage rate, 5-year, %)
+    """
+    rows: List[PanelRow] = []
+    region = "canada"
+
+    series_by_metric: Dict[str, Tuple[str, str]] = {
+        "policy_rate": ("V39079", "pct"),
+        "gov_2y_yield": ("V122538", "pct"),
+        "gov_5y_yield": ("V122540", "pct"),
+        "gov_10y_yield": ("V122487", "pct"),
+        "mortgage_5y": ("V122521", "pct"),
+    }
+
+    all_series_ids = [cfg[0] for cfg in series_by_metric.values()]
+
+    monthly = fetch_boc_series_monthly(all_series_ids, start="2000-01-01")
+    if not monthly:
+        # Let caller decide whether to fall back
+        return []
+
+    for metric, (series_id, unit) in series_by_metric.items():
+        month_keys = sorted(
+            d
+            for d, per_sid in monthly.items()
+            if series_id in per_sid and per_sid[series_id] is not None
+        )
+        if not month_keys:
+            continue
+
+        vals: List[float] = [monthly[d][series_id] for d in month_keys]
+        mom, yoy, ma3 = compute_changes(vals)
+
+        for dt_str, val, m, y, ma in zip(month_keys, vals, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt_str,
+                    region=region,
+                    segment="all",
+                    metric=metric,
+                    value=round(val, 3),
+                    unit=unit,
+                    source="boc_valet",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+
+    # Derive mortgage_5y_spread where both mortgage_5y and gov_5y_yield are available
+    mort_by_date = {r.date: r for r in rows if r.metric == "mortgage_5y"}
+    g5_by_date = {r.date: r for r in rows if r.metric == "gov_5y_yield"}
+
+    common_dates = sorted(set(mort_by_date.keys()) & set(g5_by_date.keys()))
+    if common_dates:
+        spread_vals: List[float] = [
+            mort_by_date[d].value - g5_by_date[d].value for d in common_dates
+        ]
+        mom, yoy, ma3 = compute_changes(spread_vals)
+
+        for dt_str, val, m, y, ma in zip(common_dates, spread_vals, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt_str,
+                    region=region,
+                    segment="all",
+                    metric="mortgage_5y_spread",
+                    value=round(val, 3),
+                    unit="pct",
+                    source="boc_valet_derived",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+
+    return rows
 
 # end of rates test
 
@@ -481,93 +695,20 @@ def generate_rentals() -> List[PanelRow]:
 # rates test
 def generate_rates() -> List[PanelRow]:
     """
-    Generate rates data using *real* Bank of Canada series via the Valet API.
-
-    Metrics → BoC CANSIM series:
-      - policy_rate      -> V39079   (Target for the overnight rate, %)
-      - gov_2y_yield     -> V122538  (2-year GoC benchmark bond yield, %)
-      - gov_5y_yield     -> V122540  (5-year GoC benchmark bond yield, %)
-      - gov_10y_yield    -> V122487  (Long-term GoC bond yield >10y, %)
-      - mortgage_5y      -> V122521  (5-year conventional mortgage rate, %, discontinued after 2019-10)
-
-    We also derive:
-      - mortgage_5y_spread = mortgage_5y - gov_5y_yield
+    Wrapper used by main(): try real BoC data first, fall back to synthetic
+    if anything goes wrong so Netlify builds remain stable.
     """
-    rows: List[PanelRow] = []
-    region = "canada"
+    try:
+        rows = generate_rates_from_boc()
+        if rows:
+            print(f"[INFO] Loaded {len(rows)} rate rows from BoC Valet")
+            return rows
+        else:
+            print("[WARN] BoC Valet returned no rate data; using synthetic fallback")
+    except Exception as e:
+        print(f"[WARN] BoC Valet error ({e!r}); using synthetic fallback")
 
-    # Map our internal metric IDs to BoC series IDs and units
-    series_by_metric: Dict[str, Tuple[str, str]] = {
-        "policy_rate": ("V39079", "pct"),
-        "gov_2y_yield": ("V122538", "pct"),
-        "gov_5y_yield": ("V122540", "pct"),
-        "gov_10y_yield": ("V122487", "pct"),
-        "mortgage_5y": ("V122521", "pct"),
-    }
-
-    all_series_ids = [cfg[0] for cfg in series_by_metric.values()]
-
-    # Fetch month-averaged series from 2000 onward
-    monthly = fetch_boc_series_monthly(all_series_ids, start="2000-01-01")
-
-    # Build rows for the core rate metrics
-    for metric, (series_id, unit) in series_by_metric.items():
-        # Get all months where we have a value for this series
-        month_keys = sorted(
-            d
-            for d, per_sid in monthly.items()
-            if series_id in per_sid and per_sid[series_id] is not None
-        )
-        if not month_keys:
-            continue
-
-        vals: List[float] = [monthly[d][series_id] for d in month_keys]
-        mom, yoy, ma3 = compute_changes(vals)
-
-        for dt_str, val, m, y, ma in zip(month_keys, vals, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt_str,
-                    region=region,
-                    segment="all",
-                    metric=metric,
-                    value=round(val, 3),
-                    unit=unit,
-                    source="boc_valet",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-
-    # Derive mortgage_5y_spread where both mortgage_5y and gov_5y_yield are available
-    mort_by_date = {r.date: r for r in rows if r.metric == "mortgage_5y"}
-    g5_by_date = {r.date: r for r in rows if r.metric == "gov_5y_yield"}
-
-    common_dates = sorted(set(mort_by_date.keys()) & set(g5_by_date.keys()))
-    if common_dates:
-        spread_vals: List[float] = [
-            mort_by_date[d].value - g5_by_date[d].value for d in common_dates
-        ]
-        mom, yoy, ma3 = compute_changes(spread_vals)
-
-        for dt_str, val, m, y, ma in zip(common_dates, spread_vals, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt_str,
-                    region=region,
-                    segment="all",
-                    metric="mortgage_5y_spread",
-                    value=round(val, 3),
-                    unit="pct",
-                    source="boc_valet_derived",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-
-    return rows
+    return generate_rates_synthetic()
 
 # end rates test
 
