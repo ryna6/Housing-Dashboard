@@ -11,14 +11,8 @@ interface Props {
   snapshot: MetricSnapshot;
 }
 
-const RATE_METRICS = new Set<string>([
-  "policy_rate",
-  "mortgage_5y",
-  "gov_2y_yield",
-  "gov_5y_yield",
-  "gov_10y_yield",
-  "mortgage_5y_spread",
-]);
+/** Only BoC policy rate uses "vs previous rate" logic. */
+const POLICY_RATE_METRICS = new Set<string>(["policy_rate"]);
 
 function formatValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "–";
@@ -40,6 +34,10 @@ function formatValue(value: number, unit: string): string {
 
   if (unit === "index") {
     return value.toFixed(1);
+  }
+
+  if (unit === "count") {
+    return value.toLocaleString("en-CA");
   }
 
   return value.toFixed(2);
@@ -100,9 +98,9 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
 
   const latestVal = latest?.value;
   const yoyPct = latest.yoy_pct ?? null;
-  const isRateMetric = RATE_METRICS.has(metric);
+  const isPolicyRate = POLICY_RATE_METRICS.has(metric);
 
-  // Common YoY color classes
+  // YoY styling
   const yoyClass =
     "metric-card__secondary" +
     (yoyPct != null
@@ -115,8 +113,8 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
 
   let deltaNode: React.ReactNode = null;
 
-  if (isRateMetric) {
-    // For interest rates: change from previous rate (not "MoM")
+  if (isPolicyRate) {
+    // BoC policy rate: show change vs previous rate (not "MoM")
     if (prev && Number.isFinite(prev.value) && latestVal != null) {
       const absDelta = latest.value - prev.value;
       if (absDelta !== 0) {
@@ -153,7 +151,7 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
       }
     }
   } else {
-    // Non-rate metrics: classic MoM delta
+    // All other metrics (including 5y mortgage, 2y/10y yields): classic MoM
     const hasPrev = !!prev && Number.isFinite(prev.value);
     const momPct =
       latest.mom_pct != null
