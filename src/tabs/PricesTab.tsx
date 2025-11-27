@@ -1,36 +1,32 @@
 import React, { useMemo, useState } from "react";
-import type { PanelPoint, RegionCode, Segment } from "../data/types";
+import type {
+  PanelPoint,
+  RegionCode,
+  Segment,
+  MarketCode
+} from "../data/types";
 import { RegionToggle } from "../components/RegionToggle";
 import { MarketSelector } from "../components/MarketSelector";
 import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
+import { REGIONS_BY_MARKET } from "../data/regions";
 
 const PRICE_METRICS = ["hpi_benchmark", "avg_price", "teranet_hpi"];
 
 export const PricesTab: React.FC = () => {
   const { data, loading, error } = useTabData("prices");
-  const [region, setRegion] = useState<RegionCode>("canada");
-  const [market, setMarket] = useState<RegionCode | null>(null);
+  const [market, setMarket] = useState<MarketCode>("canada");
+  const [region, setRegion] = useState<RegionCode | null>(null);
   const [segment, setSegment] = useState<Segment>("all");
 
-  const effectiveRegion: RegionCode = market ?? region;
+  const effectiveRegion: RegionCode = region ?? market;
+  const hasRegions = REGIONS_BY_MARKET[market].length > 0;
 
-  const handleRegionChange = (next: RegionCode) => {
-    setRegion(next);
-    if (next === "gta" || next === "metro_vancouver") {
-      setMarket(next);
-    } else {
-      setMarket(null);
-    }
-  };
-
-  const handleMarketChange = (next: RegionCode | null) => {
+  const handleMarketChange = (next: MarketCode) => {
     setMarket(next);
-    if (next) {
-      setRegion(next);
-    }
+    setRegion(null); // reset region when switching markets
   };
 
   const handleSegmentChange = (
@@ -65,8 +61,19 @@ export const PricesTab: React.FC = () => {
       </header>
 
       <div className="tab__controls">
-        <RegionToggle value={region} onChange={handleRegionChange} />
         <MarketSelector value={market} onChange={handleMarketChange} />
+
+        {hasRegions && (
+          <div className="tab__regions-group">
+            <span className="tab__regions-label">Regions:</span>
+            <RegionToggle
+              market={market}
+              value={region}
+              onChange={setRegion}
+            />
+          </div>
+        )}
+
         <div className="tab__segment">
           Segment
           <select value={segment} onChange={handleSegmentChange}>
