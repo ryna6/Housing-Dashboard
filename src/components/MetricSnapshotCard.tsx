@@ -16,10 +16,7 @@ interface Props {
  * - Bank of Canada policy rate
  * - 5-year mortgage / prime proxy
  */
-const VS_PREVIOUS_RATE_METRICS = new Set<string>([
-  "policy_rate",
-  "mortgage_5y",
-]);
+const VS_PREVIOUS_RATE_METRICS = new Set<string>(["policy_rate", "mortgage_5y"]);
 
 function formatValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "–";
