@@ -73,6 +73,13 @@ function formatValue(latest: PanelPoint): string {
   }
 }
 
+function signClass(base: string, value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return base;
+  if (value > 0) return `${base} ${base}--up`;
+  if (value < 0) return `${base} ${base}--down`;
+  return base;
+}
+
 export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
   const { metric, latest, prev } = snapshot;
 
@@ -85,6 +92,10 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
       : null;
 
   const hasDelta = deltaAbs != null || deltaPct != null;
+  const yoy = latest.yoy_pct ?? null;
+
+  const deltaClass = signClass("metric-card__delta", deltaPct ?? deltaAbs ?? null);
+  const yoyClass = signClass("metric-card__secondary", yoy);
 
   return (
     <div className="metric-card">
@@ -94,7 +105,7 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
       </div>
 
       {hasDelta && (
-        <div className="metric-card__delta">
+        <div className={deltaClass}>
           {deltaAbs != null && (
             <>
               Δ {deltaAbs > 0 ? "+" : ""}
@@ -114,10 +125,10 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
         </div>
       )}
 
-      {latest.yoy_pct != null && (
-        <div className="metric-card__secondary">
-          YoY: {latest.yoy_pct > 0 ? "+" : ""}
-          {latest.yoy_pct.toFixed(1)}%
+      {yoy != null && (
+        <div className={yoyClass}>
+          YoY: {yoy > 0 ? "+" : ""}
+          {yoy.toFixed(1)}%
         </div>
       )}
     </div>
