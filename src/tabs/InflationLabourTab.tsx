@@ -1,71 +1,83 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { PanelPoint, RegionCode } from "../data/types";
-import { loadTabData, getLatestByMetric } from "../data/dataClient";
 import { RegionToggle } from "../components/RegionToggle";
-import { MetricSnapshotCard, Snapshot } from "../components/MetricSnapshotCard";
+import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
+import { getLatestByMetric } from "../data/dataClient";
+import { useTabData } from "./useTabData";
 
-const METRICS = ["cpi_yoy", "cpi_mom", "unemployment_rate", "wage_growth"];
-const PRIMARY_METRIC = "cpi_yoy";
+const INFLATION_METRICS = [
+  "cpi_headline",
+  "cpi_shelter",
+  "cpi_rent",
+  "wage_index",
+  "unemployment_rate"
+];
 
 export const InflationLabourTab: React.FC = () => {
-  const [data, setData] = useState<PanelPoint[]>([]);
+  const { data, loading, error } = useTabData("inflation_labour");
   const [region, setRegion] = useState<RegionCode>("canada");
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadTabData("inflation_labour")
-      .then(setData)
-      .finally(() => setLoading(false));
-  }, []);
+  const handleRegionChange = (next: RegionCode) => {
+    setRegion(next);
+  };
 
-  if (loading) return <div>Loading...</div>;
-
-  const snapshots = getLatestByMetric(
-    data,
-    region,
-    METRICS,
-    "all"
-  ) as Snapshot[];
-
-  const primarySeries = data.filter(
-    (p) => p.region === region && p.metric === PRIMARY_METRIC
+  const snapshots = useMemo(
+    () => getLatestByMetric(data, region, INFLATION_METRICS),
+    [data, region]
   );
-  const momSeries = primarySeries.filter((p) => p.mom_pct != null);
-  const yoySeries = primarySeries.filter((p) => p.yoy_pct != null);
+
+  const cpiSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) =>
+          (p.metric === "cpi_headline" || p.metric === "cpi_shelter") &&
+          p.region === region
+      ),
+    [data, region]
+  );
 
   return (
     <div className="tab">
-      <div className="tab__header">
-        <RegionToggle
-          value={region}
-          onChange={setRegion}
-          allowedRegions={["canada", "on", "bc"]}
-        />
+      <header className="tab__header">
+        <h1 className="tab__title">Inflation</h1>
+        <p className="tab__subtitle">
+          CPI, shelter & labour proxies (StatCan)
+        </p>
+      </header>
+
+      <div className="tab__controls">
+        <RegionToggle value={region} onChange={handleRegionChange} />
       </div>
 
-      <div className="card-grid">
-        {snapshots.length === 0 && (
-          <div className="tab__note">No inflation/labour data yet.</div>
+      {loading && <div className="tab__status">Loading inflation data…</div>}
+      {error && (
+        <div className="tab__status tab__status--error">
+          Failed to load inflation metrics: {error}
+        </div>
+      )}
+
+      <section className="tab__metrics">
+        {!loading && !snapshots.length && (
+          <div className="tab__status">No inflation data yet.</div>
         )}
-        {snapshots.map((snap) => (
-          <MetricSnapshotCard key={snap.metric} snapshot={snap} />
+        {snapshots.map((s) => (
+          <MetricSnapshotCard key={s.metric} snapshot={s} />
         ))}
-      </div>
+      </section>
 
-      <div className="chart-grid">
+      <section className="tab__charts">
         <ChartPanel
-          title="CPI YoY"
-          series={yoySeries}
-          valueKey="yoy_pct"
-        />
-        <ChartPanel
-          title="CPI MoM"
-          series={momSeries}
+          title="Headline CPI – MoM %"
+          series={cpiSeries}
           valueKey="mom_pct"
         />
-      </div>
+        <ChartPanel
+          title="Headline CPI – YoY %"
+          series={cpiSeries}
+          valueKey="yoy_pct"
+        />
+      </section>
     </div>
   );
 };
-
