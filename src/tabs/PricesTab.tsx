@@ -1,71 +1,112 @@
-import React, { useEffect, useState } from "react";
-import type { PanelPoint, RegionCode } from "../data/types";
-import { loadTabData, getLatestByMetric } from "../data/dataClient";
+import React, { useMemo, useState } from "react";
+import type { PanelPoint, RegionCode, Segment } from "../data/types";
 import { RegionToggle } from "../components/RegionToggle";
 import { MarketSelector } from "../components/MarketSelector";
-import { MetricSnapshotCard, Snapshot } from "../components/MetricSnapshotCard";
+import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
+import { getLatestByMetric } from "../data/dataClient";
+import { useTabData } from "./useTabData";
+
+const PRICE_METRICS = ["hpi_benchmark", "avg_price", "teranet_hpi"];
 
 export const PricesTab: React.FC = () => {
-  const [data, setData] = useState<PanelPoint[]>([]);
+  const { data, loading, error } = useTabData("prices");
   const [region, setRegion] = useState<RegionCode>("canada");
   const [market, setMarket] = useState<RegionCode | null>(null);
-  const [segment] = useState<string>("all");
-  const [loading, setLoading] = useState(true);
+  const [segment, setSegment] = useState<Segment>("all");
 
-  useEffect(() => {
-    loadTabData("prices")
-      .then(setData)
-      .finally(() => setLoading(false));
-  }, []);
+  const effectiveRegion: RegionCode = market ?? region;
 
-  if (loading) return <div>Loading...</div>;
+  const handleRegionChange = (next: RegionCode) => {
+    setRegion(next);
+    if (next === "gta" || next === "metro_vancouver") {
+      setMarket(next);
+    } else {
+      setMarket(null);
+    }
+  };
 
-  const baseMetrics = ["hpi_benchmark", "avg_price_gvr", "avg_price_trreb"];
+  const handleMarketChange = (next: RegionCode | null) => {
+    setMarket(next);
+    if (next) {
+      setRegion(next);
+    }
+  };
 
-  const latestSnapshots = getLatestByMetric(
-    data,
-    market ?? region,
-    baseMetrics,
-    segment
-  ) as Snapshot[];
+  const handleSegmentChange = (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    setSegment(event.target.value as Segment);
+  };
 
-  const regionFilter = (p: PanelPoint) =>
-    p.segment === segment &&
-    ((market === null && p.region === region) ||
-      (market !== null && p.region === market));
-
-  const hpiSeries = data.filter(
-    (p) => regionFilter(p) && p.metric === "hpi_benchmark"
+  const snapshots = useMemo(
+    () => getLatestByMetric(data, effectiveRegion, PRICE_METRICS, segment),
+    [data, effectiveRegion, segment]
   );
 
-  const hpiMomSeries = hpiSeries.filter((p) => p.mom_pct != null);
-  const hpiYoySeries = hpiSeries.filter((p) => p.yoy_pct != null);
+  const hpiSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) =>
+          p.metric === "hpi_benchmark" &&
+          p.region === effectiveRegion &&
+          (segment === "all" || p.segment === segment)
+      ),
+    [data, effectiveRegion, segment]
+  );
 
   return (
     <div className="tab">
-      <div className="tab__header">
-        <RegionToggle
-          value={region}
-          onChange={setRegion}
-          allowedRegions={["canada", "on", "bc"]}
-        />
-        <MarketSelector value={market} onChange={setMarket} />
+      <header className="tab__header">
+        <h1 className="tab__title">Prices</h1>
+        <p className="tab__subtitle">
+          Benchmark & average resale prices (monthly)
+        </p>
+      </header>
+
+      <div className="tab__controls">
+        <RegionToggle value={region} onChange={handleRegionChange} />
+        <MarketSelector value={market} onChange={handleMarketChange} />
+        <div className="tab__segment">
+          Segment
+          <select value={segment} onChange={handleSegmentChange}>
+            <option value="all">All</option>
+            <option value="condo">Condo</option>
+            <option value="freehold">Freehold</option>
+          </select>
+        </div>
       </div>
 
-      <div className="card-grid">
-        {latestSnapshots.length === 0 && (
-          <div className="tab__note">No price data yet.</div>
+      {loading && <div className="tab__status">Loading price data…</div>}
+      {error && (
+        <div className="tab__status tab__status--error">
+          Failed to load prices: {error}
+        </div>
+      )}
+
+      <section className="tab__metrics">
+        {!loading && !snapshots.length && (
+          <div className="tab__status">
+            No price data for this selection yet.
+          </div>
         )}
-        {latestSnapshots.map((snap) => (
-          <MetricSnapshotCard key={snap.metric} snapshot={snap} />
+        {snapshots.map((s) => (
+          <MetricSnapshotCard key={s.metric} snapshot={s} />
         ))}
-      </div>
+      </section>
 
-      <div className="chart-grid">
-        <ChartPanel title="HPI MoM %" series={hpiMomSeries} valueKey="mom_pct" />
-        <ChartPanel title="HPI YoY %" series={hpiYoySeries} valueKey="yoy_pct" />
-      </div>
+      <section className="tab__charts">
+        <ChartPanel
+          title="HPI benchmark – MoM %"
+          series={hpiSeries}
+          valueKey="mom_pct"
+        />
+        <ChartPanel
+          title="HPI benchmark – YoY %"
+          series={hpiSeries}
+          valueKey="yoy_pct"
+        />
+      </section>
     </div>
   );
 };
