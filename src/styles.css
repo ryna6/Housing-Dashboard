@@ -59,9 +59,9 @@ body {
 }
 
 /* On very large screens, let it grow a bit more */
-@media (min-width: 1440px) {
+@media (min-width: 1400px) {
   .app__inner {
-    max-width: 1800px;
+    max-width: 1600px;
   }
 }
 
