@@ -1,32 +1,25 @@
 import React from "react";
-import type { RegionCode } from "../data/types";
-
-const REGION_LABELS: Record<RegionCode, string> = {
-  canada: "Canada",
-  on: "Ontario",
-  bc: "British Columbia",
-  gta: "GTA",
-  metro_vancouver: "Metro Van"
-};
+import type { MarketCode, RegionCode } from "../data/types";
+import { REGIONS_BY_MARKET, REGION_LABELS } from "../data/regions";
 
 interface Props {
-  value: RegionCode;
-  onChange: (region: RegionCode) => void;
-  allowedRegions?: RegionCode[];
+  market: MarketCode;
+  value: RegionCode | null;
+  onChange: (region: RegionCode | null) => void;
 }
 
 export const RegionToggle: React.FC<Props> = ({
+  market,
   value,
-  onChange,
-  allowedRegions
+  onChange
 }) => {
-  const regions: RegionCode[] =
-    allowedRegions && allowedRegions.length > 0
-      ? allowedRegions
-      : ["canada", "on", "bc", "gta", "metro_vancouver"];
+  const regions = REGIONS_BY_MARKET[market];
+
+  // Canada has no sub-regions to choose from in the UI
+  if (!regions || regions.length === 0) return null;
 
   return (
-    <div className="region-toggle" role="radiogroup" aria-label="Region">
+    <div className="region-toggle" role="radiogroup" aria-label="Regions">
       {regions.map((code) => {
         const isActive = code === value;
         return (
@@ -39,7 +32,7 @@ export const RegionToggle: React.FC<Props> = ({
             }
             role="radio"
             aria-checked={isActive}
-            onClick={() => onChange(code)}
+            onClick={() => onChange(isActive ? null : code)}
           >
             {REGION_LABELS[code]}
           </button>
