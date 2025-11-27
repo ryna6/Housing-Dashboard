@@ -1,4 +1,17 @@
-export type RegionCode = "canada" | "on" | "bc" | "gta" | "metro_vancouver";
+export type MarketCode = "canada" | "on" | "bc";
+
+export type RegionCode =
+  | MarketCode
+  | "gta"
+  | "hamilton"
+  | "halton"
+  | "niagara"
+  | "vancouver"
+  | "burnaby"
+  | "surrey"
+  | "richmond"
+  | "victoria";
+
 export type Segment = "all" | "condo" | "freehold";
 
 export interface PanelPoint {
@@ -13,4 +26,3 @@ export interface PanelPoint {
   yoy_pct: number | null;
   ma3: number | null;
 }
-
