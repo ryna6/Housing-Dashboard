@@ -11,10 +11,27 @@ const RATE_METRICS = [
   "gov_2y_yield",
   "gov_5y_yield",
   "gov_10y_yield",
-  "mortgage_5y_spread"
+  "mortgage_5y_spread",
 ];
 
 const REGION: RegionCode = "canada";
+
+/**
+ * Trim a series down to the last N years based on the latest observation date.
+ */
+function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
+  if (series.length <= 1) return series;
+
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const last = new Date(sorted[sorted.length - 1].date);
+  const cutoff = new Date(last);
+  cutoff.setFullYear(cutoff.getFullYear() - years);
+
+  return sorted.filter((p) => {
+    const d = new Date(p.date);
+    return d >= cutoff;
+  });
+}
 
 export const RatesBondsTab: React.FC = () => {
   const { data, loading, error } = useTabData("rates_bonds");
@@ -26,25 +43,37 @@ export const RatesBondsTab: React.FC = () => {
 
   const policySeries: PanelPoint[] = useMemo(
     () =>
-      data.filter((p) => p.metric === "policy_rate" && p.region === REGION),
+      trimLastYears(
+        data.filter((p) => p.metric === "policy_rate" && p.region === REGION),
+        10
+      ),
     [data]
   );
 
   const mortgageSeries: PanelPoint[] = useMemo(
     () =>
-      data.filter((p) => p.metric === "mortgage_5y" && p.region === REGION),
+      trimLastYears(
+        data.filter((p) => p.metric === "mortgage_5y" && p.region === REGION),
+        10
+      ),
     [data]
   );
 
   const gov2Series: PanelPoint[] = useMemo(
     () =>
-      data.filter((p) => p.metric === "gov_2y_yield" && p.region === REGION),
+      trimLastYears(
+        data.filter((p) => p.metric === "gov_2y_yield" && p.region === REGION),
+        10
+      ),
     [data]
   );
 
   const gov10Series: PanelPoint[] = useMemo(
     () =>
-      data.filter((p) => p.metric === "gov_10y_yield" && p.region === REGION),
+      trimLastYears(
+        data.filter((p) => p.metric === "gov_10y_yield" && p.region === REGION),
+        10
+      ),
     [data]
   );
 
@@ -79,27 +108,27 @@ export const RatesBondsTab: React.FC = () => {
           title="BoC policy rate"
           series={policySeries}
           valueKey="value"
-          valueAxisLabel="%"
+          treatAsPercentScale
           step
         />
         <ChartPanel
           title="Conventional 5-year mortgage rate"
           series={mortgageSeries}
           valueKey="value"
-          valueAxisLabel="%"
+          treatAsPercentScale
           step
         />
         <ChartPanel
           title="2-year Government of Canada bond yield"
           series={gov2Series}
           valueKey="value"
-          valueAxisLabel="%"
+          treatAsPercentScale
         />
         <ChartPanel
           title="10-year Government of Canada bond yield"
           series={gov10Series}
           valueKey="value"
-          valueAxisLabel="%"
+          treatAsPercentScale
         />
       </section>
     </div>
