@@ -1,53 +1,51 @@
 import type { PanelPoint, RegionCode } from "./types";
+import type { MetricSnapshot } from "../components/MetricSnapshotCard";
 
 export async function loadTabData(tabKey: string): Promise<PanelPoint[]> {
-  const res = await fetch(`/data/processed/${tabKey}.json`);
+  const url = `/data/processed/${tabKey}.json`;
+  const res = await fetch(url, { cache: "no-store" });
+
   if (!res.ok) {
-    console.error(`Failed to load data for tab ${tabKey}: ${res.status}`);
-    return [];
+    if (res.status === 404) {
+      return [];
+    }
+    throw new Error(`Failed to load data for tab ${tabKey}: ${res.status}`);
   }
 
-  try {
-    const json = await res.json();
-    return Array.isArray(json) ? (json as PanelPoint[]) : [];
-  } catch (err) {
-    console.error("Error parsing JSON for tab", tabKey, err);
-    return [];
-  }
+  const json = await res.json();
+  if (!Array.isArray(json)) return [];
+  return json as PanelPoint[];
 }
 
 export function getLatestByMetric(
   points: PanelPoint[],
   region: RegionCode,
   metrics: string[],
-  segment: string = "all"
-) {
-  const filtered = points.filter(
-    (p) =>
-      p.region === region &&
-      p.segment === segment &&
-      metrics.includes(p.metric)
-  );
+  segment?: string
+): MetricSnapshot[] {
+  const snapshots: MetricSnapshot[] = [];
 
-  const latestDate = filtered.reduce<string | null>((acc, p) => {
-    if (!acc) return p.date;
-    return p.date > acc ? p.date : acc;
-  }, null);
+  const matchesSegment = (seg: string) => {
+    if (!segment || segment === "all") return true;
+    return seg === segment;
+  };
 
-  if (!latestDate) return [];
+  for (const metric of metrics) {
+    const series = points
+      .filter(
+        (p) =>
+          p.metric === metric &&
+          p.region === region &&
+          matchesSegment(String(p.segment))
+      )
+      .sort((a, b) => a.date.localeCompare(b.date));
 
-  return metrics
-    .map((metric) => {
-      const series = filtered
-        .filter((p) => p.metric === metric)
-        .sort((a, b) => a.date.localeCompare(b.date));
+    if (!series.length) continue;
 
-      if (series.length === 0) return null;
+    const latest = series[series.length - 1];
+    const prev = series.length > 1 ? series[series.length - 2] : null;
+    snapshots.push({ metric, latest, prev });
+  }
 
-      const latest = series[series.length - 1];
-      const prev = series.length > 1 ? series[series.length - 2] : null;
-
-      return { metric, latest, prev };
-    })
-    .filter((s): s is { metric: string; latest: PanelPoint; prev: PanelPoint | null } => s !== null);
+  return snapshots;
 }
