@@ -48,7 +48,7 @@ body {
   flex: 1;
   width: 100%;
   padding: 12px 24px calc(var(--nav-height) + 12px);
-  margin: 0; /* outer container now spans full width */
+  margin: 200; /* outer container now spans full width */
 }
 
 .app__inner {
