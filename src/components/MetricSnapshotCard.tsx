@@ -11,14 +11,21 @@ interface Props {
   snapshot: MetricSnapshot;
 }
 
-/** Only BoC policy rate uses "vs previous rate" logic. */
-const POLICY_RATE_METRICS = new Set<string>(["policy_rate"]);
+/**
+ * Metrics that should show "change vs previous rate" instead of "MoM":
+ * - Bank of Canada policy rate
+ * - 5-year mortgage / prime proxy
+ */
+const VS_PREVIOUS_RATE_METRICS = new Set<string>([
+  "policy_rate",
+  "mortgage_5y",
+]);
 
 function formatValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "–";
 
   if (unit === "pct") {
-    // 2 decimal places for rates / percentages
+    // 2 decimal places for interest rates / percentages
     return `${value.toFixed(2)}%`;
   }
 
@@ -68,10 +75,12 @@ function labelForMetric(metric: string): string {
       return "Sales / New listings";
     case "moi":
       return "Months of inventory";
+
     case "policy_rate":
       return "BoC policy rate";
     case "mortgage_5y":
-      return "5y mortgage rate";
+      return "5y mortgage / prime";
+
     case "gov_2y_yield":
       return "2y GoC yield";
     case "gov_5y_yield":
@@ -80,6 +89,7 @@ function labelForMetric(metric: string): string {
       return "10y GoC yield";
     case "mortgage_5y_spread":
       return "5y mortgage spread";
+
     case "avg_rent":
       return "Average rent";
     case "vacancy_rate":
@@ -88,6 +98,7 @@ function labelForMetric(metric: string): string {
       return "Headline CPI";
     case "cpi_shelter":
       return "Shelter CPI";
+
     default:
       return metric.replace(/_/g, " ");
   }
@@ -98,9 +109,9 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
 
   const latestVal = latest?.value;
   const yoyPct = latest.yoy_pct ?? null;
-  const isPolicyRate = POLICY_RATE_METRICS.has(metric);
+  const useVsPreviousRate = VS_PREVIOUS_RATE_METRICS.has(metric);
 
-  // YoY styling
+  // YoY styling (green up / red down)
   const yoyClass =
     "metric-card__secondary" +
     (yoyPct != null
@@ -113,10 +124,11 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
 
   let deltaNode: React.ReactNode = null;
 
-  if (isPolicyRate) {
-    // BoC policy rate: show change vs previous rate (not "MoM")
+  if (useVsPreviousRate) {
+    // For policy_rate & mortgage_5y: "Δ … vs previous rate"
     if (prev && Number.isFinite(prev.value) && latestVal != null) {
       const absDelta = latest.value - prev.value;
+
       if (absDelta !== 0) {
         const relPct =
           prev.value !== 0
@@ -151,7 +163,7 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
       }
     }
   } else {
-    // All other metrics (including 5y mortgage, 2y/10y yields): classic MoM
+    // All other metrics (including 2y/10y yields): classic MoM change
     const hasPrev = !!prev && Number.isFinite(prev.value);
     const momPct =
       latest.mom_pct != null
