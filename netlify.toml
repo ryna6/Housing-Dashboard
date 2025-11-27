@@ -1,5 +1,5 @@
-  [build]
-  command = "python scripts/generate_test_data.py && npm run build && mkdir -p dist/data && cp -r data/processed dist/data/processed"
+[build]
+  command = "npm run build && mkdir -p dist/data && cp -r data/processed dist/data/processed"
   publish = "dist"
 
 [functions]
