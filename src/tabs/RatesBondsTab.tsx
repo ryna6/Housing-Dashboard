@@ -16,9 +16,6 @@ const RATE_METRICS = [
 
 const REGION: RegionCode = "canada";
 
-/**
- * Trim a series down to the last N years based on the latest observation date.
- */
 function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
   if (series.length <= 1) return series;
 
@@ -109,13 +106,15 @@ export const RatesBondsTab: React.FC = () => {
           series={policySeries}
           valueKey="value"
           treatAsPercentScale
+          clampYMinToZero
           step
         />
         <ChartPanel
-          title="Conventional 5-year mortgage rate"
+          title="5-year mortgage rate"
           series={mortgageSeries}
           valueKey="value"
           treatAsPercentScale
+          clampYMinToZero
           step
         />
         <ChartPanel
