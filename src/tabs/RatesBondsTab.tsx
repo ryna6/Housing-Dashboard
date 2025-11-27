@@ -1,135 +1,189 @@
-import React, { useMemo } from "react";
-import type { PanelPoint, RegionCode } from "../data/types";
-import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
-import { ChartPanel } from "../components/ChartPanel";
-import { getLatestByMetric } from "../data/dataClient";
-import { useTabData } from "./useTabData";
+import React from "react";
+import ReactECharts from "echarts-for-react";
+import type { PanelPoint } from "../data/types";
 
-const RATE_METRICS = [
-  "policy_rate",
-  "mortgage_5y",
-  "gov_2y_yield",
-  "gov_5y_yield",
-  "gov_10y_yield",
-  "mortgage_5y_spread",
-];
-
-const REGION: RegionCode = "canada";
-
-function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
-  if (series.length <= 1) return series;
-
-  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
-  const last = new Date(sorted[sorted.length - 1].date);
-  const cutoff = new Date(last);
-  cutoff.setFullYear(cutoff.getFullYear() - years);
-
-  return sorted.filter((p) => {
-    const d = new Date(p.date);
-    return d >= cutoff;
-  });
+interface Props {
+  title: string;
+  series: PanelPoint[];
+  valueKey: "value" | "mom_pct" | "yoy_pct";
+  /** Optional label for the y-axis (left blank by default). */
+  valueAxisLabel?: string;
+  /** Render as a step line (discrete jumps between months). */
+  step?: boolean;
+  /**
+   * Treat numeric values as percentages for formatting (0–5% etc),
+   * even if the underlying valueKey is "value".
+   */
+  treatAsPercentScale?: boolean;
+  /**
+   * For percent-style series, clamp the y-axis minimum at 0
+   * (e.g. policy rate, mortgage rate).
+   */
+  clampYMinToZero?: boolean;
 }
 
-export const RatesBondsTab: React.FC = () => {
-  const { data, loading, error } = useTabData("rates_bonds");
+// Simple "nice number" helper for tick steps: 1, 2, 5 × 10^k
+function niceStep(rawStep: number): number {
+  if (!Number.isFinite(rawStep) || rawStep <= 0) return 1;
+  const exp = Math.floor(Math.log10(rawStep));
+  const base = rawStep / Math.pow(10, exp); // between 1 and 10
+  let niceBase: number;
 
-  const snapshots = useMemo(
-    () => getLatestByMetric(data, REGION, RATE_METRICS),
-    [data]
-  );
+  if (base < 1.5) niceBase = 1;
+  else if (base < 3) niceBase = 2;
+  else if (base < 7) niceBase = 5;
+  else niceBase = 10;
 
-  const policySeries: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter((p) => p.metric === "policy_rate" && p.region === REGION),
-        10
-      ),
-    [data]
-  );
+  return niceBase * Math.pow(10, exp);
+}
 
-  const mortgageSeries: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter((p) => p.metric === "mortgage_5y" && p.region === REGION),
-        10
-      ),
-    [data]
-  );
+export const ChartPanel: React.FC<Props> = ({
+  title,
+  series,
+  valueKey,
+  valueAxisLabel,
+  step = false,
+  treatAsPercentScale,
+  clampYMinToZero = false,
+}) => {
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const x = sorted.map((p) => p.date.slice(0, 7)); // YYYY-MM
+  const y = sorted.map((p) => {
+    const v = p[valueKey] as number | null;
+    return v == null ? NaN : v;
+  });
 
-  const gov2Series: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter((p) => p.metric === "gov_2y_yield" && p.region === REGION),
-        10
-      ),
-    [data]
-  );
+  const numeric = y.filter(
+    (v) => typeof v === "number" && !Number.isNaN(v)
+  ) as number[];
 
-  const gov10Series: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter((p) => p.metric === "gov_10y_yield" && p.region === REGION),
-        10
-      ),
-    [data]
-  );
+  const hasData = sorted.length > 0 && numeric.length > 0;
+
+  const isPercentScale =
+    treatAsPercentScale ??
+    (valueKey === "mom_pct" || valueKey === "yoy_pct");
+
+  if (!hasData) {
+    return (
+      <div className="chart-panel chart-panel--empty">
+        <div className="chart-panel__title">{title}</div>
+        <div className="chart-panel__empty-text">
+          Not available for this selection.
+        </div>
+      </div>
+    );
+  }
+
+  // ----- Y-axis bounds with "±1 step" logic -----
+  let yMin: number | undefined;
+  let yMax: number | undefined;
+  let interval: number | undefined;
+
+  const rawMin = Math.min(...numeric);
+  const rawMax = Math.max(...numeric);
+
+  if (rawMin === rawMax) {
+    // Flat series: pick a reasonable step based on magnitude
+    const base = Math.abs(rawMin) || 1;
+    const rough = base / 3;
+    const stepSize = niceStep(rough);
+    interval = stepSize;
+
+    let min = rawMin - stepSize;
+    let max = rawMax + stepSize;
+
+    if (isPercentScale && clampYMinToZero) {
+      min = Math.max(0, min);
+    }
+
+    yMin = min;
+    yMax = max;
+  } else {
+    const range = rawMax - rawMin;
+    const targetTicks = 5;
+    const rough = range / (targetTicks - 1 || 1);
+    const stepSize = niceStep(rough);
+    interval = stepSize;
+
+    const niceMin = Math.floor(rawMin / stepSize) * stepSize;
+    const niceMax = Math.ceil(rawMax / stepSize) * stepSize;
+
+    let min = niceMin - stepSize; // one extra step below
+    let max = niceMax + stepSize; // one extra step above
+
+    if (isPercentScale && clampYMinToZero) {
+      min = Math.max(0, min);
+    }
+
+    yMin = min;
+    yMax = max;
+  }
+
+  const option: any = {
+    grid: { left: 40, right: 16, top: 8, bottom: 28 },
+    tooltip: {
+      trigger: "axis",
+      formatter: (params: any) => {
+        const p = Array.isArray(params) ? params[0] : params;
+        const axisValue = p && p.axisValue ? String(p.axisValue) : "";
+        const val =
+          p && typeof p.data === "number" ? (p.data as number) : NaN;
+        if (Number.isNaN(val)) return axisValue;
+
+        const formatted = isPercentScale
+          ? `${val.toFixed(2)}%`
+          : val.toFixed(2);
+
+        return `${axisValue}<br/>${formatted}`;
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: x,
+      axisLine: { lineStyle: { opacity: 0.4 } },
+      axisLabel: { fontSize: 10 },
+    },
+    yAxis: {
+      type: "value",
+      name: valueAxisLabel ?? "",
+      min: yMin,
+      max: yMax,
+      interval,
+      axisLine: { lineStyle: { opacity: 0.4 } },
+      splitLine: { lineStyle: { opacity: 0.2 } },
+      axisLabel: {
+        fontSize: 10,
+        formatter: (val: number) => {
+          if (Number.isNaN(val)) return "";
+          if (isPercentScale) {
+            // e.g. 0%, 2%, 4%, … (for stepSize=2)
+            return `${val.toFixed(0)}%`;
+          }
+          return val.toFixed(0);
+        },
+      },
+    },
+    series: [
+      {
+        type: "line",
+        data: y,
+        showSymbol: false,
+        connectNulls: true,
+        smooth: !step,
+        step: step ? "end" : undefined,
+      },
+    ],
+  };
 
   return (
-    <div className="tab">
-      <header className="tab__header">
-        <h1 className="tab__title">Rates</h1>
-        <p className="tab__subtitle">
-          Bank of Canada policy rate, 5-year mortgage rate and Government of
-          Canada bond yields.
-        </p>
-      </header>
-
-      {loading && <div className="tab__status">Loading rates…</div>}
-      {error && (
-        <div className="tab__status tab__status--error">
-          Failed to load rates: {error}
-        </div>
-      )}
-
-      <section className="tab__metrics">
-        {!loading && !snapshots.length && !error && (
-          <div className="tab__status">No rate data yet.</div>
-        )}
-        {snapshots.map((s) => (
-          <MetricSnapshotCard key={s.metric} snapshot={s} />
-        ))}
-      </section>
-
-      <section className="tab__charts">
-        <ChartPanel
-          title="BoC policy rate"
-          series={policySeries}
-          valueKey="value"
-          treatAsPercentScale
-          clampYMinToZero
-          step
-        />
-        <ChartPanel
-          title="5-year mortgage rate"
-          series={mortgageSeries}
-          valueKey="value"
-          treatAsPercentScale
-          clampYMinToZero
-          step
-        />
-        <ChartPanel
-          title="2-year Government of Canada bond yield"
-          series={gov2Series}
-          valueKey="value"
-          treatAsPercentScale
-        />
-        <ChartPanel
-          title="10-year Government of Canada bond yield"
-          series={gov10Series}
-          valueKey="value"
-          treatAsPercentScale
-        />
-      </section>
+    <div className="chart-panel">
+      <div className="chart-panel__title">{title}</div>
+      <ReactECharts
+        option={option}
+        notMerge
+        lazyUpdate
+        style={{ width: "100%", height: 190 }}
+      />
     </div>
   );
 };
