@@ -84,10 +84,15 @@ def fetch_boc_series_monthly(
     end: Optional[str] = None,
 ) -> Dict[str, Dict[str, float]]:
     """
-    Fetch one or more Bank of Canada Valet series and aggregate to monthly averages.
+    Fetch one or more Bank of Canada Valet series and aggregate to monthly levels.
 
     We use one HTTP call *per series* using the documented pattern:
       https://www.bankofcanada.ca/valet/observations/{seriesId}/json?start_date=...
+
+    For each calendar month we keep the **last available daily observation**
+    (rather than an average). This matches how policy-rate decisions work and
+    avoids fractional values like 4.73% when the target actually moves in 0.25
+    percentage-point steps.
 
     Returns a dict:
         {
@@ -99,10 +104,8 @@ def fetch_boc_series_monthly(
     """
     base = "https://www.bankofcanada.ca/valet/observations"
 
-    # month_key -> series_id -> list of daily values to average
-    monthly_lists: Dict[str, Dict[str, List[float]]] = defaultdict(
-        lambda: defaultdict(list)
-    )
+    # month_key -> series_id -> last daily value seen in that month
+    monthly_last: Dict[str, Dict[str, float]] = defaultdict(dict)
 
     for sid in series_ids:
         params = f"?start_date={start}"
@@ -124,7 +127,6 @@ def fetch_boc_series_monthly(
             if not d_str:
                 continue
 
-            # Dates are ISO like "2025-10-31"
             try:
                 d = datetime.fromisoformat(d_str[:10]).date()
             except Exception:
@@ -143,15 +145,13 @@ def fetch_boc_series_monthly(
             except Exception:
                 continue
 
-            monthly_lists[month_key][sid].append(v)
+            # Rely on Valet returning observations in chronological order;
+            # the last assignment in a month will be the last daily value.
+            monthly_last[month_key][sid] = v
 
-    # Collapse lists to averages
     monthly: Dict[str, Dict[str, float]] = {}
-    for month_key, per_sid in monthly_lists.items():
-        monthly[month_key] = {}
-        for sid, values in per_sid.items():
-            if values:
-                monthly[month_key][sid] = sum(values) / len(values)
+    for month_key, per_sid in monthly_last.items():
+        monthly[month_key] = dict(per_sid)
 
     return monthly
 
