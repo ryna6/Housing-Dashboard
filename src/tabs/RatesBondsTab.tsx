@@ -63,12 +63,21 @@ export const RatesBondsTab: React.FC = () => {
     [data]
   );
 
-  // Convert percentage points (e.g. 2.25) to basis points (225) for charting.
-  const toBasisPoints = (series: PanelPoint[]): PanelPoint[] =>
-    series.map((p) => ({
-      ...p,
-      value: p.value * 100,
-    }));
+  const gov2Series = useMemo(
+    () =>
+      data.filter(
+        (p) => p.metric === "gov_2y_yield" && p.region === REGION
+      ),
+    [data]
+  );
+
+  const gov10Series = useMemo(
+    () =>
+      data.filter(
+        (p) => p.metric === "gov_10y_yield" && p.region === REGION
+      ),
+    [data]
+  );
 
   return (
     <div className="tab">
@@ -98,16 +107,28 @@ export const RatesBondsTab: React.FC = () => {
 
       <section className="tab__charts">
         <ChartPanel
-          title="BoC policy rate (basis points)"
-          series={toBasisPoints(policySeries)}
+          title="BoC policy rate"
+          series={policySeries}
           valueKey="value"
-          valueAxisLabel="bps"
+          valueAxisLabel="%"
         />
         <ChartPanel
-          title="Conventional 5-year mortgage rate (basis points)"
-          series={toBasisPoints(mortgageSeries)}
+          title="Conventional 5-year mortgage rate"
+          series={mortgageSeries}
           valueKey="value"
-          valueAxisLabel="bps"
+          valueAxisLabel="%"
+        />
+        <ChartPanel
+          title="2-year Government of Canada bond yield"
+          series={gov2Series}
+          valueKey="value"
+          valueAxisLabel="%"
+        />
+        <ChartPanel
+          title="10-year Government of Canada bond yield"
+          series={gov10Series}
+          valueKey="value"
+          valueAxisLabel="%"
         />
       </section>
     </div>
