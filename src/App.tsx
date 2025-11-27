@@ -1,17 +1,16 @@
 import React, { useState } from "react";
-import { BottomTabNav } from "./components/BottomTabNav";
 import { PricesTab } from "./tabs/PricesTab";
 import { SalesListingsTab } from "./tabs/SalesListingsTab";
-import { SupplyPipelineTab } from "./tabs/SupplyPipelineTab";
+import { SupplyTab } from "./tabs/SupplyTab";
 import { RatesBondsTab } from "./tabs/RatesBondsTab";
-import { InflationLabourTab } from "./tabs/InflationLabourTab";
-import { CreditStressTab } from "./tabs/CreditStressTab";
-import { MarketRiskTab } from "./tabs/MarketRiskTab";
+import { InflationTab } from "./tabs/InflationTab";
+import { CreditTab } from "./tabs/CreditTab";
+import { MarketTab } from "./tabs/MarketTab";
 import { RentalsTab } from "./tabs/RentalsTab";
-import type { TabKey } from "./tabs/tabConfig";
+import { BottomTabNav, TabId } from "./components/BottomTabNav";
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabKey>("prices");
+  const [activeTab, setActiveTab] = useState<TabId>("prices");
 
   const renderTab = () => {
     switch (activeTab) {
@@ -20,31 +19,32 @@ const App: React.FC = () => {
       case "sales":
         return <SalesListingsTab />;
       case "supply":
-        return <SupplyPipelineTab />;
+        return <SupplyTab />;
       case "rates":
         return <RatesBondsTab />;
       case "inflation":
-        return <InflationLabourTab />;
+        return <InflationTab />;
       case "credit":
-        return <CreditStressTab />;
+        return <CreditTab />;
       case "market":
-        return <MarketRiskTab />;
+        return <MarketTab />;
       case "rentals":
         return <RentalsTab />;
       default:
-        return null;
+        return <PricesTab />;
     }
   };
 
-return (
-  <div className="app">
-    <main className="app__content">
-      <div className="app__inner">
-        {renderTab()}
-      </div>
-    </main>
-    <BottomTabNav active={activeTab} onChange={setActiveTab} />
-  </div>
-);
+  return (
+    <div className="app">
+      <main className="app__content">
+        <div className="app__inner">
+          {renderTab()}
+        </div>
+      </main>
+      <BottomTabNav active={activeTab} onChange={setActiveTab} />
+    </div>
+  );
+};
 
 export default App;
