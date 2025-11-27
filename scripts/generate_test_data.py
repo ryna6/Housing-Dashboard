@@ -291,7 +291,7 @@ def generate_rates_from_boc() -> List[PanelRow]:
         "gov_2y_yield": ("V122538", "pct"),
         "gov_5y_yield": ("V122540", "pct"),
         "gov_10y_yield": ("V122487", "pct"),
-        "mortgage_5y": ("V122521", "pct"),
+        "mortgage_5y": ("V80691335", "pct"),
     }
 
     all_series_ids = [cfg[0] for cfg in series_by_metric.values()]
