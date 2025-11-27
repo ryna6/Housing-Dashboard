@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { BottomTabNav, TabKey } from "./components/BottomTabNav";
+import { BottomTabNav } from "./components/BottomTabNav";
 import { PricesTab } from "./tabs/PricesTab";
 import { SalesListingsTab } from "./tabs/SalesListingsTab";
 import { SupplyPipelineTab } from "./tabs/SupplyPipelineTab";
@@ -8,12 +8,13 @@ import { InflationLabourTab } from "./tabs/InflationLabourTab";
 import { CreditStressTab } from "./tabs/CreditStressTab";
 import { MarketRiskTab } from "./tabs/MarketRiskTab";
 import { RentalsTab } from "./tabs/RentalsTab";
+import type { TabKey } from "./tabs/tabConfig";
 
-export const App: React.FC = () => {
-  const [active, setActive] = useState<TabKey>("prices");
+const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<TabKey>("prices");
 
   const renderTab = () => {
-    switch (active) {
+    switch (activeTab) {
       case "prices":
         return <PricesTab />;
       case "sales":
@@ -38,7 +39,7 @@ export const App: React.FC = () => {
   return (
     <div className="app">
       <main className="app__content">{renderTab()}</main>
-      <BottomTabNav active={active} onChange={setActive} />
+      <BottomTabNav active={activeTab} onChange={setActiveTab} />
     </div>
   );
 };
