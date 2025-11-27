@@ -128,20 +128,20 @@ body {
   gap: 8px;
 }
 
-/* Each chart takes full width on mobile */
+/* Mobile: stack charts vertically */
 .tab__charts > * {
   flex: 1 1 100%;
 }
 
-/* On larger screens, use a 2×N grid so charts don't get squished */
+/* Desktop: 4 charts side-by-side */
 @media (min-width: 768px) {
   .tab__charts {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .tab__charts > * {
-    flex: 0 0 calc(50% - 4px);
+    flex: 1 1 0;
   }
 }
 
