@@ -1,71 +1,94 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { PanelPoint, RegionCode } from "../data/types";
-import { loadTabData, getLatestByMetric } from "../data/dataClient";
 import { RegionToggle } from "../components/RegionToggle";
-import { MetricSnapshotCard, Snapshot } from "../components/MetricSnapshotCard";
+import { MarketSelector } from "../components/MarketSelector";
+import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
+import { getLatestByMetric } from "../data/dataClient";
+import { useTabData } from "./useTabData";
 
-const METRICS = ["rental_vacancy_rate", "rent_growth_yoy"];
-const PRIMARY_METRIC = "rental_vacancy_rate";
+const RENT_METRICS = ["avg_rent", "vacancy_rate", "rent_index", "rent_inflation"];
 
 export const RentalsTab: React.FC = () => {
-  const [data, setData] = useState<PanelPoint[]>([]);
+  const { data, loading, error } = useTabData("rentals");
   const [region, setRegion] = useState<RegionCode>("canada");
-  const [loading, setLoading] = useState(true);
+  const [market, setMarket] = useState<RegionCode | null>(null);
 
-  useEffect(() => {
-    loadTabData("rentals")
-      .then(setData)
-      .finally(() => setLoading(false));
-  }, []);
+  const effectiveRegion: RegionCode = market ?? region;
 
-  if (loading) return <div>Loading...</div>;
+  const handleRegionChange = (next: RegionCode) => {
+    setRegion(next);
+    if (next === "gta" || next === "metro_vancouver") {
+      setMarket(next);
+    } else {
+      setMarket(null);
+    }
+  };
 
-  const snapshots = getLatestByMetric(
-    data,
-    region,
-    METRICS,
-    "all"
-  ) as Snapshot[];
+  const handleMarketChange = (next: RegionCode | null) => {
+    setMarket(next);
+    if (next) setRegion(next);
+  };
 
-  const primarySeries = data.filter(
-    (p) => p.region === region && p.metric === PRIMARY_METRIC
+  const snapshots = useMemo(
+    () => getLatestByMetric(data, effectiveRegion, RENT_METRICS),
+    [data, effectiveRegion]
   );
-  const momSeries = primarySeries.filter((p) => p.mom_pct != null);
-  const yoySeries = primarySeries.filter((p) => p.yoy_pct != null);
+
+  const rentSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) =>
+          (p.metric === "avg_rent" || p.metric === "rent_index") &&
+          p.region === effectiveRegion
+      ),
+    [data, effectiveRegion]
+  );
 
   return (
     <div className="tab">
-      <div className="tab__header">
-        <RegionToggle
-          value={region}
-          onChange={setRegion}
-          allowedRegions={["canada", "on", "bc"]}
-        />
+      <header className="tab__header">
+        <h1 className="tab__title">Rentals</h1>
+        <p className="tab__subtitle">
+          Rents & vacancy (CMHC, TRREB / GVR where available)
+        </p>
+      </header>
+
+      <div className="tab__controls">
+        <RegionToggle value={region} onChange={handleRegionChange} />
+        <MarketSelector value={market} onChange={handleMarketChange} />
       </div>
 
-      <div className="card-grid">
-        {snapshots.length === 0 && (
-          <div className="tab__note">No rental data yet.</div>
+      {loading && <div className="tab__status">Loading rental data…</div>}
+      {error && (
+        <div className="tab__status tab__status--error">
+          Failed to load rentals: {error}
+        </div>
+      )}
+
+      <section className="tab__metrics">
+        {!loading && !snapshots.length && (
+          <div className="tab__status">
+            No rental data for this selection yet.
+          </div>
         )}
-        {snapshots.map((snap) => (
-          <MetricSnapshotCard key={snap.metric} snapshot={snap} />
+        {snapshots.map((s) => (
+          <MetricSnapshotCard key={s.metric} snapshot={s} />
         ))}
-      </div>
+      </section>
 
-      <div className="chart-grid">
+      <section className="tab__charts">
         <ChartPanel
-          title="Vacancy rate MoM %"
-          series={momSeries}
+          title="Rents – MoM %"
+          series={rentSeries}
           valueKey="mom_pct"
         />
         <ChartPanel
-          title="Vacancy rate YoY %"
-          series={yoySeries}
+          title="Rents – YoY %"
+          series={rentSeries}
           valueKey="yoy_pct"
         />
-      </div>
+      </section>
     </div>
   );
 };
-
