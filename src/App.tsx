@@ -1,13 +1,40 @@
 import React, { useState } from "react";
 import { PricesTab } from "./tabs/PricesTab";
 import { SalesListingsTab } from "./tabs/SalesListingsTab";
-import { SupplyTab } from "./tabs/SupplyTab";
 import { RatesBondsTab } from "./tabs/RatesBondsTab";
-import { InflationTab } from "./tabs/InflationTab";
-import { CreditTab } from "./tabs/CreditTab";
-import { MarketTab } from "./tabs/MarketTab";
 import { RentalsTab } from "./tabs/RentalsTab";
-import { BottomTabNav, TabId } from "./components/BottomTabNav";
+import { BottomTabNav } from "./components/BottomTabNav";
+
+/**
+ * Tab IDs must match what BottomTabNav uses internally.
+ * We define this locally instead of importing a type.
+ */
+type TabId =
+  | "prices"
+  | "sales"
+  | "supply"
+  | "rates"
+  | "inflation"
+  | "credit"
+  | "market"
+  | "rentals";
+
+const PlaceholderTab: React.FC<{ title: string; subtitle?: string }> = ({
+  title,
+  subtitle,
+}) => {
+  return (
+    <div className="tab">
+      <header className="tab__header">
+        <h1 className="tab__title">{title}</h1>
+        {subtitle && <p className="tab__subtitle">{subtitle}</p>}
+      </header>
+      <div className="tab__status">
+        This tab is not fully implemented yet.
+      </div>
+    </div>
+  );
+};
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>("prices");
@@ -19,15 +46,35 @@ const App: React.FC = () => {
       case "sales":
         return <SalesListingsTab />;
       case "supply":
-        return <SupplyTab />;
+        return (
+          <PlaceholderTab
+            title="Supply"
+            subtitle="Starts, completions, and permits (coming soon)."
+          />
+        );
       case "rates":
         return <RatesBondsTab />;
       case "inflation":
-        return <InflationTab />;
+        return (
+          <PlaceholderTab
+            title="Inflation"
+            subtitle="CPI and shelter components (coming soon)."
+          />
+        );
       case "credit":
-        return <CreditTab />;
+        return (
+          <PlaceholderTab
+            title="Credit"
+            subtitle="Insolvencies and arrears proxies (coming soon)."
+          />
+        );
       case "market":
-        return <MarketTab />;
+        return (
+          <PlaceholderTab
+            title="Market"
+            subtitle="Equity and credit spread proxies (coming soon)."
+          />
+        );
       case "rentals":
         return <RentalsTab />;
       default:
@@ -38,9 +85,7 @@ const App: React.FC = () => {
   return (
     <div className="app">
       <main className="app__content">
-        <div className="app__inner">
-          {renderTab()}
-        </div>
+        <div className="app__inner">{renderTab()}</div>
       </main>
       <BottomTabNav active={activeTab} onChange={setActiveTab} />
     </div>
