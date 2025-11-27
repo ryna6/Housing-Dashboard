@@ -281,7 +281,7 @@ def generate_rates_from_boc() -> List[PanelRow]:
       - gov_2y_yield     -> V122538  (2-year GoC benchmark bond yield, %)
       - gov_5y_yield     -> V122540  (5-year GoC benchmark bond yield, %)
       - gov_10y_yield    -> V122487  (Long-term GoC bond yield >10y, %)
-      - mortgage_5y      -> V122521  (Conventional mortgage rate, 5-year, %)
+      - mortgage_5y      -> V80691311  (Prime rate, %)
     """
     rows: List[PanelRow] = []
     region = "canada"
@@ -291,7 +291,7 @@ def generate_rates_from_boc() -> List[PanelRow]:
         "gov_2y_yield": ("V122538", "pct"),
         "gov_5y_yield": ("V122540", "pct"),
         "gov_10y_yield": ("V122487", "pct"),
-        "mortgage_5y": ("V80691335", "pct"),
+        "mortgage_5y": ("V80691311", "pct"),
     }
 
     all_series_ids = [cfg[0] for cfg in series_by_metric.values()]
