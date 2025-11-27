@@ -121,13 +121,13 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="2-year GoC bond yield"
+          title="2-year Government bond yield"
           series={gov2Series}
           valueKey="value"
           treatAsPercentScale
         />
         <ChartPanel
-          title="10-year GoC bond yield"
+          title="10-year Government bond yield"
           series={gov10Series}
           valueKey="value"
           treatAsPercentScale
