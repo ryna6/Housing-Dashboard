@@ -2,10 +2,9 @@ import type { PanelPoint, RegionCode } from "./types";
 import type { MetricSnapshot } from "../components/MetricSnapshotCard";
 
 /**
- * Load tab data from static JSON produced by ETL / scripts.
- * Example paths:
+ * Load tab data from static JSON produced by ETL.
+ * Example:
  *  - /data/processed/prices.json
- *  - /data/processed/sales_listings.json
  *  - /data/processed/rates_bonds.json
  */
 export async function loadTabData(tabKey: string): Promise<PanelPoint[]> {
@@ -18,7 +17,12 @@ export async function loadTabData(tabKey: string): Promise<PanelPoint[]> {
 
 /**
  * For a given region + segment, build a "snapshot" for each requested metric:
- * the latest point and the previous point (for MoM delta).
+ * - latest: most recent observation
+ * - prev: most recent observation with a *different* value (if any)
+ *
+ * This is important for step-like series such as policy_rate, where the last
+ * few months may all share the same level – in that case we still want to
+ * show the change from the last time the rate moved.
  */
 export function getLatestByMetric(
   points: PanelPoint[],
@@ -26,7 +30,6 @@ export function getLatestByMetric(
   metrics: string[],
   segment: string = "all"
 ): MetricSnapshot[] {
-  // Filter by region, segment and metric inclusion list
   const filtered = points.filter((p) => {
     if (p.region !== region) return false;
     if (segment !== "all" && p.segment !== segment) return false;
@@ -34,25 +37,31 @@ export function getLatestByMetric(
     return true;
   });
 
-  // Group by metric
   const byMetric: Record<string, PanelPoint[]> = {};
   for (const p of filtered) {
     if (!byMetric[p.metric]) byMetric[p.metric] = [];
     byMetric[p.metric].push(p);
   }
 
-  // Build snapshots in the same order as `metrics`
   const snapshots: MetricSnapshot[] = [];
 
   for (const metric of metrics) {
     const series = byMetric[metric];
     if (!series || series.length === 0) continue;
 
-    // Sort by date ascending (ISO strings => lexical order works)
+    // sort ascending by date
     series.sort((a, b) => a.date.localeCompare(b.date));
 
     const latest = series[series.length - 1];
-    const prev = series.length > 1 ? series[series.length - 2] : null;
+    let prev: PanelPoint | null = null;
+
+    // Walk backwards until we find a *different* value
+    for (let i = series.length - 2; i >= 0; i--) {
+      if (series[i].value !== latest.value) {
+        prev = series[i];
+        break;
+      }
+    }
 
     snapshots.push({
       metric,
