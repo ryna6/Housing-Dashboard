@@ -76,6 +76,18 @@ body {
   color: var(--text-muted);
 }
 
+.tab__regions-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.tab__regions-label {
+  margin-right: 4px;
+}
+
 .tab__controls {
   display: flex;
   flex-wrap: wrap;
