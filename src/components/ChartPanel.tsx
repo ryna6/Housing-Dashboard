@@ -2,65 +2,70 @@ import React from "react";
 import ReactECharts from "echarts-for-react";
 import type { PanelPoint } from "../data/types";
 
-type ValueKey = "mom_pct" | "yoy_pct" | "value";
-
 interface Props {
   title: string;
   series: PanelPoint[];
-  valueKey: ValueKey;
+  valueKey: "mom_pct" | "yoy_pct" | "value";
 }
 
 export const ChartPanel: React.FC<Props> = ({ title, series, valueKey }) => {
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
-  const x = sorted.map((p) => p.date.slice(0, 7)); // YYYY-MM
+  const x = sorted.map((p) => p.date.slice(0, 7));
   const y = sorted.map((p) => {
     const v = p[valueKey] as number | null;
     return v == null ? NaN : v;
   });
 
-  const isPct = valueKey === "mom_pct" || valueKey === "yoy_pct";
+  const hasData = y.some((v) => Number.isFinite(v));
+
+  if (!hasData) {
+    return (
+      <div className="chart-panel chart-panel--empty">
+        <div className="chart-panel__title">{title}</div>
+        <div className="chart-panel__empty-text">
+          Not available for this selection.
+        </div>
+      </div>
+    );
+  }
 
   const option = {
-    title: {
-      text: title,
-      left: "center",
-      textStyle: { fontSize: 12 }
-    },
+    grid: { left: 40, right: 16, top: 24, bottom: 24 },
     tooltip: {
-      trigger: "axis",
-      valueFormatter: (val: number) =>
-        isPct ? `${val.toFixed(2)}%` : val.toFixed(2)
+      trigger: "axis"
     },
-    grid: { left: 40, right: 10, top: 30, bottom: 30 },
     xAxis: {
-      type: "category" as const,
+      type: "category",
       data: x,
+      axisLine: { lineStyle: { opacity: 0.4 } },
       axisLabel: { fontSize: 10 }
     },
     yAxis: {
-      type: "value" as const,
-      axisLabel: {
-        formatter: isPct ? "{value} %" : "{value}"
-      },
-      splitLine: { show: true }
+      type: "value",
+      axisLine: { lineStyle: { opacity: 0.4 } },
+      splitLine: { lineStyle: { opacity: 0.2 } },
+      axisLabel: { fontSize: 10 }
     },
     series: [
       {
-        type: "line" as const,
+        type: "line",
         data: y,
         smooth: true,
-        showSymbol: false
+        showSymbol: false,
+        lineStyle: { width: 2 }
       }
     ]
   };
 
   return (
     <div className="chart-panel">
-      {series.length === 0 ? (
-        <div className="chart-panel__empty">No data yet</div>
-      ) : (
-        <ReactECharts option={option} notMerge lazyUpdate />
-      )}
+      <div className="chart-panel__title">{title}</div>
+      <ReactECharts
+        option={option}
+        notMerge
+        lazyUpdate
+        style={{ width: "100%", height: 220 }}
+      />
     </div>
   );
 };
