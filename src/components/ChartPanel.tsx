@@ -22,6 +22,21 @@ interface Props {
   clampYMinToZero?: boolean;
 }
 
+// Simple "nice number" helper for tick steps: 1, 2, 5 × 10^k
+function niceStep(rawStep: number): number {
+  if (!Number.isFinite(rawStep) || rawStep <= 0) return 1;
+  const exp = Math.floor(Math.log10(rawStep));
+  const base = rawStep / Math.pow(10, exp); // between 1 and 10
+  let niceBase: number;
+
+  if (base < 1.5) niceBase = 1;
+  else if (base < 3) niceBase = 2;
+  else if (base < 7) niceBase = 5;
+  else niceBase = 10;
+
+  return niceBase * Math.pow(10, exp);
+}
+
 export const ChartPanel: React.FC<Props> = ({
   title,
   series,
@@ -59,43 +74,49 @@ export const ChartPanel: React.FC<Props> = ({
     );
   }
 
-  // ----- Y-axis bounds -----
+  // ----- Y-axis bounds with "±1 step" logic -----
   let yMin: number | undefined;
   let yMax: number | undefined;
+  let interval: number | undefined;
 
-  if (numeric.length > 0) {
-    const rawMin = Math.min(...numeric);
-    const rawMax = Math.max(...numeric);
+  const rawMin = Math.min(...numeric);
+  const rawMax = Math.max(...numeric);
 
-    if (isPercentScale) {
-      // For percent-style series: extend by ±1 percentage point.
-      const floor = Math.floor(rawMin);
-      const ceil = Math.ceil(rawMax);
+  if (rawMin === rawMax) {
+    // Flat series: pick a reasonable step based on magnitude
+    const base = Math.abs(rawMin) || 1;
+    const rough = base / 3;
+    const stepSize = niceStep(rough);
+    interval = stepSize;
 
-      let min = floor - 1;
-      let max = ceil + 1;
+    let min = rawMin - stepSize;
+    let max = rawMax + stepSize;
 
-      if (clampYMinToZero) {
-        // e.g. policy rate: don't go below 0.
-        min = Math.max(0, min);
-      }
-
-      yMin = min;
-      yMax = max;
-    } else {
-      // Non-percent series: keep smooth ±10% padding of range.
-      if (rawMin === rawMax) {
-        const base = rawMin === 0 ? 1 : Math.abs(rawMin);
-        const pad = base * 0.1;
-        yMin = rawMin - pad;
-        yMax = rawMax + pad;
-      } else {
-        const span = rawMax - rawMin;
-        const pad = span * 0.1;
-        yMin = rawMin - pad;
-        yMax = rawMax + pad;
-      }
+    if (isPercentScale && clampYMinToZero) {
+      min = Math.max(0, min);
     }
+
+    yMin = min;
+    yMax = max;
+  } else {
+    const range = rawMax - rawMin;
+    const targetTicks = 5;
+    const rough = range / (targetTicks - 1 || 1);
+    const stepSize = niceStep(rough);
+    interval = stepSize;
+
+    const niceMin = Math.floor(rawMin / stepSize) * stepSize;
+    const niceMax = Math.ceil(rawMax / stepSize) * stepSize;
+
+    let min = niceMin - stepSize; // one extra step below
+    let max = niceMax + stepSize; // one extra step above
+
+    if (isPercentScale && clampYMinToZero) {
+      min = Math.max(0, min);
+    }
+
+    yMin = min;
+    yMax = max;
   }
 
   const option: any = {
@@ -124,10 +145,10 @@ export const ChartPanel: React.FC<Props> = ({
     },
     yAxis: {
       type: "value",
-      // No '%' axis-name at the top; leave it blank unless explicitly provided
       name: valueAxisLabel ?? "",
       min: yMin,
       max: yMax,
+      interval,
       axisLine: { lineStyle: { opacity: 0.4 } },
       splitLine: { lineStyle: { opacity: 0.2 } },
       axisLabel: {
@@ -135,7 +156,6 @@ export const ChartPanel: React.FC<Props> = ({
         formatter: (val: number) => {
           if (Number.isNaN(val)) return "";
           if (isPercentScale) {
-            // e.g. 0%, 1%, 2%, …
             return `${val.toFixed(0)}%`;
           }
           return val.toFixed(0);
