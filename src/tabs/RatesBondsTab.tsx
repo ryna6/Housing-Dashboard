@@ -1,6 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import type { PanelPoint, RegionCode } from "../data/types";
-import { RegionToggle } from "../components/RegionToggle";
 import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
@@ -15,23 +14,19 @@ const RATE_METRICS = [
   "mortgage_5y_spread"
 ];
 
+const REGION: RegionCode = "canada";
+
 export const RatesBondsTab: React.FC = () => {
   const { data, loading, error } = useTabData("rates_bonds");
-  const [region, setRegion] = useState<RegionCode>("canada");
-
-  const handleRegionChange = (next: RegionCode) => {
-    setRegion(next);
-  };
 
   const snapshots = useMemo(
-    () => getLatestByMetric(data, region, RATE_METRICS),
-    [data, region]
+    () => getLatestByMetric(data, REGION, RATE_METRICS),
+    [data]
   );
 
   const policySeries: PanelPoint[] = useMemo(
-    () =>
-      data.filter((p) => p.metric === "policy_rate" && p.region === region),
-    [data, region]
+    () => data.filter((p) => p.metric === "policy_rate" && p.region === REGION),
+    [data]
   );
 
   return (
@@ -42,14 +37,6 @@ export const RatesBondsTab: React.FC = () => {
           Policy rate, mortgage rates & bond yields (BoC)
         </p>
       </header>
-
-      <div className="tab__controls">
-        <RegionToggle
-          value={region}
-          onChange={handleRegionChange}
-          allowedRegions={["canada"]}
-        />
-      </div>
 
       {loading && <div className="tab__status">Loading rates…</div>}
       {error && (
