@@ -6,10 +6,15 @@ interface Props {
   title: string;
   series: PanelPoint[];
   valueKey: "value" | "mom_pct" | "yoy_pct";
-  /** Optional label for the y-axis, e.g. "%" for rate levels. */
+  /** Optional label for the y-axis (left blank by default). */
   valueAxisLabel?: string;
   /** Render as a step line (discrete jumps between months). */
   step?: boolean;
+  /**
+   * Treat numeric values as percentages for formatting (0–5% etc),
+   * even if the underlying valueKey is "value".
+   */
+  treatAsPercentScale?: boolean;
 }
 
 export const ChartPanel: React.FC<Props> = ({
@@ -17,7 +22,8 @@ export const ChartPanel: React.FC<Props> = ({
   series,
   valueKey,
   valueAxisLabel,
-  step = false
+  step = false,
+  treatAsPercentScale,
 }) => {
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
   const x = sorted.map((p) => p.date.slice(0, 7));
@@ -30,10 +36,9 @@ export const ChartPanel: React.FC<Props> = ({
     sorted.length > 0 &&
     y.some((v) => typeof v === "number" && !Number.isNaN(v));
 
-  const isPctSeries =
-    valueKey === "mom_pct" ||
-    valueKey === "yoy_pct" ||
-    valueAxisLabel === "%";
+  const isPercentScale =
+    treatAsPercentScale ??
+    (valueKey === "mom_pct" || valueKey === "yoy_pct");
 
   if (!hasData) {
     return (
@@ -57,35 +62,36 @@ export const ChartPanel: React.FC<Props> = ({
           p && typeof p.data === "number" ? (p.data as number) : NaN;
         if (Number.isNaN(val)) return axisValue;
 
-        const formatted = isPctSeries
+        const formatted = isPercentScale
           ? `${val.toFixed(2)}%`
           : val.toFixed(2);
 
         return `${axisValue}<br/>${formatted}`;
-      }
+      },
     },
     xAxis: {
       type: "category",
       data: x,
       axisLine: { lineStyle: { opacity: 0.4 } },
-      axisLabel: { fontSize: 10 }
+      axisLabel: { fontSize: 10 },
     },
     yAxis: {
       type: "value",
-      name: isPctSeries ? "%" : valueAxisLabel ?? "",
+      // No '%' axis-name at the top; leave it blank unless caller sets something
+      name: valueAxisLabel ?? "",
       axisLine: { lineStyle: { opacity: 0.4 } },
       splitLine: { lineStyle: { opacity: 0.2 } },
       axisLabel: {
         fontSize: 10,
         formatter: (val: number) => {
           if (Number.isNaN(val)) return "";
-          if (isPctSeries) {
-            // 0%, 1%, 2%, ...
-            return `${val.toFixed(0)}%`;
+          if (isPercentScale) {
+            // 0, 1, 2, 3 (we already show % in tooltip / cards)
+            return val.toFixed(0);
           }
           return val.toFixed(0);
-        }
-      }
+        },
+      },
     },
     series: [
       {
@@ -94,10 +100,9 @@ export const ChartPanel: React.FC<Props> = ({
         showSymbol: false,
         connectNulls: true,
         smooth: !step,
-        // For policy/mortgage rates: vertical jumps between months
-        step: step ? "end" : undefined
-      }
-    ]
+        step: step ? "end" : undefined,
+      },
+    ],
   };
 
   return (
@@ -107,7 +112,7 @@ export const ChartPanel: React.FC<Props> = ({
         option={option}
         notMerge
         lazyUpdate
-        style={{ width: "100%", height: 260 }}
+        style={{ width: "100%", height: 190 }}
       />
     </div>
   );
