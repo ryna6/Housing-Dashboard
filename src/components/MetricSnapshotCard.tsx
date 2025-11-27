@@ -11,11 +11,20 @@ interface Props {
   snapshot: MetricSnapshot;
 }
 
+const RATE_METRICS = new Set<string>([
+  "policy_rate",
+  "mortgage_5y",
+  "gov_2y_yield",
+  "gov_5y_yield",
+  "gov_10y_yield",
+  "mortgage_5y_spread",
+]);
+
 function formatValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "–";
 
   if (unit === "pct") {
-    // show two decimals for rates / percentages
+    // 2 decimal places for rates / percentages
     return `${value.toFixed(2)}%`;
   }
 
@@ -34,6 +43,13 @@ function formatValue(value: number, unit: string): string {
   }
 
   return value.toFixed(2);
+}
+
+function formatDelta(value: number, unit: string): string {
+  if (unit === "pct") {
+    return `${value.toFixed(2)}%`;
+  }
+  return formatValue(value, unit);
 }
 
 function labelForMetric(metric: string): string {
@@ -83,19 +99,10 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
   const { metric, latest, prev } = snapshot;
 
   const latestVal = latest?.value;
-  const momPct =
-    latest.mom_pct != null
-      ? latest.mom_pct
-      : prev && prev.value
-      ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
-      : null;
+  const yoyPct = latest.yoy_pct ?? null;
+  const isRateMetric = RATE_METRICS.has(metric);
 
-  const hasPrev = !!prev && Number.isFinite(prev.value);
-  const deltaAbs =
-    hasPrev && momPct != null ? latest.value - prev.value : null;
-
-  const yoyPct = latest.yoy_pct;
-
+  // Common YoY color classes
   const yoyClass =
     "metric-card__secondary" +
     (yoyPct != null
@@ -106,6 +113,80 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
         : ""
       : "");
 
+  let deltaNode: React.ReactNode = null;
+
+  if (isRateMetric) {
+    // For interest rates: change from previous rate (not "MoM")
+    if (prev && Number.isFinite(prev.value) && latestVal != null) {
+      const absDelta = latest.value - prev.value;
+      if (absDelta !== 0) {
+        const relPct =
+          prev.value !== 0
+            ? (absDelta / Math.abs(prev.value)) * 100
+            : null;
+
+        const chipClass =
+          "metric-card__delta-chip" +
+          (absDelta > 0
+            ? " metric-card__delta-chip--up"
+            : " metric-card__delta-chip--down");
+
+        deltaNode = (
+          <div className="metric-card__delta-row">
+            <span className={chipClass}>
+              {absDelta > 0 ? "+" : ""}
+              {formatDelta(absDelta, latest.unit)}{" "}
+              {relPct != null && (
+                <>
+                  (
+                  {relPct > 0 ? "+" : ""}
+                  {relPct.toFixed(1)}%)
+                </>
+              )}
+              <span className="metric-card__delta-label">
+                {" "}
+                vs previous rate
+              </span>
+            </span>
+          </div>
+        );
+      }
+    }
+  } else {
+    // Non-rate metrics: classic MoM delta
+    const hasPrev = !!prev && Number.isFinite(prev.value);
+    const momPct =
+      latest.mom_pct != null
+        ? latest.mom_pct
+        : hasPrev && prev
+        ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
+        : null;
+
+    if (hasPrev && momPct != null) {
+      const absDelta = latest.value - prev!.value;
+      const chipClass =
+        "metric-card__delta-chip" +
+        (momPct > 0
+          ? " metric-card__delta-chip--up"
+          : momPct < 0
+          ? " metric-card__delta-chip--down"
+          : "");
+
+      deltaNode = (
+        <div className="metric-card__delta-row">
+          <span className={chipClass}>
+            {absDelta > 0 ? "+" : ""}
+            {formatDelta(absDelta, latest.unit)}{" "}
+            (
+            {momPct > 0 ? "+" : ""}
+            {momPct.toFixed(1)}%)
+            <span className="metric-card__delta-label"> MoM</span>
+          </span>
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="metric-card">
       <div className="metric-card__title">{labelForMetric(metric)}</div>
@@ -113,24 +194,7 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
         {formatValue(latestVal, latest.unit)}
       </div>
 
-      {momPct != null && hasPrev && deltaAbs != null && (
-        <div className="metric-card__delta-row">
-          <span
-            className={
-              "metric-card__delta-chip" +
-              (momPct >= 0
-                ? " metric-card__delta-chip--up"
-                : " metric-card__delta-chip--down")
-            }
-          >
-            {deltaAbs >= 0 ? "+" : ""}
-            {formatValue(deltaAbs, latest.unit)}{" "}
-            ({momPct >= 0 ? "+" : ""}
-            {momPct.toFixed(1)}%)
-            <span className="metric-card__delta-label"> MoM</span>
-          </span>
-        </div>
-      )}
+      {deltaNode}
 
       {yoyPct != null && (
         <div className={yoyClass}>
