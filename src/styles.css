@@ -47,7 +47,7 @@ body {
 .app__content {
   flex: 1;
   padding: 12px 12px calc(var(--nav-height) + 12px);
-  max-width: 1400px;
+  max-width: 1800px;
   margin: 0 auto;
 }
 
