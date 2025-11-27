@@ -6,8 +6,10 @@ interface Props {
   title: string;
   series: PanelPoint[];
   valueKey: "value" | "mom_pct" | "yoy_pct";
-  /** Optional label for Y axis (e.g. "%", "bps", "index"). */
+  /** Optional label for the y-axis, e.g. "%" for rate levels. */
   valueAxisLabel?: string;
+  /** Render as a step line (discrete jumps between months). */
+  step?: boolean;
 }
 
 export const ChartPanel: React.FC<Props> = ({
@@ -15,94 +17,98 @@ export const ChartPanel: React.FC<Props> = ({
   series,
   valueKey,
   valueAxisLabel,
+  step = false
 }) => {
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
-  const x = sorted.map((p) => p.date.slice(0, 7)); // YYYY-MM
+  const x = sorted.map((p) => p.date.slice(0, 7));
   const y = sorted.map((p) => {
-    const raw = p[valueKey] as number | null;
-    return raw == null ? NaN : raw;
+    const v = p[valueKey] as number | null;
+    return v == null ? NaN : v;
   });
 
   const hasData =
-    sorted.length > 0 && y.some((v) => typeof v === "number" && !Number.isNaN(v));
+    sorted.length > 0 &&
+    y.some((v) => typeof v === "number" && !Number.isNaN(v));
+
+  const isPctSeries =
+    valueKey === "mom_pct" ||
+    valueKey === "yoy_pct" ||
+    valueAxisLabel === "%";
 
   if (!hasData) {
     return (
       <div className="chart-panel chart-panel--empty">
         <div className="chart-panel__title">{title}</div>
-        <div className="chart-panel__empty-message">
-          Not available for this selection
+        <div className="chart-panel__empty-text">
+          Not available for this selection.
         </div>
       </div>
     );
   }
 
-  const isPctChange = valueKey === "mom_pct" || valueKey === "yoy_pct";
-  const isPercentScale = isPctChange || valueAxisLabel === "%";
-
-  const option = {
-    title: {
-      text: title,
-      left: "left",
-      top: 0,
-      textStyle: {
-        fontSize: 13,
-        fontWeight: 600,
-        color: "#f5f5f5", // more visible title
-      },
-    },
+  const option: any = {
+    grid: { left: 40, right: 16, top: 8, bottom: 28 },
     tooltip: {
       trigger: "axis",
       formatter: (params: any) => {
         const p = Array.isArray(params) ? params[0] : params;
-        const value: number =
-          p && typeof p.data === "number" ? (p.data as number) : NaN;
         const axisValue = p && p.axisValue ? String(p.axisValue) : "";
-        if (Number.isNaN(value)) return axisValue;
+        const val =
+          p && typeof p.data === "number" ? (p.data as number) : NaN;
+        if (Number.isNaN(val)) return axisValue;
 
-        const valueStr = isPercentScale
-          ? `${value.toFixed(2)}%`
-          : value.toFixed(2);
+        const formatted = isPctSeries
+          ? `${val.toFixed(2)}%`
+          : val.toFixed(2);
 
-        return `${axisValue}<br/>${valueStr}`;
-      },
+        return `${axisValue}<br/>${formatted}`;
+      }
     },
-    grid: { left: 40, right: 10, top: 35, bottom: 40 },
     xAxis: {
       type: "category",
       data: x,
-      axisLabel: {
-        formatter: (val: string) => val,
-      },
+      axisLine: { lineStyle: { opacity: 0.4 } },
+      axisLabel: { fontSize: 10 }
     },
     yAxis: {
       type: "value",
-      name: isPercentScale ? "%" : valueAxisLabel ?? "",
+      name: isPctSeries ? "%" : valueAxisLabel ?? "",
+      axisLine: { lineStyle: { opacity: 0.4 } },
+      splitLine: { lineStyle: { opacity: 0.2 } },
       axisLabel: {
+        fontSize: 10,
         formatter: (val: number) => {
           if (Number.isNaN(val)) return "";
-          if (isPercentScale) {
-            // Show as 0%, 1%, 2%, ...
+          if (isPctSeries) {
+            // 0%, 1%, 2%, ...
             return `${val.toFixed(0)}%`;
           }
           return val.toFixed(0);
-        },
-      },
+        }
+      }
     },
     series: [
       {
         type: "line",
         data: y,
-        smooth: true,
         showSymbol: false,
         connectNulls: true,
-      },
-    ],
+        smooth: !step,
+        // For policy/mortgage rates: vertical jumps between months
+        step: step ? "end" : undefined
+      }
+    ]
   };
 
   return (
     <div className="chart-panel">
-      <ReactECharts option={option} notMerge lazyUpdate />
+      <div className="chart-panel__title">{title}</div>
+      <ReactECharts
+        option={option}
+        notMerge
+        lazyUpdate
+        style={{ width: "100%", height: 260 }}
+      />
     </div>
   );
 };
