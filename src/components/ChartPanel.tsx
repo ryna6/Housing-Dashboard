@@ -32,9 +32,11 @@ export const ChartPanel: React.FC<Props> = ({
     return v == null ? NaN : v;
   });
 
-  const hasData =
-    sorted.length > 0 &&
-    y.some((v) => typeof v === "number" && !Number.isNaN(v));
+  const numeric = y.filter(
+    (v) => typeof v === "number" && !Number.isNaN(v)
+  ) as number[];
+
+  const hasData = sorted.length > 0 && numeric.length > 0;
 
   const isPercentScale =
     treatAsPercentScale ??
@@ -49,6 +51,25 @@ export const ChartPanel: React.FC<Props> = ({
         </div>
       </div>
     );
+  }
+
+  // Dynamic y-axis bounds: ±10% around the observed range
+  let yMin: number | undefined;
+  let yMax: number | undefined;
+  if (numeric.length > 0) {
+    const rawMin = Math.min(...numeric);
+    const rawMax = Math.max(...numeric);
+    if (rawMin === rawMax) {
+      const base = rawMin === 0 ? 1 : Math.abs(rawMin);
+      const pad = base * 0.1;
+      yMin = rawMin - pad;
+      yMax = rawMax + pad;
+    } else {
+      const span = rawMax - rawMin;
+      const pad = span * 0.1;
+      yMin = rawMin - pad;
+      yMax = rawMax + pad;
+    }
   }
 
   const option: any = {
@@ -77,8 +98,10 @@ export const ChartPanel: React.FC<Props> = ({
     },
     yAxis: {
       type: "value",
-      // No '%' axis-name at the top; leave it blank unless caller sets something
+      // No '%' axis name at the top; leave blank unless explicitly provided
       name: valueAxisLabel ?? "",
+      min: yMin,
+      max: yMax,
       axisLine: { lineStyle: { opacity: 0.4 } },
       splitLine: { lineStyle: { opacity: 0.2 } },
       axisLabel: {
@@ -86,8 +109,8 @@ export const ChartPanel: React.FC<Props> = ({
         formatter: (val: number) => {
           if (Number.isNaN(val)) return "";
           if (isPercentScale) {
-            // 0, 1, 2, 3 (we already show % in tooltip / cards)
-            return val.toFixed(0);
+            // 0%, 1%, 2%, ... (tick labels)
+            return `${val.toFixed(0)}%`;
           }
           return val.toFixed(0);
         },
