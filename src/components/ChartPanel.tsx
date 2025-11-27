@@ -5,46 +5,69 @@ import type { PanelPoint } from "../data/types";
 interface Props {
   title: string;
   series: PanelPoint[];
-  valueKey: "mom_pct" | "yoy_pct" | "value";
+  valueKey: "value" | "mom_pct" | "yoy_pct";
+  /** Optional label for the Y axis when plotting raw values (e.g. "bps"). */
+  valueAxisLabel?: string;
 }
 
-export const ChartPanel: React.FC<Props> = ({ title, series, valueKey }) => {
+export const ChartPanel: React.FC<Props> = ({
+  title,
+  series,
+  valueKey,
+  valueAxisLabel,
+}) => {
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
-  const x = sorted.map((p) => p.date.slice(0, 7));
+  const x = sorted.map((p) => p.date.slice(0, 7)); // YYYY-MM
   const y = sorted.map((p) => {
-    const v = p[valueKey] as number | null;
-    return v == null ? NaN : v;
+    const raw = p[valueKey] as number | null;
+    return raw == null ? NaN : raw;
   });
 
-  const hasData = y.some((v) => Number.isFinite(v));
+  const hasData =
+    sorted.length > 0 && y.some((v) => typeof v === "number" && !Number.isNaN(v));
 
   if (!hasData) {
     return (
       <div className="chart-panel chart-panel--empty">
         <div className="chart-panel__title">{title}</div>
-        <div className="chart-panel__empty-text">
-          Not available for this selection.
+        <div className="chart-panel__empty-message">
+          Not available for this selection
         </div>
       </div>
     );
   }
 
+  const isPctChange = valueKey === "mom_pct" || valueKey === "yoy_pct";
+
   const option = {
-    grid: { left: 40, right: 16, top: 24, bottom: 24 },
-    tooltip: {
-      trigger: "axis"
+    title: {
+      text: title,
+      left: "left",
+      top: 0,
+      textStyle: { fontSize: 11 },
     },
+    tooltip: {
+      trigger: "axis",
+    },
+    grid: { left: 40, right: 10, top: 30, bottom: 40 },
     xAxis: {
       type: "category",
       data: x,
-      axisLine: { lineStyle: { opacity: 0.4 } },
-      axisLabel: { fontSize: 10 }
+      axisLabel: {
+        formatter: (val: string) => val,
+      },
     },
     yAxis: {
       type: "value",
-      axisLine: { lineStyle: { opacity: 0.4 } },
-      splitLine: { lineStyle: { opacity: 0.2 } },
-      axisLabel: { fontSize: 10 }
+      name: isPctChange ? "%" : valueAxisLabel ?? "",
+      axisLabel: {
+        formatter: (val: number) => {
+          if (Number.isNaN(val)) return "";
+          if (isPctChange) return `${val.toFixed(1)}%`; // MoM/YoY % charts
+          // Raw values (e.g. basis points)
+          return val.toFixed(0);
+        },
+      },
     },
     series: [
       {
@@ -52,20 +75,14 @@ export const ChartPanel: React.FC<Props> = ({ title, series, valueKey }) => {
         data: y,
         smooth: true,
         showSymbol: false,
-        lineStyle: { width: 2 }
-      }
-    ]
+        connectNulls: true,
+      },
+    ],
   };
 
   return (
     <div className="chart-panel">
-      <div className="chart-panel__title">{title}</div>
-      <ReactECharts
-        option={option}
-        notMerge
-        lazyUpdate
-        style={{ width: "100%", height: 220 }}
-      />
+      <ReactECharts option={option} notMerge lazyUpdate />
     </div>
   );
 };
