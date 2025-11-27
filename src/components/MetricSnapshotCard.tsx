@@ -1,63 +1,115 @@
 import React from "react";
 import type { PanelPoint } from "../data/types";
 
-export interface Snapshot {
+export interface MetricSnapshot {
   metric: string;
   latest: PanelPoint;
   prev: PanelPoint | null;
 }
 
 interface Props {
-  snapshot: Snapshot;
+  snapshot: MetricSnapshot;
+}
+
+function formatValue(value: number, unit: string): string {
+  if (!Number.isFinite(value)) return "–";
+
+  if (unit === "pct") {
+    return `${value.toFixed(1)}%`;
+  }
+
+  if (unit === "cad") {
+    if (Math.abs(value) >= 1_000_000) {
+      return `$${(value / 1_000_000).toFixed(2)}M`;
+    }
+    if (Math.abs(value) >= 1_000) {
+      return `$${(value / 1_000).toFixed(1)}k`;
+    }
+    return `$${value.toFixed(0)}`;
+  }
+
+  if (unit === "index") {
+    return value.toFixed(1);
+  }
+
+  return value.toFixed(2);
+}
+
+function labelForMetric(metric: string): string {
+  switch (metric) {
+    case "hpi_benchmark":
+      return "Benchmark HPI";
+    case "avg_price":
+      return "Average price";
+    case "teranet_hpi":
+      return "Teranet HPI";
+    case "sales":
+      return "Sales";
+    case "new_listings":
+      return "New listings";
+    case "active_listings":
+      return "Active listings";
+    case "snlr":
+      return "Sales / New listings";
+    case "moi":
+      return "Months of inventory";
+    case "policy_rate":
+      return "BoC policy rate";
+    case "mortgage_5y":
+      return "5y mortgage rate";
+    case "gov_5y_yield":
+      return "5y GoC yield";
+    case "avg_rent":
+      return "Average rent";
+    case "vacancy_rate":
+      return "Vacancy rate";
+    case "cpi_headline":
+      return "Headline CPI";
+    case "cpi_shelter":
+      return "Shelter CPI";
+    default:
+      return metric.replace(/_/g, " ");
+  }
 }
 
 export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
   const { metric, latest, prev } = snapshot;
 
-  const deltaAbs =
-    prev && prev.value !== undefined ? latest.value - prev.value : null;
-  const deltaPct =
-    prev && prev.value
-      ? ((latest.value / prev.value - 1) * 100)
+  const latestVal = latest?.value;
+  const momPct =
+    latest.mom_pct != null
+      ? latest.mom_pct
+      : prev && prev.value
+      ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
       : null;
 
-  const signClass =
-    deltaPct == null
-      ? ""
-      : deltaPct > 0
-      ? "metric-card__delta--up"
-      : "metric-card__delta--down";
-
-  const formatVal = (v: number) => {
-    if (metric.includes("price") || latest.unit.startsWith("$")) {
-      return v.toLocaleString("en-CA", {
-        style: "currency",
-        currency: "CAD",
-        maximumFractionDigits: 0
-      });
-    }
-
-    if (latest.unit === "percent") {
-      return `${v.toFixed(1)}%`;
-    }
-
-    return v.toLocaleString("en-CA", { maximumFractionDigits: 1 });
-  };
+  const hasPrev = !!prev && Number.isFinite(prev.value);
+  const deltaAbs =
+    hasPrev && momPct != null ? latest.value - prev.value : null;
 
   return (
     <div className="metric-card">
-      <div className="metric-card__label">{metric}</div>
+      <div className="metric-card__title">{labelForMetric(metric)}</div>
       <div className="metric-card__value">
-        {formatVal(latest.value)}
-        <span className="metric-card__unit">{latest.unit}</span>
+        {formatValue(latestVal, latest.unit)}
       </div>
 
-      {deltaPct != null && (
-        <div className={`metric-card__delta ${signClass}`}>
-          {deltaAbs !== null ? formatVal(deltaAbs) : ""} (
-          {deltaPct > 0 ? "+" : ""}
-          {deltaPct.toFixed(1)}%)
-          <span className="metric-card__delta-label"> MoM</span>
+      {momPct != null && hasPrev && deltaAbs != null && (
+        <div className="metric-card__delta-row">
+          <span
+            className={
+              "metric-card__delta-chip" +
+              (momPct >= 0
+                ? " metric-card__delta-chip--up"
+                : " metric-card__delta-chip--down")
+            }
+          >
+            {deltaAbs >= 0 ? "+" : ""}
+            {formatValue(deltaAbs, latest.unit)}{" "}
+            ({momPct >= 0 ? "+" : ""}
+            {momPct.toFixed(1)}%)
+            <span className="metric-card__delta-label"> MoM</span>
+          </span>
         </div>
       )}
 
