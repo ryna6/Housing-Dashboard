@@ -1,12 +1,6 @@
 import React from "react";
 import type { PanelPoint } from "../data/types";
 
-/**
- * Snapshot used for headline metric cards:
- * - metric: identifier string (e.g. "policy_rate")
- * - latest: most recent PanelPoint for that metric / region / segment
- * - prev: previous observation (for MoM deltas), if available
- */
 export interface MetricSnapshot {
   metric: string;
   latest: PanelPoint;
@@ -17,118 +11,131 @@ interface Props {
   snapshot: MetricSnapshot;
 }
 
-const METRIC_LABELS: Record<string, string> = {
-  policy_rate: "Policy rate",
-  mortgage_5y: "5-year mortgage rate",
-  gov_2y_yield: "2Y GoC yield",
-  gov_5y_yield: "5Y GoC yield",
-  gov_10y_yield: "10Y GoC yield",
-  mortgage_5y_spread: "5Y mortgage spread",
+function formatValue(value: number, unit: string): string {
+  if (!Number.isFinite(value)) return "–";
 
-  hpi_benchmark: "Benchmark HPI",
-  avg_price: "Average price",
-  teranet_hpi: "Teranet HPI",
-
-  sales: "Sales",
-  new_listings: "New listings",
-  active_listings: "Active listings",
-  snlr: "SNLR",
-  moi: "Months of inventory",
-
-  avg_rent: "Average rent",
-  vacancy_rate: "Vacancy rate",
-  rent_index: "Rent index",
-  rent_inflation: "Rent inflation",
-
-  cpi_headline: "Headline CPI",
-  cpi_shelter: "Shelter CPI",
-  cpi_rent: "Rent CPI",
-  wage_index: "Wage index",
-  unemployment_rate: "Unemployment rate",
-};
-
-function formatMetricLabel(metric: string): string {
-  return METRIC_LABELS[metric] ?? metric.replace(/_/g, " ");
-}
-
-function formatValue(latest: PanelPoint): string {
-  const value = latest.value;
-
-  switch (latest.unit) {
-    case "pct":
-      // Show at least 2 decimal places for rates / % (e.g. 2.25%, 3.51%)
-      return `${value.toFixed(2)}%`;
-    case "cad":
-      return `$${value.toLocaleString("en-CA", {
-        maximumFractionDigits: 0,
-      })}`;
-    case "index":
-      return value.toFixed(1);
-    case "count":
-      return value.toLocaleString("en-CA");
-    case "ratio":
-      return value.toFixed(2);
-    default:
-      return value.toFixed(2);
+  if (unit === "pct") {
+    // show two decimals for rates / percentages
+    return `${value.toFixed(2)}%`;
   }
+
+  if (unit === "cad") {
+    if (Math.abs(value) >= 1_000_000) {
+      return `$${(value / 1_000_000).toFixed(2)}M`;
+    }
+    if (Math.abs(value) >= 1_000) {
+      return `$${(value / 1_000).toFixed(1)}k`;
+    }
+    return `$${value.toFixed(0)}`;
+  }
+
+  if (unit === "index") {
+    return value.toFixed(1);
+  }
+
+  return value.toFixed(2);
 }
 
-function signClass(base: string, value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return base;
-  if (value > 0) return `${base} ${base}--up`;
-  if (value < 0) return `${base} ${base}--down`;
-  return base;
+function labelForMetric(metric: string): string {
+  switch (metric) {
+    case "hpi_benchmark":
+      return "Benchmark HPI";
+    case "avg_price":
+      return "Average price";
+    case "teranet_hpi":
+      return "Teranet HPI";
+    case "sales":
+      return "Sales";
+    case "new_listings":
+      return "New listings";
+    case "active_listings":
+      return "Active listings";
+    case "snlr":
+      return "Sales / New listings";
+    case "moi":
+      return "Months of inventory";
+    case "policy_rate":
+      return "BoC policy rate";
+    case "mortgage_5y":
+      return "5y mortgage rate";
+    case "gov_2y_yield":
+      return "2y GoC yield";
+    case "gov_5y_yield":
+      return "5y GoC yield";
+    case "gov_10y_yield":
+      return "10y GoC yield";
+    case "mortgage_5y_spread":
+      return "5y mortgage spread";
+    case "avg_rent":
+      return "Average rent";
+    case "vacancy_rate":
+      return "Vacancy rate";
+    case "cpi_headline":
+      return "Headline CPI";
+    case "cpi_shelter":
+      return "Shelter CPI";
+    default:
+      return metric.replace(/_/g, " ");
+  }
 }
 
 export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
   const { metric, latest, prev } = snapshot;
 
-  const deltaAbs = prev ? latest.value - prev.value : null;
-  const deltaPct =
+  const latestVal = latest?.value;
+  const momPct =
     latest.mom_pct != null
       ? latest.mom_pct
-      : prev && prev.value !== 0
-      ? ((latest.value / prev.value) - 1) * 100
+      : prev && prev.value
+      ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
       : null;
 
-  const hasDelta = deltaAbs != null || deltaPct != null;
-  const yoy = latest.yoy_pct ?? null;
+  const hasPrev = !!prev && Number.isFinite(prev.value);
+  const deltaAbs =
+    hasPrev && momPct != null ? latest.value - prev.value : null;
 
-  const deltaClass = signClass("metric-card__delta", deltaPct ?? deltaAbs ?? null);
-  const yoyClass = signClass("metric-card__secondary", yoy);
+  const yoyPct = latest.yoy_pct;
+
+  const yoyClass =
+    "metric-card__secondary" +
+    (yoyPct != null
+      ? yoyPct > 0
+        ? " metric-card__secondary--up"
+        : yoyPct < 0
+        ? " metric-card__secondary--down"
+        : ""
+      : "");
 
   return (
     <div className="metric-card">
-      <div className="metric-card__header">
-        <div className="metric-card__title">{formatMetricLabel(metric)}</div>
-        <div className="metric-card__value">{formatValue(latest)}</div>
+      <div className="metric-card__title">{labelForMetric(metric)}</div>
+      <div className="metric-card__value">
+        {formatValue(latestVal, latest.unit)}
       </div>
 
-      {hasDelta && (
-        <div className={deltaClass}>
-          {deltaAbs != null && (
-            <>
-              Δ {deltaAbs > 0 ? "+" : ""}
-              {deltaAbs.toFixed(latest.unit === "pct" ? 2 : 1)}
-            </>
-          )}
-          {deltaPct != null && (
-            <>
-              {" "}
-              (
-              {deltaPct > 0 ? "+" : ""}
-              {deltaPct.toFixed(1)}%
-              <span className="metric-card__delta-label"> MoM</span>
-              )
-            </>
-          )}
+      {momPct != null && hasPrev && deltaAbs != null && (
+        <div className="metric-card__delta-row">
+          <span
+            className={
+              "metric-card__delta-chip" +
+              (momPct >= 0
+                ? " metric-card__delta-chip--up"
+                : " metric-card__delta-chip--down")
+            }
+          >
+            {deltaAbs >= 0 ? "+" : ""}
+            {formatValue(deltaAbs, latest.unit)}{" "}
+            ({momPct >= 0 ? "+" : ""}
+            {momPct.toFixed(1)}%)
+            <span className="metric-card__delta-label"> MoM</span>
+          </span>
         </div>
       )}
 
-      {yoy != null && (
+      {yoyPct != null && (
         <div className={yoyClass}>
-          YoY: {yoy > 0 ? "+" : ""}
-          {yoy.toFixed(1)}%
+          YoY: {yoyPct > 0 ? "+" : ""}
+          {yoyPct.toFixed(1)}%
         </div>
       )}
     </div>
