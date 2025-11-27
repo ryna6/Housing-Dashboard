@@ -46,9 +46,9 @@ body {
 
 .app__content {
   flex: 1;
-  padding: 12px 12px calc(var(--nav-height) + 12px);
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  padding: 12px 24px calc(var(--nav-height) + 12px);
+  margin: 0; /* outer container now spans full width */
 }
 
 .app__inner {
@@ -187,7 +187,7 @@ body {
 }
 
 .bottom-nav__inner {
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
   height: 100%;
   display: flex;
