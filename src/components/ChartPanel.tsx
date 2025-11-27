@@ -53,25 +53,6 @@ export const ChartPanel: React.FC<Props> = ({
     );
   }
 
-  // Dynamic y-axis bounds: ±10% around the observed range
-  let yMin: number | undefined;
-  let yMax: number | undefined;
-  if (numeric.length > 0) {
-    const rawMin = Math.min(...numeric);
-    const rawMax = Math.max(...numeric);
-    if (rawMin === rawMax) {
-      const base = rawMin === 0 ? 1 : Math.abs(rawMin);
-      const pad = base * 0.1;
-      yMin = rawMin - pad;
-      yMax = rawMax + pad;
-    } else {
-      const span = rawMax - rawMin;
-      const pad = span * 0.1;
-      yMin = rawMin - pad;
-      yMax = rawMax + pad;
-    }
-  }
-
   const option: any = {
     grid: { left: 40, right: 16, top: 8, bottom: 28 },
     tooltip: {
@@ -98,10 +79,11 @@ export const ChartPanel: React.FC<Props> = ({
     },
     yAxis: {
       type: "value",
-      // No '%' axis name at the top; leave blank unless explicitly provided
+      // No '%' axis-name at the top; leave it blank unless explicitly provided
       name: valueAxisLabel ?? "",
-      min: yMin,
-      max: yMax,
+      // Auto-scale exactly to the data range, no extra ±10% padding
+      min: "dataMin",
+      max: "dataMax",
       axisLine: { lineStyle: { opacity: 0.4 } },
       splitLine: { lineStyle: { opacity: 0.2 } },
       axisLabel: {
@@ -109,7 +91,7 @@ export const ChartPanel: React.FC<Props> = ({
         formatter: (val: number) => {
           if (Number.isNaN(val)) return "";
           if (isPercentScale) {
-            // 0%, 1%, 2%, ... (tick labels)
+            // Show "X%" on ticks for rate / % series
             return `${val.toFixed(0)}%`;
           }
           return val.toFixed(0);
