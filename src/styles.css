@@ -128,14 +128,21 @@ body {
   gap: 8px;
 }
 
+/* Each chart takes full width on mobile */
+.tab__charts > * {
+  flex: 1 1 100%;
+}
+
+/* On larger screens, use a 2×N grid so charts don't get squished */
 @media (min-width: 768px) {
   .tab__charts {
     flex-direction: row;
+    flex-wrap: wrap;
   }
-}
 
-.tab__charts > * {
-  flex: 1;
+  .tab__charts > * {
+    flex: 0 0 calc(50% - 4px);
+  }
 }
 
 .tab__status {
