@@ -5,49 +5,46 @@ const REGION_LABELS: Record<RegionCode, string> = {
   canada: "Canada",
   on: "Ontario",
   bc: "British Columbia",
-  gta: "Toronto (GTA)",
-  metro_vancouver: "Metro Vancouver"
+  gta: "GTA",
+  metro_vancouver: "Metro Van"
 };
 
 interface Props {
   value: RegionCode;
-  onChange: (value: RegionCode) => void;
-  allowedRegions: RegionCode[];
-  disabledRegions?: RegionCode[];
-  note?: string;
+  onChange: (region: RegionCode) => void;
+  allowedRegions?: RegionCode[];
 }
 
 export const RegionToggle: React.FC<Props> = ({
   value,
   onChange,
-  allowedRegions,
-  disabledRegions = [],
-  note
+  allowedRegions
 }) => {
-  return (
-    <div className="region-toggle">
-      {allowedRegions.map((region) => {
-        const disabled = disabledRegions.includes(region);
-        const classes = [
-          "region-toggle__btn",
-          value === region ? "region-toggle__btn--active" : "",
-          disabled ? "region-toggle__btn--disabled" : ""
-        ]
-          .filter(Boolean)
-          .join(" ");
+  const regions: RegionCode[] =
+    allowedRegions && allowedRegions.length > 0
+      ? allowedRegions
+      : ["canada", "on", "bc", "gta", "metro_vancouver"];
 
+  return (
+    <div className="region-toggle" role="radiogroup" aria-label="Region">
+      {regions.map((code) => {
+        const isActive = code === value;
         return (
           <button
-            key={region}
-            disabled={disabled}
-            className={classes}
-            onClick={() => !disabled && onChange(region)}
+            key={code}
+            type="button"
+            className={
+              "region-toggle__btn" +
+              (isActive ? " region-toggle__btn--active" : "")
+            }
+            role="radio"
+            aria-checked={isActive}
+            onClick={() => onChange(code)}
           >
-            {REGION_LABELS[region]}
+            {REGION_LABELS[code]}
           </button>
         );
       })}
-      {note && <div className="region-toggle__note">{note}</div>}
     </div>
   );
 };
