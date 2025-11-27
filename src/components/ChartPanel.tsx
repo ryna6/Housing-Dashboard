@@ -15,6 +15,11 @@ interface Props {
    * even if the underlying valueKey is "value".
    */
   treatAsPercentScale?: boolean;
+  /**
+   * For percent-style series, clamp the y-axis minimum at 0
+   * (e.g. policy rate, mortgage rate).
+   */
+  clampYMinToZero?: boolean;
 }
 
 export const ChartPanel: React.FC<Props> = ({
@@ -24,6 +29,7 @@ export const ChartPanel: React.FC<Props> = ({
   valueAxisLabel,
   step = false,
   treatAsPercentScale,
+  clampYMinToZero = false,
 }) => {
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
   const x = sorted.map((p) => p.date.slice(0, 7)); // YYYY-MM
@@ -51,6 +57,45 @@ export const ChartPanel: React.FC<Props> = ({
         </div>
       </div>
     );
+  }
+
+  // ----- Y-axis bounds -----
+  let yMin: number | undefined;
+  let yMax: number | undefined;
+
+  if (numeric.length > 0) {
+    const rawMin = Math.min(...numeric);
+    const rawMax = Math.max(...numeric);
+
+    if (isPercentScale) {
+      // For percent-style series: extend by ±1 percentage point.
+      const floor = Math.floor(rawMin);
+      const ceil = Math.ceil(rawMax);
+
+      let min = floor - 1;
+      let max = ceil + 1;
+
+      if (clampYMinToZero) {
+        // e.g. policy rate: don't go below 0.
+        min = Math.max(0, min);
+      }
+
+      yMin = min;
+      yMax = max;
+    } else {
+      // Non-percent series: keep smooth ±10% padding of range.
+      if (rawMin === rawMax) {
+        const base = rawMin === 0 ? 1 : Math.abs(rawMin);
+        const pad = base * 0.1;
+        yMin = rawMin - pad;
+        yMax = rawMax + pad;
+      } else {
+        const span = rawMax - rawMin;
+        const pad = span * 0.1;
+        yMin = rawMin - pad;
+        yMax = rawMax + pad;
+      }
+    }
   }
 
   const option: any = {
@@ -81,10 +126,8 @@ export const ChartPanel: React.FC<Props> = ({
       type: "value",
       // No '%' axis-name at the top; leave it blank unless explicitly provided
       name: valueAxisLabel ?? "",
-      // Use raw data min/max, but add visual padding via boundaryGap
-      min: "dataMin",
-      max: "dataMax",
-      boundaryGap: [0.1, 0.1], // ±10% padding without extra fake values
+      min: yMin,
+      max: yMax,
       axisLine: { lineStyle: { opacity: 0.4 } },
       splitLine: { lineStyle: { opacity: 0.2 } },
       axisLabel: {
@@ -92,7 +135,7 @@ export const ChartPanel: React.FC<Props> = ({
         formatter: (val: number) => {
           if (Number.isNaN(val)) return "";
           if (isPercentScale) {
-            // e.g. 1%, 2%, 3%…
+            // e.g. 0%, 1%, 2%, …
             return `${val.toFixed(0)}%`;
           }
           return val.toFixed(0);
