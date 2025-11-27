@@ -358,3 +358,33 @@ body {
   color: var(--text-muted);
   text-align: center;
 }
+
+/* Metric card visual hierarchy + up/down colors */
+
+.metric-card__value {
+  font-size: 1.4rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.metric-card__delta {
+  margin-top: 4px;
+  font-size: 0.85rem;
+}
+
+.metric-card__secondary {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+/* Green for positive, red for negative deltas */
+.metric-card__delta--up,
+.metric-card__secondary--up {
+  color: #2ecc71; /* up */
+}
+
+.metric-card__delta--down,
+.metric-card__secondary--down {
+  color: #e74c3c; /* down */
+}
