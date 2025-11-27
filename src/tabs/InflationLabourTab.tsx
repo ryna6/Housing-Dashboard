@@ -1,6 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import type { PanelPoint, RegionCode } from "../data/types";
-import { RegionToggle } from "../components/RegionToggle";
 import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
@@ -14,17 +13,14 @@ const INFLATION_METRICS = [
   "unemployment_rate"
 ];
 
+const REGION: RegionCode = "canada";
+
 export const InflationLabourTab: React.FC = () => {
   const { data, loading, error } = useTabData("inflation_labour");
-  const [region, setRegion] = useState<RegionCode>("canada");
-
-  const handleRegionChange = (next: RegionCode) => {
-    setRegion(next);
-  };
 
   const snapshots = useMemo(
-    () => getLatestByMetric(data, region, INFLATION_METRICS),
-    [data, region]
+    () => getLatestByMetric(data, REGION, INFLATION_METRICS),
+    [data]
   );
 
   const cpiSeries: PanelPoint[] = useMemo(
@@ -32,9 +28,9 @@ export const InflationLabourTab: React.FC = () => {
       data.filter(
         (p) =>
           (p.metric === "cpi_headline" || p.metric === "cpi_shelter") &&
-          p.region === region
+          p.region === REGION
       ),
-    [data, region]
+    [data]
   );
 
   return (
@@ -45,10 +41,6 @@ export const InflationLabourTab: React.FC = () => {
           CPI, shelter & labour proxies (StatCan)
         </p>
       </header>
-
-      <div className="tab__controls">
-        <RegionToggle value={region} onChange={handleRegionChange} />
-      </div>
 
       {loading && <div className="tab__status">Loading inflation data…</div>}
       {error && (
