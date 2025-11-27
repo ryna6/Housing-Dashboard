@@ -2,7 +2,6 @@ name: Monthly ETL Refresh
 
 on:
   schedule:
-    # 5th of every month at 08:00 Toronto time (~13:00 UTC)
     - cron: "0 13 5 * *"
   workflow_dispatch: {}
 
@@ -14,10 +13,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -25,22 +22,24 @@ jobs:
           python-version: "3.11"
 
       - name: Install ETL dependencies
-        working-directory: ./etl
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f etl/requirements.txt ]; then
+            pip install -r etl/requirements.txt
+          else
+            pip install pandas requests python-dateutil
+          fi
 
       - name: Run ETL
-        working-directory: ./etl
-        run: python main.py
+        run: python -m etl.main
 
-      - name: Check for changes in processed data
+      - name: Check for changes
         id: git-status
         run: |
-          if [[ -z "$(git status --porcelain data/processed)" ]]; then
-            echo "changed=false" >> $GITHUB_OUTPUT
+          if git diff --quiet -- data/processed; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Commit & push updated data
