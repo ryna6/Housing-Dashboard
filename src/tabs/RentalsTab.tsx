@@ -1,33 +1,26 @@
 import React, { useMemo, useState } from "react";
-import type { PanelPoint, RegionCode } from "../data/types";
+import type { PanelPoint, RegionCode, MarketCode } from "../data/types";
 import { RegionToggle } from "../components/RegionToggle";
 import { MarketSelector } from "../components/MarketSelector";
 import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
+import { REGIONS_BY_MARKET } from "../data/regions";
 
 const RENT_METRICS = ["avg_rent", "vacancy_rate", "rent_index", "rent_inflation"];
 
 export const RentalsTab: React.FC = () => {
   const { data, loading, error } = useTabData("rentals");
-  const [region, setRegion] = useState<RegionCode>("canada");
-  const [market, setMarket] = useState<RegionCode | null>(null);
+  const [market, setMarket] = useState<MarketCode>("canada");
+  const [region, setRegion] = useState<RegionCode | null>(null);
 
-  const effectiveRegion: RegionCode = market ?? region;
+  const effectiveRegion: RegionCode = region ?? market;
+  const hasRegions = REGIONS_BY_MARKET[market].length > 0;
 
-  const handleRegionChange = (next: RegionCode) => {
-    setRegion(next);
-    if (next === "gta" || next === "metro_vancouver") {
-      setMarket(next);
-    } else {
-      setMarket(null);
-    }
-  };
-
-  const handleMarketChange = (next: RegionCode | null) => {
+  const handleMarketChange = (next: MarketCode) => {
     setMarket(next);
-    if (next) setRegion(next);
+    setRegion(null);
   };
 
   const snapshots = useMemo(
@@ -55,8 +48,18 @@ export const RentalsTab: React.FC = () => {
       </header>
 
       <div className="tab__controls">
-        <RegionToggle value={region} onChange={handleRegionChange} />
         <MarketSelector value={market} onChange={handleMarketChange} />
+
+        {hasRegions && (
+          <div className="tab__regions-group">
+            <span className="tab__regions-label">Regions:</span>
+            <RegionToggle
+              market={market}
+              value={region}
+              onChange={setRegion}
+            />
+          </div>
+        )}
       </div>
 
       {loading && <div className="tab__status">Loading rental data…</div>}
