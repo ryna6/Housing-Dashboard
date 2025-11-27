@@ -1,72 +1,110 @@
-import React, { useEffect, useState } from "react";
-import type { PanelPoint, RegionCode } from "../data/types";
-import { loadTabData, getLatestByMetric } from "../data/dataClient";
+import React, { useMemo, useState } from "react";
+import type { PanelPoint, RegionCode, Segment } from "../data/types";
 import { RegionToggle } from "../components/RegionToggle";
-import { MetricSnapshotCard, Snapshot } from "../components/MetricSnapshotCard";
+import { MarketSelector } from "../components/MarketSelector";
+import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
+import { getLatestByMetric } from "../data/dataClient";
+import { useTabData } from "./useTabData";
 
-const METRICS = ["sales", "new_listings", "active_listings", "snlr", "moi"];
-const PRIMARY_METRIC = "sales";
+const SALES_METRICS = ["sales", "new_listings", "active_listings", "snlr", "moi"];
 
 export const SalesListingsTab: React.FC = () => {
-  const [data, setData] = useState<PanelPoint[]>([]);
+  const { data, loading, error } = useTabData("sales_listings");
   const [region, setRegion] = useState<RegionCode>("canada");
-  const [segment] = useState<string>("all");
-  const [loading, setLoading] = useState(true);
+  const [market, setMarket] = useState<RegionCode | null>(null);
+  const [segment, setSegment] = useState<Segment>("all");
 
-  useEffect(() => {
-    loadTabData("sales_listings")
-      .then(setData)
-      .finally(() => setLoading(false));
-  }, []);
+  const effectiveRegion: RegionCode = market ?? region;
 
-  if (loading) return <div>Loading...</div>;
+  const handleRegionChange = (next: RegionCode) => {
+    setRegion(next);
+    if (next === "gta" || next === "metro_vancouver") {
+      setMarket(next);
+    } else {
+      setMarket(null);
+    }
+  };
 
-  const snapshots = getLatestByMetric(
-    data,
-    region,
-    METRICS,
-    segment
-  ) as Snapshot[];
+  const handleMarketChange = (next: RegionCode | null) => {
+    setMarket(next);
+    if (next) setRegion(next);
+  };
 
-  const primarySeries = data.filter(
-    (p) => p.region === region && p.segment === segment && p.metric === PRIMARY_METRIC
+  const handleSegmentChange = (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    setSegment(event.target.value as Segment);
+  };
+
+  const snapshots = useMemo(
+    () => getLatestByMetric(data, effectiveRegion, SALES_METRICS, segment),
+    [data, effectiveRegion, segment]
   );
-  const momSeries = primarySeries.filter((p) => p.mom_pct != null);
-  const yoySeries = primarySeries.filter((p) => p.yoy_pct != null);
+
+  const salesSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) =>
+          p.metric === "sales" &&
+          p.region === effectiveRegion &&
+          (segment === "all" || p.segment === segment)
+      ),
+    [data, effectiveRegion, segment]
+  );
 
   return (
     <div className="tab">
-      <div className="tab__header">
-        <RegionToggle
-          value={region}
-          onChange={setRegion}
-          allowedRegions={["canada", "on", "bc"]}
-        />
+      <header className="tab__header">
+        <h1 className="tab__title">Sales</h1>
+        <p className="tab__subtitle">
+          Resale volumes, listings, absorption (monthly)
+        </p>
+      </header>
+
+      <div className="tab__controls">
+        <RegionToggle value={region} onChange={handleRegionChange} />
+        <MarketSelector value={market} onChange={handleMarketChange} />
+        <div className="tab__segment">
+          Segment
+          <select value={segment} onChange={handleSegmentChange}>
+            <option value="all">All</option>
+            <option value="condo">Condo</option>
+            <option value="freehold">Freehold</option>
+          </select>
+        </div>
       </div>
 
-      <div className="card-grid">
-        {snapshots.length === 0 && (
-          <div className="tab__note">No sales/listings data yet.</div>
+      {loading && <div className="tab__status">Loading sales data…</div>}
+      {error && (
+        <div className="tab__status tab__status--error">
+          Failed to load sales: {error}
+        </div>
+      )}
+
+      <section className="tab__metrics">
+        {!loading && !snapshots.length && (
+          <div className="tab__status">
+            No sales data for this selection yet.
+          </div>
         )}
-        {snapshots.map((snap) => (
-          <MetricSnapshotCard key={snap.metric} snapshot={snap} />
+        {snapshots.map((s) => (
+          <MetricSnapshotCard key={s.metric} snapshot={s} />
         ))}
-      </div>
+      </section>
 
-      <div className="chart-grid">
+      <section className="tab__charts">
         <ChartPanel
-          title="Sales MoM %"
-          series={momSeries}
+          title="Sales – MoM %"
+          series={salesSeries}
           valueKey="mom_pct"
         />
         <ChartPanel
-          title="Sales YoY %"
-          series={yoySeries}
+          title="Sales – YoY %"
+          series={salesSeries}
           valueKey="yoy_pct"
         />
-      </div>
+      </section>
     </div>
   );
 };
-
