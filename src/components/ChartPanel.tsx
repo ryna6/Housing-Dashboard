@@ -53,25 +53,6 @@ export const ChartPanel: React.FC<Props> = ({
     );
   }
 
-  // y-axis bounds with ±10% padding of the data range (no extra fake points).
-  let yMin: number | undefined;
-  let yMax: number | undefined;
-  if (numeric.length > 0) {
-    const rawMin = Math.min(...numeric);
-    const rawMax = Math.max(...numeric);
-    if (rawMin === rawMax) {
-      const base = rawMin === 0 ? 1 : Math.abs(rawMin);
-      const pad = base * 0.1;
-      yMin = rawMin - pad;
-      yMax = rawMax + pad;
-    } else {
-      const span = rawMax - rawMin;
-      const pad = span * 0.1;
-      yMin = rawMin - pad;
-      yMax = rawMax + pad;
-    }
-  }
-
   const option: any = {
     grid: { left: 40, right: 16, top: 8, bottom: 28 },
     tooltip: {
@@ -100,8 +81,10 @@ export const ChartPanel: React.FC<Props> = ({
       type: "value",
       // No '%' axis-name at the top; leave it blank unless explicitly provided
       name: valueAxisLabel ?? "",
-      min: yMin,
-      max: yMax,
+      // Use raw data min/max, but add visual padding via boundaryGap
+      min: "dataMin",
+      max: "dataMax",
+      boundaryGap: [0.1, 0.1], // ±10% padding without extra fake values
       axisLine: { lineStyle: { opacity: 0.4 } },
       splitLine: { lineStyle: { opacity: 0.2 } },
       axisLabel: {
@@ -109,7 +92,7 @@ export const ChartPanel: React.FC<Props> = ({
         formatter: (val: number) => {
           if (Number.isNaN(val)) return "";
           if (isPercentScale) {
-            // e.g. 1%, 2%, 3%...
+            // e.g. 1%, 2%, 3%…
             return `${val.toFixed(0)}%`;
           }
           return val.toFixed(0);
