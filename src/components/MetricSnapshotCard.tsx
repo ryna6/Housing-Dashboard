@@ -1,14 +1,20 @@
 import React from "react";
 import type { PanelPoint } from "../data/types";
 
-interface Snapshot {
+/**
+ * Snapshot used for headline metric cards:
+ * - metric: identifier string (e.g. "policy_rate")
+ * - latest: most recent PanelPoint for that metric / region / segment
+ * - prev: previous observation (for MoM deltas), if available
+ */
+export interface MetricSnapshot {
   metric: string;
   latest: PanelPoint;
   prev: PanelPoint | null;
 }
 
 interface Props {
-  snapshot: Snapshot;
+  snapshot: MetricSnapshot;
 }
 
 const METRIC_LABELS: Record<string, string> = {
@@ -18,18 +24,22 @@ const METRIC_LABELS: Record<string, string> = {
   gov_5y_yield: "5Y GoC yield",
   gov_10y_yield: "10Y GoC yield",
   mortgage_5y_spread: "5Y mortgage spread",
+
   hpi_benchmark: "Benchmark HPI",
   avg_price: "Average price",
   teranet_hpi: "Teranet HPI",
+
   sales: "Sales",
   new_listings: "New listings",
   active_listings: "Active listings",
   snlr: "SNLR",
   moi: "Months of inventory",
+
   avg_rent: "Average rent",
   vacancy_rate: "Vacancy rate",
   rent_index: "Rent index",
   rent_inflation: "Rent inflation",
+
   cpi_headline: "Headline CPI",
   cpi_shelter: "Shelter CPI",
   cpi_rent: "Rent CPI",
@@ -46,7 +56,7 @@ function formatValue(latest: PanelPoint): string {
 
   switch (latest.unit) {
     case "pct":
-      // Show at least 2 decimal places for rates / percentages (e.g. 2.25%, 3.51%)
+      // Show at least 2 decimal places for rates / % (e.g. 2.25%, 3.51%)
       return `${value.toFixed(2)}%`;
     case "cad":
       return `$${value.toLocaleString("en-CA", {
