@@ -156,7 +156,6 @@ export const ChartPanel: React.FC<Props> = ({
         formatter: (val: number) => {
           if (Number.isNaN(val)) return "";
           if (isPercentScale) {
-            // e.g. 0%, 2%, 4%, … (for stepSize=2)
             return `${val.toFixed(0)}%`;
           }
           return val.toFixed(0);
