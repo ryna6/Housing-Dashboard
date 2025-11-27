@@ -36,12 +36,15 @@ const App: React.FC = () => {
     }
   };
 
-  return (
-    <div className="app">
-      <main className="app__content">{renderTab()}</main>
-      <BottomTabNav active={activeTab} onChange={setActiveTab} />
-    </div>
-  );
-};
+return (
+  <div className="app">
+    <main className="app__content">
+      <div className="app__inner">
+        {renderTab()}
+      </div>
+    </main>
+    <BottomTabNav active={activeTab} onChange={setActiveTab} />
+  </div>
+);
 
 export default App;
