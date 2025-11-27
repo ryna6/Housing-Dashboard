@@ -79,7 +79,7 @@ function labelForMetric(metric: string): string {
     case "policy_rate":
       return "BoC policy rate";
     case "mortgage_5y":
-      return "5y mortgage / prime";
+      return "5y mortgage rate";
 
     case "gov_2y_yield":
       return "2y GoC yield";
