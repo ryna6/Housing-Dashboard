@@ -6,7 +6,7 @@ interface Props {
   title: string;
   series: PanelPoint[];
   valueKey: "value" | "mom_pct" | "yoy_pct";
-  /** Optional label for the Y axis when plotting raw values (e.g. "bps"). */
+  /** Optional label for Y axis (e.g. "%", "bps", "index"). */
   valueAxisLabel?: string;
 }
 
@@ -38,18 +38,36 @@ export const ChartPanel: React.FC<Props> = ({
   }
 
   const isPctChange = valueKey === "mom_pct" || valueKey === "yoy_pct";
+  const isPercentScale = isPctChange || valueAxisLabel === "%";
 
   const option = {
     title: {
       text: title,
       left: "left",
       top: 0,
-      textStyle: { fontSize: 11 },
+      textStyle: {
+        fontSize: 13,
+        fontWeight: 600,
+        color: "#f5f5f5", // more visible title
+      },
     },
     tooltip: {
       trigger: "axis",
+      formatter: (params: any) => {
+        const p = Array.isArray(params) ? params[0] : params;
+        const value: number =
+          p && typeof p.data === "number" ? (p.data as number) : NaN;
+        const axisValue = p && p.axisValue ? String(p.axisValue) : "";
+        if (Number.isNaN(value)) return axisValue;
+
+        const valueStr = isPercentScale
+          ? `${value.toFixed(2)}%`
+          : value.toFixed(2);
+
+        return `${axisValue}<br/>${valueStr}`;
+      },
     },
-    grid: { left: 40, right: 10, top: 30, bottom: 40 },
+    grid: { left: 40, right: 10, top: 35, bottom: 40 },
     xAxis: {
       type: "category",
       data: x,
@@ -59,12 +77,14 @@ export const ChartPanel: React.FC<Props> = ({
     },
     yAxis: {
       type: "value",
-      name: isPctChange ? "%" : valueAxisLabel ?? "",
+      name: isPercentScale ? "%" : valueAxisLabel ?? "",
       axisLabel: {
         formatter: (val: number) => {
           if (Number.isNaN(val)) return "";
-          if (isPctChange) return `${val.toFixed(1)}%`; // MoM/YoY % charts
-          // Raw values (e.g. basis points)
+          if (isPercentScale) {
+            // Show as 0%, 1%, 2%, ...
+            return `${val.toFixed(0)}%`;
+          }
           return val.toFixed(0);
         },
       },
