@@ -26,7 +26,7 @@ export const ChartPanel: React.FC<Props> = ({
   treatAsPercentScale,
 }) => {
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
-  const x = sorted.map((p) => p.date.slice(0, 7));
+  const x = sorted.map((p) => p.date.slice(0, 7)); // YYYY-MM
   const y = sorted.map((p) => {
     const v = p[valueKey] as number | null;
     return v == null ? NaN : v;
@@ -51,6 +51,25 @@ export const ChartPanel: React.FC<Props> = ({
         </div>
       </div>
     );
+  }
+
+  // y-axis bounds with ±10% padding of the data range (no extra fake points).
+  let yMin: number | undefined;
+  let yMax: number | undefined;
+  if (numeric.length > 0) {
+    const rawMin = Math.min(...numeric);
+    const rawMax = Math.max(...numeric);
+    if (rawMin === rawMax) {
+      const base = rawMin === 0 ? 1 : Math.abs(rawMin);
+      const pad = base * 0.1;
+      yMin = rawMin - pad;
+      yMax = rawMax + pad;
+    } else {
+      const span = rawMax - rawMin;
+      const pad = span * 0.1;
+      yMin = rawMin - pad;
+      yMax = rawMax + pad;
+    }
   }
 
   const option: any = {
@@ -81,9 +100,8 @@ export const ChartPanel: React.FC<Props> = ({
       type: "value",
       // No '%' axis-name at the top; leave it blank unless explicitly provided
       name: valueAxisLabel ?? "",
-      // Auto-scale exactly to the data range, no extra ±10% padding
-      min: "dataMin",
-      max: "dataMax",
+      min: yMin,
+      max: yMax,
       axisLine: { lineStyle: { opacity: 0.4 } },
       splitLine: { lineStyle: { opacity: 0.2 } },
       axisLabel: {
@@ -91,7 +109,7 @@ export const ChartPanel: React.FC<Props> = ({
         formatter: (val: number) => {
           if (Number.isNaN(val)) return "";
           if (isPercentScale) {
-            // Show "X%" on ticks for rate / % series
+            // e.g. 1%, 2%, 3%...
             return `${val.toFixed(0)}%`;
           }
           return val.toFixed(0);
