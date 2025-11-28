@@ -145,6 +145,10 @@ body {
     /* Inflation has 5 overview cards */
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
+  /* Prices tab: 3 overview cards should span the full width on desktop */
+  .tab__metrics.tab__metrics--3col {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .tab__charts {
