@@ -11,6 +11,10 @@ from SalesListings import generate_sales
 from Rentals import generate_rentals
 from RatesBonds import generate_rates
 from InflationLabour import generate_inflation
+from CreditStress import generate_credit_stress
+from MarketRisk import generate_market_risk
+from SupplyPipeline import generate_supply_pipeline
+
 
 # Root paths
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -36,17 +40,20 @@ def main() -> None:
     rentals = generate_rentals()
     rates = generate_rates()
     inflation = generate_inflation()
+    credit = generate_credit_stress()
+    market = generate_market_risk()
+    supply = generate_supply_pipeline()
 
-    # Combined panel (currently not used by the UI, but nice to keep)
-    panel = prices + sales + rentals + rates + inflation
+    panel = prices + sales + rentals + rates + inflation + credit + market + supply
 
-    # Per-tab JSON files (these are what the frontend actually fetches)
     write_json(DATA_DIR / "panel.json", panel)
     write_json(DATA_DIR / "prices.json", prices)
     write_json(DATA_DIR / "sales_listings.json", sales)
     write_json(DATA_DIR / "rentals.json", rentals)
     write_json(DATA_DIR / "rates_bonds.json", rates)
     write_json(DATA_DIR / "inflation_labour.json", inflation)
+    #credit/market/supply JSONs are written by their own scripts if you call main()
+
 
     print(f"Wrote dashboard data to {DATA_DIR}")
 
