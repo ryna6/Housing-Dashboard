@@ -5,15 +5,33 @@ import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
 
-const INFLATION_METRICS = [
+const INFLATION_METRICS: string[] = [
   "cpi_headline",
   "cpi_shelter",
   "cpi_rent",
   "wage_index",
-  "unemployment_rate"
+  "unemployment_rate",
 ];
 
 const REGION: RegionCode = "canada";
+
+/**
+ * Trim a series down to the last N years based on the latest observation date.
+ * Mirrors the helper in RatesBondsTab so charts auto-focus on the recent decade.
+ */
+function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
+  if (series.length <= 1) return series;
+
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const last = new Date(sorted[sorted.length - 1].date);
+  const cutoff = new Date(last);
+  cutoff.setFullYear(cutoff.getFullYear() - years);
+
+  return sorted.filter((p) => {
+    const d = new Date(p.date);
+    return d >= cutoff;
+  });
+}
 
 export const InflationLabourTab: React.FC = () => {
   const { data, loading, error } = useTabData("inflation_labour");
@@ -23,12 +41,54 @@ export const InflationLabourTab: React.FC = () => {
     [data]
   );
 
-  const cpiSeries: PanelPoint[] = useMemo(
+  // Per-metric series, trimmed to the last 10 years
+  const headlineSeries: PanelPoint[] = useMemo(
     () =>
-      data.filter(
-        (p) =>
-          (p.metric === "cpi_headline" || p.metric === "cpi_shelter") &&
-          p.region === REGION
+      trimLastYears(
+        data.filter(
+          (p) => p.metric === "cpi_headline" && p.region === REGION
+        ),
+        10
+      ),
+    [data]
+  );
+
+  const shelterSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter(
+          (p) => p.metric === "cpi_shelter" && p.region === REGION
+        ),
+        10
+      ),
+    [data]
+  );
+
+  const rentSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter((p) => p.metric === "cpi_rent" && p.region === REGION),
+        10
+      ),
+    [data]
+  );
+
+  const wageSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter((p) => p.metric === "wage_index" && p.region === REGION),
+        10
+      ),
+    [data]
+  );
+
+  const unemploymentSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter(
+          (p) => p.metric === "unemployment_rate" && p.region === REGION
+        ),
+        10
       ),
     [data]
   );
@@ -42,15 +102,18 @@ export const InflationLabourTab: React.FC = () => {
         </p>
       </header>
 
-      {loading && <div className="tab__status">Loading inflation data…</div>}
+      {loading && (
+        <div className="tab__status">Loading inflation data…</div>
+      )}
       {error && (
         <div className="tab__status tab__status--error">
           Failed to load inflation metrics: {error}
         </div>
       )}
 
-      <section className="tab__metrics">
-        {!loading && !snapshots.length && (
+      {/* Wide layout so all 5 overview cards sit side-by-side on desktop */}
+      <section className="tab__metrics tab__metrics--wide">
+        {!loading && !snapshots.length && !error && (
           <div className="tab__status">No inflation data yet.</div>
         )}
         {snapshots.map((s) => (
@@ -58,16 +121,34 @@ export const InflationLabourTab: React.FC = () => {
         ))}
       </section>
 
+      {/* One chart for each overview metric */}
       <section className="tab__charts">
         <ChartPanel
-          title="Headline CPI – MoM %"
-          series={cpiSeries}
-          valueKey="mom_pct"
+          title="Headline CPI – YoY %"
+          series={headlineSeries}
+          valueKey="yoy_pct"
         />
         <ChartPanel
-          title="Headline CPI – YoY %"
-          series={cpiSeries}
+          title="Shelter CPI – YoY %"
+          series={shelterSeries}
           valueKey="yoy_pct"
+        />
+        <ChartPanel
+          title="Rent CPI – YoY %"
+          series={rentSeries}
+          valueKey="yoy_pct"
+        />
+        <ChartPanel
+          title="Wage index – YoY %"
+          series={wageSeries}
+          valueKey="yoy_pct"
+        />
+        <ChartPanel
+          title="Unemployment rate – level %"
+          series={unemploymentSeries}
+          valueKey="value"
+          treatAsPercentScale
+          clampYMinToZero
         />
       </section>
     </div>
