@@ -139,7 +139,7 @@ export const InflationLabourTab: React.FC = () => {
           valueKey="value"
         />
         <ChartPanel
-          title="Wage index – level"
+          title="Wage index"
           series={wageSeries}
           valueKey="value"
           valueAxisLabel="$/week"
