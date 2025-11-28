@@ -58,10 +58,10 @@ function labelForMetric(metric: string): string {
   switch (metric) {
     case "hpi_benchmark":
       return "Benchmark HPI";
+    case "hpi_type":
+      return "Housing type HPI";
     case "avg_price":
       return "Average price";
-    case "teranet_hpi":
-      return "Teranet HPI";
       
     case "sales":
       return "Sales";
