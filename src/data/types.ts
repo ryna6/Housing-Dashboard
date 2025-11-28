@@ -10,9 +10,21 @@ export type RegionCode =
   | "burnaby"
   | "surrey"
   | "richmond"
-  | "victoria";
+  | "victoria"
+  | "lower_mainland"
+  | "calgary"
+  | "greater_toronto"
+  | "montreal";
 
-export type Segment = "all" | "condo" | "freehold";
+export type Segment =
+  | "all"
+  | "condo"
+  | "freehold"
+  | "composite"
+  | "one_storey"
+  | "two_storey"
+  | "townhouse"
+  | "apartment";
 
 export interface PanelPoint {
   date: string; // ISO date string
