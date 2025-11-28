@@ -1,25 +1,13 @@
-export type MarketCode = "canada" | "on" | "bc";
-
 export type RegionCode =
   | MarketCode
-  | "gta"
-  | "hamilton"
-  | "halton"
-  | "niagara"
-  | "vancouver"
-  | "burnaby"
-  | "surrey"
-  | "richmond"
-  | "victoria"
+  | "canada"
+  | "greater_vancouver"
   | "lower_mainland"
   | "calgary"
   | "greater_toronto"
   | "montreal";
 
 export type Segment =
-  | "all"
-  | "condo"
-  | "freehold"
   | "composite"
   | "one_storey"
   | "two_storey"
