@@ -5,8 +5,18 @@ export type MarketCode = "canada" | "on" | "bc";
 // - Original city-level regions (GTA, Hamilton, etc.) for Rentals/Sales
 // - New aggregate regions for the Prices tab (greater_vancouver, lower_mainland, etc.)
 export type RegionCode =
+export type RegionCode =
   | MarketCode
-  | "canada"
+  | "gta"
+  | "hamilton"
+  | "halton"
+  | "niagara"
+  | "vancouver"
+  | "burnaby"
+  | "surrey"
+  | "richmond"
+  | "victoria"
+  // Aggregate / new regions for the Prices tab
   | "greater_vancouver"
   | "lower_mainland"
   | "calgary"
