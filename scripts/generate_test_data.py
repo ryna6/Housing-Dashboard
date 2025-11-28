@@ -33,6 +33,59 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
 
+@dataclass
+class PanelRow:
+    date: str          # YYYY-MM-01
+    region: str
+    segment: str
+    metric: str
+    value: float
+    unit: str
+    source: str
+    mom_pct: Optional[float]
+    yoy_pct: Optional[float]
+    ma3: Optional[float]
+
+
+def generate_months(start_year: int = 2023, start_month: int = 1, periods: int = 18) -> List[date]:
+    y, m = start_year, start_month
+    out: List[date] = []
+    for _ in range(periods):
+        out.append(date(y, m, 1))
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return out
+
+
+MONTHS = generate_months()
+
+
+def compute_changes(values: List[float]) -> Tuple[List[Optional[float]], List[Optional[float]], List[float]]:
+    """
+    Compute:
+      - month-over-month % change
+      - year-over-year % change
+      - 3-month trailing moving average (level)
+    """
+    n = len(values)
+    mom: List[Optional[float]] = [None] * n
+    yoy: List[Optional[float]] = [None] * n
+    ma3: List[float] = [0.0] * n
+
+    for i, v in enumerate(values):
+        window = values[max(0, i - 2): i + 1]
+        ma3[i] = sum(window) / len(window)
+
+        if i > 0 and values[i - 1] != 0:
+            mom[i] = (v / values[i - 1] - 1.0) * 100.0
+
+        if i >= 12 and values[i - 12] != 0:
+            yoy[i] = (v / values[i - 12] - 1.0) * 100.0
+
+    return mom, yoy, ma3
+
 # ---------------------------------------------------------------------------
 # Prices – MLS HPI (from CREA Excel)
 # ---------------------------------------------------------------------------
