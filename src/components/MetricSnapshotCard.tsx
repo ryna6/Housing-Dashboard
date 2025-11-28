@@ -100,7 +100,7 @@ function labelForMetric(metric: string): string {
     case "cpi_rent":
       return "Rent CPI";
     case "wage_index":
-      return "Wage Index";
+      return "Wage Index ($/week)";
     case "unemployment_rate":
       return "Unemployment Rate";
 
