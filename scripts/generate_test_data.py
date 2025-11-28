@@ -1,20 +1,3 @@
-"""
-Generate data for the housing dashboard.
-
-This script overwrites the following files under data/processed/:
-
-  - panel.json
-  - prices.json
-  - sales_listings.json
-  - rentals.json
-  - rates_bonds.json
-  - inflation_labour.json
-
-Run from the repo root:
-
-  python scripts/generate_test_data.py
-"""
-
 from __future__ import annotations
 
 import json
