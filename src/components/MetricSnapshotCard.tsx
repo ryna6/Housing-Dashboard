@@ -45,8 +45,21 @@ function formatValue(value: number, unit: string): string {
     return value.toFixed(1);
   }
 
+  if (unit === "months") {
+    // e.g. 3.4 months of inventory
+    return `${value.toFixed(1)} months`;
+  }
+
   if (unit === "count") {
-    return value.toLocaleString("en-CA");
+    // Compact notation for large counts: 100K, 1.0M, etc.
+    const abs = Math.abs(value);
+    if (abs >= 1_000_000) {
+      return `${(value / 1_000_000).toFixed(1)}M`;
+    }
+    if (abs >= 1_000) {
+      return `${(value / 1_000).toFixed(0)}K`;
+    }
+    return value.toFixed(0);
   }
 
   return value.toFixed(2);
