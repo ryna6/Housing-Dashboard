@@ -5,13 +5,10 @@ import type {
   Segment,
   MarketCode
 } from "../data/types";
-import { RegionToggle } from "../components/RegionToggle";
-import { MarketSelector } from "../components/MarketSelector";
 import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
-import { REGIONS_BY_MARKET } from "../data/regions";
 
 const SALES_METRICS = ["sales", "new_listings", "active_listings", "snlr", "moi"];
 
