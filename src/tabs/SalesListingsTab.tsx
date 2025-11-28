@@ -7,22 +7,8 @@ import { useTabData } from "./useTabData";
 
 const SALES_METRICS = ["sales", "new_listings", "active_listings", "snlr", "moi"];
 
-const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
-  { value: "canada", label: "Canada" },
-  { value: "greater_vancouver", label: "Vancouver" },
-  { value: "lower_mainland", label: "Lower Mainland (Burnaby, Surrey, New West, Coquitlam)", },
-  { value: "calgary", label: "Calgary" },
-  { value: "greater_toronto", label: "Greater Toronto Area (GTA)" },
-  { value: "montreal", label: "Montreal" },
-];
-
 export const SalesListingsTab: React.FC = () => {
   const { data, loading, error } = useTabData("sales_listings");
-
-  // New unified region selector (no MarketCode)
-  const [region, setRegion] = useState<RegionCode>("canada");
-  // Same segment logic as before: all | condo | freehold
-  const [segment, setSegment] = useState<Segment>("all");
 
   const handleRegionChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setRegion(event.target.value as RegionCode);
@@ -55,36 +41,9 @@ export const SalesListingsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Sales</h1>
         <p className="tab__subtitle">
-          Resale volumes, listings, absorption (monthly)
+          Active & new listings, Sales to New Listings Ratio (SNLR), Months of Inventory (MOI), and absorption rate (Canadian Real Estate Association)
         </p>
       </header>
-
-      {/* New unified controls: Regions + Segment */}
-      <div className="tab__controls">
-        <div className="tab__regions-group">
-          <span className="tab__regions-label">Regions:</span>
-          <select
-            className="tab__regions-select"
-            value={region}
-            onChange={handleRegionChange}
-          >
-            {REGION_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="tab__segment">
-          Segment
-          <select value={segment} onChange={handleSegmentChange}>
-            <option value="all">All</option>
-            <option value="condo">Condo</option>
-            <option value="freehold">Freehold</option>
-          </select>
-        </div>
-      </div>
 
       {loading && <div className="tab__status">Loading sales data…</div>}
       {error && (
