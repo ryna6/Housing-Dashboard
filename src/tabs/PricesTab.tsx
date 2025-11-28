@@ -6,21 +6,27 @@ import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
 
-type HousingType =
+// Regions available on the Prices tab only
+// (UI labels are exactly what the user should see.)
+const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
+  { value: "canada", label: "Canada (aggregate)" },
+  { value: "vancouver", label: "Vancouver" },
+  { value: "lower_mainland" as RegionCode, label: "Lower Mainland" },
+  {
+    value: "greater_toronto" as RegionCode,
+    label: "Greater Toronto Area",
+  },
+  { value: "calgary" as RegionCode, label: "Calgary" },
+  { value: "montreal" as RegionCode, label: "Montreal" },
+];
+
+// Housing types (segments) available on this tab
+export type HousingType =
   | "composite"
   | "one_storey"
   | "two_storey"
   | "townhouse"
   | "apartment";
-
-const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
-  { value: "canada", label: "Canada" },
-  { value: "vancouver", label: "Vancouver" },
-  { value: "lower_mainland", label: "Lower Mainland" },
-  { value: "calgary", label: "Calgary" },
-  { value: "greater_toronto", label: "Greater Toronto Area (GTA)" },
-  { value: "montreal", label: "Montreal" },
-];
 
 const HOUSING_TYPE_OPTIONS: { value: HousingType; label: string }[] = [
   { value: "composite", label: "Composite" },
@@ -33,7 +39,7 @@ const HOUSING_TYPE_OPTIONS: { value: HousingType; label: string }[] = [
 export const PricesTab: React.FC = () => {
   const { data, loading, error } = useTabData("prices");
 
-  // Default selection: Canada + Composite
+  // Default selection: Canada (aggregate), Composite
   const [region, setRegion] = useState<RegionCode>("canada");
   const [housingType, setHousingType] = useState<HousingType>("composite");
 
@@ -47,13 +53,13 @@ export const PricesTab: React.FC = () => {
     setHousingType(event.target.value as HousingType);
   };
 
-  // Three cards: Benchmark HPI, Housing type HPI, Average price
+  // Three snapshot cards: Benchmark HPI, Housing type HPI, Average price
   const snapshots: MetricSnapshot[] = useMemo(() => {
     if (!data.length) return [];
 
     const all: MetricSnapshot[] = [];
 
-    // Benchmark HPI – always composite
+    // 1) Benchmark HPI (composite, region-only)
     const benchmark = getLatestByMetric(
       data,
       region,
@@ -61,10 +67,10 @@ export const PricesTab: React.FC = () => {
       "composite"
     );
 
-    // Housing-type HPI – varies with housingType
+    // 2) Housing type HPI (region + housing type)
     const hpiType = getLatestByMetric(data, region, ["hpi_type"], housingType);
 
-    // Average price – varies with housingType
+    // 3) Average price (region + housing type)
     const avgPrice = getLatestByMetric(
       data,
       region,
@@ -79,7 +85,7 @@ export const PricesTab: React.FC = () => {
     return all;
   }, [data, region, housingType]);
 
-  // Charts – level values only (no MoM/YoY charts)
+  // Chart series – values only (no MoM/YoY charts)
   const benchmarkSeries: PanelPoint[] = useMemo(
     () =>
       data.filter(
