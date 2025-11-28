@@ -1,22 +1,6 @@
-// Top-level market buckets used by the legacy MarketSelector component
-// (kept for compatibility; the new tabs use the unified Regions selector)
-export type MarketCode = "canada" | "on" | "bc";
-
 // All region codes used anywhere in the app
-// - Original city-level regions (GTA, Hamilton, etc.) for older tabs / data
-// - New aggregate regions for the unified Regions selector
 export type RegionCode =
-  | MarketCode
-  | "gta"
-  | "hamilton"
-  | "halton"
-  | "niagara"
-  | "vancouver"
-  | "burnaby"
-  | "surrey"
-  | "richmond"
-  | "victoria"
-  // New aggregate regions used by Prices / Sales / Rentals
+  | "canada"
   | "greater_vancouver"
   | "lower_mainland"
   | "calgary"
