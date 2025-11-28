@@ -1,119 +1,174 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import type { PanelPoint, RegionCode, Segment } from "../data/types";
 import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
 
-const SALES_METRICS = ["sales", "new_listings", "active_listings", "snlr", "moi"];
-
-const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
-  { value: "canada", label: "Canada" },
-  { value: "greater_vancouver", label: "Vancouver" },
-  { value: "lower_mainland", label: "Lower Mainland (Burnaby, Surrey, New West, Coquitlam)", },
-  { value: "calgary", label: "Calgary" },
-  { value: "greater_toronto", label: "Greater Toronto Area (GTA)" },
-  { value: "montreal", label: "Montreal" },
+const SALES_METRICS: string[] = [
+  "new_listings",
+  "active_listings",
+  "snlr",
+  "moi",
+  "absorption_rate",
 ];
+
+// Sales tab is Canada aggregate only, no region / segment selector in the UI
+const REGION: RegionCode = "canada";
+const SEGMENT: Segment = "all";
+
+/**
+ * Compact formatter for counts used on charts, e.g.
+ *  - 100000 -> "100K"
+ *  - 1000000 -> "1.0M"
+ */
+function formatCompactCount(value: number): string {
+  const abs = Math.abs(value);
+  if (!Number.isFinite(value)) return "–";
+  if (abs >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (abs >= 1_000) {
+    return `${(value / 1_000).toFixed(0)}K`;
+  }
+  return value.toFixed(0);
+}
+
+const CARD_TITLES: Record<string, string> = {
+  new_listings: "New Listings",
+  active_listings: "Active Listings",
+  snlr: "SNLR",
+  moi: "MOI",
+  absorption_rate: "Absorption Rate",
+};
 
 export const SalesListingsTab: React.FC = () => {
   const { data, loading, error } = useTabData("sales_listings");
 
-  // New unified region selector (no MarketCode)
-  const [region, setRegion] = useState<RegionCode>("canada");
-  // Same segment logic as before: all | condo | freehold
-  const [segment, setSegment] = useState<Segment>("all");
-
-  const handleRegionChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setRegion(event.target.value as RegionCode);
-  };
-
-  const handleSegmentChange = (
-    event: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    setSegment(event.target.value as Segment);
-  };
-
+  // Latest reading for each of the five overview metrics
   const snapshots = useMemo(
-    () => getLatestByMetric(data, region, SALES_METRICS, segment),
-    [data, region, segment]
+    () => getLatestByMetric(data, REGION, SALES_METRICS, SEGMENT),
+    [data]
   );
 
-  const salesSeries: PanelPoint[] = useMemo(
+  // One time series per metric, filtered to Canada / all segments
+  const newListingsSeries: PanelPoint[] = useMemo(
     () =>
       data.filter(
         (p) =>
-          p.metric === "sales" &&
-          p.region === region &&
-          (segment === "all" || p.segment === segment)
+          p.metric === "new_listings" &&
+          p.region === REGION &&
+          p.segment === SEGMENT
       ),
-    [data, region, segment]
+    [data]
+  );
+
+  const activeListingsSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) =>
+          p.metric === "active_listings" &&
+          p.region === REGION &&
+          p.segment === SEGMENT
+      ),
+    [data]
+  );
+
+  const snlrSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) => p.metric === "snlr" && p.region === REGION && p.segment === SEGMENT
+      ),
+    [data]
+  );
+
+  const moiSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) => p.metric === "moi" && p.region === REGION && p.segment === SEGMENT
+      ),
+    [data]
+  );
+
+  const absorptionRateSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) =>
+          p.metric === "absorption_rate" &&
+          p.region === REGION &&
+          p.segment === SEGMENT
+      ),
+    [data]
   );
 
   return (
     <div className="tab">
       <header className="tab__header">
-        <h1 className="tab__title">Sales</h1>
+        <h1 className="tab__title">Sales & Listings</h1>
         <p className="tab__subtitle">
-          Active & new listings, Sales to New Listings Ratio (SNLR), Months of Inventory (MOI), and absorption rate (Canadian Real Estate Association)
+          New and active listings, sales-to-new listings ratio (SNLR), months of
+          inventory (MOI), and absorption rate (Canadian Real Estate Association & Statistics Canada)
         </p>
       </header>
 
-      {/* New unified controls: Regions + Segment */}
-      <div className="tab__controls">
-        <div className="tab__regions-group">
-          <span className="tab__regions-label">Regions:</span>
-          <select
-            className="tab__regions-select"
-            value={region}
-            onChange={handleRegionChange}
-          >
-            {REGION_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="tab__segment">
-          Segment
-          <select value={segment} onChange={handleSegmentChange}>
-            <option value="all">All</option>
-            <option value="condo">Condo</option>
-            <option value="freehold">Freehold</option>
-          </select>
-        </div>
-      </div>
-
-      {loading && <div className="tab__status">Loading sales data…</div>}
+      {loading && (
+        <div className="tab__status">Loading sales & listings data…</div>
+      )}
       {error && (
         <div className="tab__status tab__status--error">
-          Failed to load sales data: {error}
+          Failed to load sales & listings data: {error}
         </div>
       )}
 
-      <section className="tab__metrics">
-        {!loading && !snapshots.length && (
+      {/* Five overview cards in a wide row on desktop */}
+      <section className="tab__metrics tab__metrics--wide">
+        {!loading && !snapshots.length && !error && (
           <div className="tab__status">
-            No sales data for this selection yet.
+            No sales & listings data available yet.
           </div>
         )}
         {snapshots.map((s) => (
-          <MetricSnapshotCard key={s.metric} snapshot={s} />
+          <MetricSnapshotCard
+            key={s.metric}
+            snapshot={s}
+            titleOverride={CARD_TITLES[s.metric] ?? undefined}
+          />
         ))}
       </section>
 
+      {/* Level charts – one per metric */}
       <section className="tab__charts">
         <ChartPanel
-          title="Sales – MoM %"
-          series={salesSeries}
-          valueKey="mom_pct"
+          title="New listings"
+          series={newListingsSeries}
+          valueKey="value"
+          valueFormatter={formatCompactCount}
         />
         <ChartPanel
-          title="Sales – YoY %"
-          series={salesSeries}
-          valueKey="yoy_pct"
+          title="Active listings"
+          series={activeListingsSeries}
+          valueKey="value"
+          valueFormatter={formatCompactCount}
+        />
+        <ChartPanel
+          title="SNLR"
+          series={snlrSeries}
+          valueKey="value"
+          treatAsPercentScale
+          clampYMinToZero
+        />
+        <ChartPanel
+          title="MOI (months of inventory)"
+          series={moiSeries}
+          valueKey="value"
+          valueAxisLabel="Months"
+        />
+        <ChartPanel
+          title="Absorption rate"
+          series={absorptionRateSeries}
+          valueKey="value"
+          treatAsPercentScale
+          clampYMinToZero
         />
       </section>
     </div>
