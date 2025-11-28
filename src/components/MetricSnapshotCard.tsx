@@ -81,8 +81,6 @@ function labelForMetric(metric: string): string {
     case "avg_price":
       return "Average price";
 
-    case "sales":
-      return "Sales";
     case "new_listings":
       return "New listings";
     case "active_listings":
@@ -91,6 +89,8 @@ function labelForMetric(metric: string): string {
       return "Sales / New listings";
     case "moi":
       return "Months of inventory";
+    case "absorption_rate":
+      return "Absorption rate";
 
     case "policy_rate":
       return "BoC policy rate";
