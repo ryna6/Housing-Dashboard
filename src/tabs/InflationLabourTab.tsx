@@ -121,7 +121,7 @@ export const InflationLabourTab: React.FC = () => {
         ))}
       </section>
 
-            {/* One chart for each overview metric, all using actual levels */}
+      {/* One chart for each overview metric, all using actual levels */}
       <section className="tab__charts">
         <ChartPanel
           title="Headline CPI"
@@ -139,7 +139,7 @@ export const InflationLabourTab: React.FC = () => {
           valueKey="value"
         />
         <ChartPanel
-          title="Wage index ($/week)"
+          title="Wage index"
           series={wageSeries}
           valueKey="value"
         />
