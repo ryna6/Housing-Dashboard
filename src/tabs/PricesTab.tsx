@@ -115,6 +115,38 @@ export const PricesTab: React.FC = () => {
     [data, region, housingType]
   );
 
+  // Per-metric series, trimmed to the last 10 years
+  const benchmarkSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter(
+          (p) => p.metric === "hpi_benchmark" && p.region === REGION
+        ),
+        10
+      ),
+    [data]
+  );
+
+  const hpiTypeSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter(
+          (p) => p.metric === "hpi_type" && p.region === REGION
+        ),
+        10
+      ),
+    [data]
+  );
+
+  const avgPriceSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter((p) => p.metric === "avg_price" && p.region === REGION),
+        10
+      ),
+    [data]
+  );
+  
   return (
     <div className="tab">
       <header className="tab__header">
