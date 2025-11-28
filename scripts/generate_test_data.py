@@ -595,26 +595,6 @@ def generate_rentals() -> List[PanelRow]:
 
     return rows
 
-# rates test
-def generate_rates() -> List[PanelRow]:
-    """
-    Wrapper used by main(): try real BoC data first, fall back to synthetic
-    if anything goes wrong so Netlify builds remain stable.
-    """
-    try:
-        rows = generate_rates_from_boc()
-        if rows:
-            print(f"[INFO] Loaded {len(rows)} rate rows from BoC Valet")
-            return rows
-        else:
-            print("[WARN] BoC Valet returned no rate data; using synthetic fallback")
-    except Exception as e:
-        print(f"[WARN] BoC Valet error ({e!r}); using synthetic fallback")
-
-    return generate_rates_synthetic()
-
-# end rates test
-
 # --- StatCan CPI (real data) -----------------------------------------------
 
 def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
@@ -623,7 +603,7 @@ def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
 
     We use the following vectors (all from table 18-10-0004-01, 2002=100):
       - cpi_headline: v41690973  (All-items)
-      - cpi_shelter:  v41691050  (Shelter)
+      - cpi_shelter:  v41691055  (Owned accomodation)
       - cpi_rent:     v41691052  (Rent)
     """
     base_url = (
@@ -634,7 +614,7 @@ def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
     # metric -> numeric vectorId (drop the leading 'v')
     vector_ids: Dict[str, int] = {
         "cpi_headline": 41690973,
-        "cpi_shelter": 41691050,
+        "cpi_shelter": 41691055,
         "cpi_rent": 41691052,
     }
 
@@ -930,20 +910,22 @@ def fetch_statcan_wage_index() -> Dict[str, float]:
     reader = csv.DictReader(io.StringIO(csv_data))
 
     for row in reader:
-        geo = row.get("GEO")
-        stat = row.get("Statistics")
-        naics = row.get("North American Industry Classification System (NAICS)")
-        val_str = row.get("VALUE")
-        ref = row.get("REF_DATE")
+    geo = row.get("GEO") or ""
+    stat = row.get("Statistics") or ""
+    naics = row.get("North American Industry Classification System (NAICS)") or ""
+    val_str = row.get("VALUE")
+    ref = row.get("REF_DATE")
 
-        if geo != "Canada":
-            continue
-        if naics != "Industrial aggregate excluding unclassified businesses":
-            continue
-        if stat != "Average weekly earnings including overtime for all employees":
-            continue
-        if not ref or val_str in (None, "", "..."):
-            continue
+    # We only care about national, industrial aggregate, average weekly earnings
+    if "Canada" not in geo:
+        continue
+    if "Industrial aggregate excluding unclassified businesses" not in naics:
+        continue
+    if "Average weekly earnings" not in stat or "all employees" not in stat:
+        continue
+    if not ref or val_str in (None, "", "..."):
+        continue
+
 
         # REF_DATE is "YYYY-MM"
         try:
