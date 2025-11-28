@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { PricesTab } from "./tabs/PricesTab";
 import { SalesListingsTab } from "./tabs/SalesListingsTab";
 import { RatesBondsTab } from "./tabs/RatesBondsTab";
+import { InflationLabourTab } from "./tabs/InflationLabourTab";
 import { RentalsTab } from "./tabs/RentalsTab";
 import { BottomTabNav } from "./components/BottomTabNav";
 
@@ -55,12 +56,7 @@ const App: React.FC = () => {
       case "rates":
         return <RatesBondsTab />;
       case "inflation":
-        return (
-          <PlaceholderTab
-            title="Inflation"
-            subtitle="CPI and shelter components (coming soon)."
-          />
-        );
+        return <InflationLabourTab />;
       case "credit":
         return (
           <PlaceholderTab
