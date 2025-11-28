@@ -712,79 +712,200 @@ def generate_rates() -> List[PanelRow]:
 
 # end rates test
 
+# --- StatCan CPI (real data) -----------------------------------------------
+
+def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
+    """
+    Fetch CPI index series for Canada from Statistics Canada Web Data Service.
+
+    We use the following vectors (all from table 18-10-0004-01, 2002=100):
+      - cpi_headline: v41690973  (All-items)
+      - cpi_shelter:  v41691050  (Shelter)
+      - cpi_rent:     v41691052  (Rent)
+    """
+    base_url = (
+        "https://www150.statcan.gc.ca/"
+        "t1/wds/rest/getDataFromVectorsAndLatestNPeriods"
+    )
+
+    # metric -> numeric vectorId (drop the leading 'v')
+    vector_ids: Dict[str, int] = {
+        "cpi_headline": 41690973,
+        "cpi_shelter": 41691050,
+        "cpi_rent": 41691052,
+    }
+
+    # WDS expects a JSON *array* of requests
+    payload = [{"vectorId": vid, "latestN": 2000} for vid in vector_ids.values()]
+    data_bytes = json.dumps(payload).encode("utf-8")
+
+    req = urllib.request.Request(
+        base_url,
+        data=data_bytes,
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            res = json.load(resp)
+    except (HTTPError, URLError, TimeoutError, ValueError) as e:
+        # Don't break the build if StatCan is down
+        print(f"[WARN] StatCan CPI fetch failed: {e}")
+        return {}
+
+    # metric -> date -> value
+    series: Dict[str, Dict[str, float]] = {m: {} for m in vector_ids.keys()}
+    vector_to_metric = {vid: m for m, vid in vector_ids.items()}
+
+    if not isinstance(res, list):
+        print("[WARN] Unexpected StatCan WDS response format for CPI")
+        return {}
+
+    for entry in res:
+        if entry.get("status") != "SUCCESS":
+            continue
+        obj = entry.get("object") or {}
+        vid = obj.get("vectorId")
+        metric = vector_to_metric.get(vid)
+        if not metric:
+            continue
+
+        for dp in obj.get("vectorDataPoint", []):
+            value = dp.get("value")
+            symbol = dp.get("symbolCode")
+
+            # Skip missing / suppressed points
+            if value in (None, "", "NaN"):
+                continue
+            if symbol not in (0, None):
+                continue
+
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                continue
+
+            # Monthly CPI uses the first of month, e.g. "2025-10-01"
+            ref = dp.get("refPer") or dp.get("refPerRaw")
+            if not ref:
+                continue
+            try:
+                dt = datetime.fromisoformat(ref)
+                key = dt.date().isoformat()
+            except Exception:
+                key = ref
+
+            series[metric][key] = v
+
+    return series
 
 def generate_inflation() -> List[PanelRow]:
     rows: List[PanelRow] = []
     region = "canada"
 
-    # Headline CPI
-    base = 150.0
-    vals: List[float] = []
-    for i, dt in enumerate(MONTHS):
-        seasonal = 0.3 * math.sin(2.0 * math.pi * (i % 12) / 12.0)
-        vals.append(base + i * 0.6 + seasonal)
-    mom, yoy, ma3 = compute_changes(vals)
-    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-        rows.append(
-            PanelRow(
-                date=dt.isoformat(),
-                region=region,
-                segment="all",
-                metric="cpi_headline",
-                value=round(val, 3),
-                unit="index",
-                source="test_inflation",
-                mom_pct=round(m, 3) if m is not None else None,
-                yoy_pct=round(y, 3) if y is not None else None,
-                ma3=round(ma, 3),
-            )
-        )
+    # 1) Try to populate CPI metrics from real StatCan data
+    cpi_series = fetch_statcan_cpi()
 
-    # Shelter CPI
-    base = 160.0
-    vals = []
-    for i, dt in enumerate(MONTHS):
-        seasonal = 0.4 * math.sin(2.0 * math.pi * (i % 12) / 12.0 + 0.5)
-        vals.append(base + i * 0.7 + seasonal)
-    mom, yoy, ma3 = compute_changes(vals)
-    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-        rows.append(
-            PanelRow(
-                date=dt.isoformat(),
-                region=region,
-                segment="all",
-                metric="cpi_shelter",
-                value=round(val, 3),
-                unit="index",
-                source="test_inflation",
-                mom_pct=round(m, 3) if m is not None else None,
-                yoy_pct=round(y, 3) if y is not None else None,
-                ma3=round(ma, 3),
-            )
-        )
+    if cpi_series:
+        for metric, per_date in cpi_series.items():
+            # per_date: { "YYYY-MM-01": index_value }
+            dates = sorted(per_date.keys())
+            values = [per_date[d] for d in dates]
+            mom, yoy, ma3 = compute_changes(values)
 
-    # Rent CPI
-    base = 155.0
-    vals = []
-    for i, dt in enumerate(MONTHS):
-        seasonal = 0.5 * math.sin(2.0 * math.pi * (i % 12) / 12.0 + 0.8)
-        vals.append(base + i * 0.65 + seasonal)
-    mom, yoy, ma3 = compute_changes(vals)
-    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-        rows.append(
-            PanelRow(
-                date=dt.isoformat(),
-                region=region,
-                segment="all",
-                metric="cpi_rent",
-                value=round(val, 3),
-                unit="index",
-                source="test_inflation",
-                mom_pct=round(m, 3) if m is not None else None,
-                yoy_pct=round(y, 3) if y is not None else None,
-                ma3=round(ma, 3),
+            for dt_str, val, m, y, ma in zip(dates, values, mom, yoy, ma3):
+                rows.append(
+                    PanelRow(
+                        date=dt_str,
+                        region=region,
+                        segment="all",
+                        metric=metric,
+                        value=round(val, 3),
+                        unit="index",
+                        source="statcan_cpi",
+                        mom_pct=round(m, 3) if m is not None else None,
+                        yoy_pct=round(y, 3) if y is not None else None,
+                        ma3=round(ma, 3),
+                    )
+                )
+    else:
+        # If StatCan is unavailable, fall back to the existing synthetic CPI logic
+        print("[WARN] StatCan CPI unavailable, falling back to synthetic CPI series")
+
+        # --- Headline CPI (synthetic fallback) ---
+        base = 150.0
+        vals: List[float] = []
+        for i, dt in enumerate(MONTHS):
+            seasonal = 0.3 * math.sin(2.0 * math.pi * (i % 12) / 12.0)
+            vals.append(base + i * 0.6 + seasonal)
+        mom, yoy, ma3 = compute_changes(vals)
+        for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt.isoformat(),
+                    region=region,
+                    segment="all",
+                    metric="cpi_headline",
+                    value=round(val, 3),
+                    unit="index",
+                    source="test_inflation",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
             )
-        )
+
+        # --- Shelter CPI (synthetic fallback) ---
+        base = 160.0
+        vals = []
+        for i, dt in enumerate(MONTHS):
+            seasonal = 0.4 * math.sin(2.0 * math.pi * (i % 12) / 12.0 + 0.5)
+            vals.append(base + i * 0.7 + seasonal)
+        mom, yoy, ma3 = compute_changes(vals)
+        for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt.isoformat(),
+                    region=region,
+                    segment="all",
+                    metric="cpi_shelter",
+                    value=round(val, 3),
+                    unit="index",
+                    source="test_inflation",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+
+        # --- Rent CPI (synthetic fallback) ---
+        base = 155.0
+        vals = []
+        for i, dt in enumerate(MONTHS):
+            seasonal = 0.5 * math.sin(2.0 * math.pi * (i % 12) / 12.0 + 0.8)
+            vals.append(base + i * 0.65 + seasonal)
+        mom, yoy, ma3 = compute_changes(vals)
+        for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt.isoformat(),
+                    region=region,
+                    segment="all",
+                    metric="cpi_rent",
+                    value=round(val, 3),
+                    unit="index",
+                    source="test_inflation",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+
+    # 2) Keep wage index & unemployment rate synthetic for now (same as before)
 
     # Wage index
     base = 140.0
@@ -833,6 +954,8 @@ def generate_inflation() -> List[PanelRow]:
         )
 
     return rows
+
+
 
 
 def write_json(path: Path, rows: List[PanelRow]) -> None:
