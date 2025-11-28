@@ -1,39 +1,124 @@
 import React, { useMemo, useState } from "react";
-import type { PanelPoint, RegionCode, MarketCode } from "../data/types";
+import type { PanelPoint, RegionCode } from "../data/types";
+import type { MetricSnapshot } from "../components/MetricSnapshotCard";
 import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
 
-const RENT_METRICS = ["avg_rent", "vacancy_rate", "rent_index", "rent_inflation"];
+// Housing type values are the same as your Segment union
+type HousingType =
+  | "composite"
+  | "one_storey"
+  | "two_storey"
+  | "townhouse"
+  | "apartment";
 
-export const RentalsTab: React.FC = () => {
-  const { data, loading, error } = useTabData("rentals");
-  const [market, setMarket] = useState<MarketCode>("canada");
-  const [region, setRegion] = useState<RegionCode | null>(null);
+// Regions for the Prices tab only – using your RegionCode strings
+const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
+  { value: "canada", label: "Canada" },
+  { value: "greater_vancouver", label: "Vancouver" },
+  { value: "lower_mainland", label: "Lower Mainland (Burnaby, Surrey, New West, Coquitlam)", },
+  { value: "calgary", label: "Calgary" },
+  { value: "greater_toronto", label: "Greater Toronto Area (GTA)" },
+  { value: "montreal", label: "Montreal" },
+];
 
-  const effectiveRegion: RegionCode = region ?? market;
-  const hasRegions = REGIONS_BY_MARKET[market].length > 0;
+const HOUSING_TYPE_OPTIONS: { value: HousingType; label: string }[] = [
+  { value: "composite", label: "Composite" },
+  { value: "one_storey", label: "One storey" },
+  { value: "two_storey", label: "Two storey" },
+  { value: "townhouse", label: "Townhouse" },
+  { value: "apartment", label: "Apartment" },
+];
 
-  const handleMarketChange = (next: MarketCode) => {
-    setMarket(next);
-    setRegion(null);
+export const PricesTab: React.FC = () => {
+  const { data, loading, error } = useTabData("prices");
+
+  // Default selection: Canada + Composite
+  const [region, setRegion] = useState<RegionCode>("canada");
+  const [housingType, setHousingType] = useState<HousingType>("composite");
+
+  const handleRegionChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setRegion(event.target.value as RegionCode);
   };
 
-  const snapshots = useMemo(
-    () => getLatestByMetric(data, effectiveRegion, RENT_METRICS),
-    [data, effectiveRegion]
-  );
+  const handleHousingTypeChange = (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    setHousingType(event.target.value as HousingType);
+  };
 
-  const rentSeries: PanelPoint[] = useMemo(
+  // Three cards: Benchmark HPI, Housing type HPI, Average price
+  const snapshots: MetricSnapshot[] = useMemo(() => {
+    if (!data.length) return [];
+
+    const all: MetricSnapshot[] = [];
+
+    // 1) Benchmark HPI – uses composite HPI for the selected region
+    const benchmark = getLatestByMetric(
+      data,
+      region,
+      ["hpi_benchmark"],
+      "composite"
+    );
+
+    // 2) Housing type HPI – selected region + housing type
+    const hpiType = getLatestByMetric(data, region, ["hpi_type"], housingType);
+
+    // 3) Average price – selected region + housing type
+    const avgPrice = getLatestByMetric(
+      data,
+      region,
+      ["avg_price"],
+      housingType
+    );
+
+    if (benchmark.length) all.push(benchmark[0]);
+    if (hpiType.length) all.push(hpiType[0]);
+    if (avgPrice.length) all.push(avgPrice[0]);
+
+    return all;
+  }, [data, region, housingType]);
+
+  // Time series for the three charts – **levels only** (no MoM/YoY charts)
+  const benchmarkSeries: PanelPoint[] = useMemo(
     () =>
       data.filter(
         (p) =>
-          (p.metric === "avg_rent" || p.metric === "rent_index") &&
-          p.region === effectiveRegion
+          p.metric === "hpi_benchmark" &&
+          p.region === region &&
+          p.segment === "composite"
       ),
-    [data, effectiveRegion]
+    [data, region]
   );
+
+  const hpiTypeSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) =>
+          p.metric === "hpi_type" &&
+          p.region === region &&
+          p.segment === housingType
+      ),
+    [data, region, housingType]
+  );
+
+  const avgPriceSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) =>
+          p.metric === "avg_price" &&
+          p.region === region &&
+          p.segment === housingType
+      ),
+    [data, region, housingType]
+  );
+
+
+
+
+  
 
   return (
     <div className="tab">
