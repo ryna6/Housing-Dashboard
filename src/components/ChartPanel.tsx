@@ -8,6 +8,8 @@ interface Props {
   valueKey: "value" | "mom_pct" | "yoy_pct";
   /** Optional label for the y-axis (left blank by default). */
   valueAxisLabel?: string;
+  /** Optional formatter for numeric values (axis ticks + tooltip) when not using percent scale. */
+  valueFormatter?: (value: number) => string;
   /** Render as a step line (discrete jumps between months). */
   step?: boolean;
   /**
@@ -42,6 +44,7 @@ export const ChartPanel: React.FC<Props> = ({
   series,
   valueKey,
   valueAxisLabel,
+  valueFormatter,
   step = false,
   treatAsPercentScale,
   clampYMinToZero = false,
@@ -130,13 +133,19 @@ export const ChartPanel: React.FC<Props> = ({
           p && typeof p.data === "number" ? (p.data as number) : NaN;
         if (Number.isNaN(val)) return axisValue;
 
-        const formatted = isPercentScale
-          ? `${val.toFixed(2)}%`
-          : val.toFixed(2);
+        let formatted: string;
+        if (isPercentScale) {
+          formatted = `${val.toFixed(2)}%`;
+        } else if (typeof valueFormatter === "function") {
+          formatted = valueFormatter(val);
+        } else {
+          formatted = val.toFixed(2);
+        }
 
         return `${axisValue}<br/>${formatted}`;
       },
     },
+
     xAxis: {
       type: "category",
       data: x,
@@ -158,10 +167,14 @@ export const ChartPanel: React.FC<Props> = ({
           if (isPercentScale) {
             return `${val.toFixed(0)}%`;
           }
+          if (typeof valueFormatter === "function") {
+            return valueFormatter(val);
+          }
           return val.toFixed(0);
         },
       },
     },
+
     series: [
       {
         type: "line",
