@@ -35,20 +35,40 @@ const HOUSING_TYPE_OPTIONS: { value: HousingType; label: string }[] = [
   { value: "apartment", label: "Apartment" },
 ];
 
-// Helper: trim a series to the last `years` years based on its latest date
+function getHousingTypeLabel(value: HousingType): string {
+  const found = HOUSING_TYPE_OPTIONS.find((opt) => opt.value === value);
+  return found ? found.label : value;
+}
+
+/**
+ * Trim a series down to the last N years based on the latest observation date.
+ */
 function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
-  if (!series.length) return series;
+  if (series.length <= 1) return series;
 
-  // Ensure sorted by date ascending
-  const sorted = [...series].sort((a, b) =>
-    a.date.localeCompare(b.date)
-  );
-
-  const lastDate = new Date(sorted[sorted.length - 1].date);
-  const cutoff = new Date(lastDate);
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const last = new Date(sorted[sorted.length - 1].date);
+  const cutoff = new Date(last);
   cutoff.setFullYear(cutoff.getFullYear() - years);
 
-  return sorted.filter((p) => new Date(p.date) >= cutoff);
+  return sorted.filter((p) => {
+    const d = new Date(p.date);
+    return d >= cutoff;
+  });
+}
+
+/**
+ * Compact currency formatter for charts, e.g. $100K, $1.2M.
+ */
+function formatCompactCurrency(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (abs >= 1_000) {
+    return `$${(value / 1_000).toFixed(0)}K`;
+  }
+  return `$${value.toFixed(0)}`;
 }
 
 export const PricesTab: React.FC = () => {
@@ -100,36 +120,48 @@ export const PricesTab: React.FC = () => {
     return all;
   }, [data, region, housingType]);
 
-  // Time series for the three charts – levels only, trimmed to last 10 years
-  const benchmarkSeries: PanelPoint[] = useMemo(() => {
-    const full = data.filter(
-      (p) =>
-        p.metric === "hpi_benchmark" &&
-        p.region === region &&
-        p.segment === "composite"
-    );
-    return trimLastYears(full, 10);
-  }, [data, region]);
+  // Time series for the three charts – **levels only** (no MoM/YoY charts)
+  const benchmarkSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter(
+          (p) =>
+            p.metric === "hpi_benchmark" &&
+            p.region === region &&
+            p.segment === "composite"
+        ),
+        10
+      ),
+    [data, region]
+  );
 
-  const hpiTypeSeries: PanelPoint[] = useMemo(() => {
-    const full = data.filter(
-      (p) =>
-        p.metric === "hpi_type" &&
-        p.region === region &&
-        p.segment === housingType
-    );
-    return trimLastYears(full, 10);
-  }, [data, region, housingType]);
+  const hpiTypeSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter(
+          (p) =>
+            p.metric === "hpi_type" &&
+            p.region === region &&
+            p.segment === housingType
+        ),
+        10
+      ),
+    [data, region, housingType]
+  );
 
-  const avgPriceSeries: PanelPoint[] = useMemo(() => {
-    const full = data.filter(
-      (p) =>
-        p.metric === "avg_price" &&
-        p.region === region &&
-        p.segment === housingType
-    );
-    return trimLastYears(full, 10);
-  }, [data, region, housingType]);
+  const avgPriceSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter(
+          (p) =>
+            p.metric === "avg_price" &&
+            p.region === region &&
+            p.segment === housingType
+        ),
+        10
+      ),
+    [data, region, housingType]
+  );
 
   return (
     <div className="tab">
@@ -180,15 +212,29 @@ export const PricesTab: React.FC = () => {
       )}
 
       {/* Cards */}
-      <section className="tab__metrics">
+      <section className="tab__metrics tab__metrics--3col">
         {!loading && !snapshots.length && (
           <div className="tab__status">
             No price data for this selection yet.
           </div>
         )}
-        {snapshots.map((s) => (
-          <MetricSnapshotCard key={s.metric} snapshot={s} />
-        ))}
+        {snapshots.map((s) => {
+          let titleOverride: string | undefined;
+          if (s.metric === "hpi_type") {
+            titleOverride = `${getHousingTypeLabel(housingType)} HPI`;
+          } else if (s.metric === "avg_price") {
+            titleOverride = `${getHousingTypeLabel(
+              housingType
+            )} average price`;
+          }
+          return (
+            <MetricSnapshotCard
+              key={s.metric}
+              snapshot={s}
+              titleOverride={titleOverride}
+            />
+          );
+        })}
       </section>
 
       {/* Level charts */}
@@ -199,14 +245,15 @@ export const PricesTab: React.FC = () => {
           valueKey="value"
         />
         <ChartPanel
-          title="Housing type HPI"
+          title={`${getHousingTypeLabel(housingType)} HPI`}
           series={hpiTypeSeries}
           valueKey="value"
         />
         <ChartPanel
-          title="Average price"
+          title={`${getHousingTypeLabel(housingType)} average price`}
           series={avgPriceSeries}
           valueKey="value"
+          valueFormatter={formatCompactCurrency}
         />
       </section>
     </div>
