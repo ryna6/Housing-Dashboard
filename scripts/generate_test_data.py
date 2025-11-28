@@ -19,9 +19,6 @@ from __future__ import annotations
 
 import json
 import math
-import csv
-import io
-import zipfile
 import urllib.request
 from urllib.error import HTTPError, URLError
 from collections import defaultdict
@@ -105,7 +102,7 @@ def compute_changes(values: List[float]) -> Tuple[List[Optional[float]], List[Op
 
 
 # ---------------------------------------------------------------------------
-# Prices – still synthetic for now
+# Prices – synthetic
 # ---------------------------------------------------------------------------
 
 def generate_prices() -> List[PanelRow]:
@@ -669,7 +666,6 @@ def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
             ref = dp.get("refPer") or dp.get("refPerRaw")
             if not ref:
                 continue
-            # normalize to YYYY-MM-01
             if len(ref) == 7:  # "YYYY-MM"
                 ref = ref + "-01"
             try:
@@ -685,104 +681,82 @@ def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
 
 def fetch_statcan_wage_index() -> Dict[str, float]:
     """
-    Wage index from StatCan table 14-10-0222-01:
-    'Employment, average hourly and weekly earnings (including overtime),
-     and average weekly hours for the industrial aggregate excluding
-     unclassified businesses, monthly, seasonally adjusted'.
+    Wage index from StatCan table 14-10-0222-01 (SEPH):
+    Average weekly earnings including overtime for all employees,
+    industrial aggregate excluding unclassified businesses, Canada,
+    monthly, seasonally adjusted.
 
-    We use average weekly earnings including overtime for all employees,
-    Canada, industrial aggregate excl. unclassified businesses.
+    We use vector v54027306.
 
     Returns:
         { "YYYY-MM-01": value_in_dollars }
     """
-    meta_url = f"{WDS_BASE}/getFullTableDownloadCSV/14100222/en"
+    base_url = f"{WDS_BASE}/getDataFromVectorsAndLatestNPeriods"
+
+    payload = [{"vectorId": 54027306, "latestN": 2000}]
+    data_bytes = json.dumps(payload).encode("utf-8")
+
+    req = urllib.request.Request(
+        base_url,
+        data=data_bytes,
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
 
     try:
-        with urllib.request.urlopen(meta_url, timeout=30) as resp:
-            meta = json.load(resp)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            res = json.load(resp)
     except (HTTPError, URLError, TimeoutError, ValueError) as e:
-        print(f"[WARN] StatCan wage meta fetch failed: {e}")
+        print(f"[WARN] StatCan wage index fetch failed: {e}")
         return {}
 
-    if meta.get("status") != "SUCCESS":
-        print(f"[WARN] StatCan wage meta status: {meta.get('status')}")
+    per_date: Dict[str, float] = {}
+
+    if not isinstance(res, list) or not res:
+        print("[WARN] StatCan wage index response not a non-empty list")
         return {}
 
-    csv_url = meta.get("object")
-    if not csv_url:
-        print("[WARN] StatCan wage meta missing 'object' URL")
+    entry = res[0]
+    if entry.get("status") != "SUCCESS":
+        print(f"[WARN] StatCan wage index status: {entry.get('status')}")
         return {}
 
-    try:
-        with urllib.request.urlopen(csv_url, timeout=60) as resp:
-            zip_bytes = resp.read()
-    except (HTTPError, URLError, TimeoutError) as e:
-        print(f"[WARN] StatCan wage CSV download failed: {e}")
-        return {}
+    obj = entry.get("object") or {}
+    points = obj.get("vectorDataPoint", [])
 
-    try:
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            csv_name = next(
-                (n for n in zf.namelist()
-                 if n.lower().endswith(".csv") and "_metadata" not in n.lower()),
-                None,
-            )
-            if not csv_name:
-                print("[WARN] StatCan wage ZIP has no data CSV file")
-                return {}
-            raw_csv = zf.read(csv_name)
-            try:
-                csv_data = raw_csv.decode("utf-8-sig")
-            except UnicodeDecodeError:
-                csv_data = raw_csv.decode("latin1")
-    except Exception as e:
-        print(f"[WARN] StatCan wage ZIP parse failed: {e}")
-        return {}
+    for dp in points:
+        value = dp.get("value")
+        symbol = dp.get("symbolCode")
 
-    out: Dict[str, float] = {}
-    reader = csv.DictReader(io.StringIO(csv_data))
-
-    for row in reader:
-        geo = (row.get("GEO") or "").strip()
-        stat = (row.get("Statistics") or "").strip()
-        naics = (
-            row.get("North American Industry Classification System (NAICS)") or ""
-        ).strip()
-        val_str = row.get("VALUE")
-        ref = (row.get("REF_DATE") or "").strip()
-
-        # We only care about national, industrial aggregate, avg weekly earnings
-        if "Canada" not in geo:
+        if value in (None, "", "NaN"):
             continue
-        if "Industrial aggregate excluding unclassified businesses" not in naics:
-            continue
-        if "Average weekly earnings" not in stat:
-            continue
-        if "all employees" not in stat:
-            continue
-        if not ref or val_str in (None, "", "..."):
+        if symbol not in (0, None, "", "E"):
             continue
 
-        # REF_DATE is "YYYY-MM"
         try:
-            if len(ref) == 7:
-                d = datetime.strptime(ref + "-01", "%Y-%m-%d").date()
-            else:
-                d = datetime.strptime(ref, "%Y-%m-%d").date()
+            v = float(value)
+        except (TypeError, ValueError):
+            continue
+
+        ref = dp.get("refPer") or dp.get("refPerRaw")
+        if not ref:
+            continue
+
+        if len(ref) == 7:  # "YYYY-MM"
+            ref = ref + "-01"
+        try:
+            d = datetime.fromisoformat(ref[:10]).date()
         except Exception:
             continue
 
-        try:
-            val = float(val_str)
-        except ValueError:
-            continue
-
         key = date(d.year, d.month, 1).isoformat()
-        out[key] = val
+        per_date[key] = v
 
-    print(f"[INFO] StatCan wage_index points loaded: {len(out)}")
-    return out
+    print(f"[INFO] StatCan wage_index points loaded: {len(per_date)}")
+    return per_date
 
 
 def fetch_statcan_unemployment_rate() -> Dict[str, float]:
@@ -818,42 +792,45 @@ def fetch_statcan_unemployment_rate() -> Dict[str, float]:
 
     per_date: Dict[str, float] = {}
 
-    if not isinstance(res, list):
-        print("[WARN] StatCan unemployment response not a list")
+    if not isinstance(res, list) or not res:
+        print("[WARN] StatCan unemployment response not a non-empty list")
         return {}
 
-    for entry in res:
-        if entry.get("status") != "SUCCESS":
+    entry = res[0]
+    if entry.get("status") != "SUCCESS":
+        print(f"[WARN] StatCan unemployment status: {entry.get('status')}")
+        return {}
+
+    obj = entry.get("object") or {}
+    points = obj.get("vectorDataPoint", [])
+
+    for dp in points:
+        value = dp.get("value")
+        symbol = dp.get("symbolCode")
+
+        if value in (None, "", "NaN"):
             continue
-        obj = entry.get("object") or {}
+        if symbol not in (0, None, "", "E"):
+            continue
 
-        for dp in obj.get("vectorDataPoint", []):
-            value = dp.get("value")
-            symbol = dp.get("symbolCode")
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            continue
 
-            if value in (None, "", "NaN"):
-                continue
-            if symbol and symbol not in ("", "E"):  # ignore suppressed
-                continue
+        ref = dp.get("refPer") or dp.get("refPerRaw")
+        if not ref:
+            continue
 
-            try:
-                v = float(value)
-            except (TypeError, ValueError):
-                continue
+        if len(ref) == 7:
+            ref = ref + "-01"
+        try:
+            d = datetime.fromisoformat(ref[:10]).date()
+        except Exception:
+            continue
 
-            ref = dp.get("refPer") or dp.get("refPerRaw")
-            if not ref:
-                continue
-
-            if len(ref) == 7:
-                ref = ref + "-01"
-            try:
-                d = datetime.fromisoformat(ref[:10]).date()
-            except Exception:
-                continue
-
-            key = date(d.year, d.month, 1).isoformat()
-            per_date[key] = v
+        key = date(d.year, d.month, 1).isoformat()
+        per_date[key] = v
 
     return per_date
 
