@@ -95,6 +95,12 @@ function labelForMetric(metric: string): string {
       return "Headline CPI";
     case "cpi_shelter":
       return "Shelter CPI";
+    case "cpi_rent":
+      return "Rent CPI";
+    case "wage_index":
+      return "Wage Index";
+    case "unemployment_rate":
+      return "Unemployment Rate";
 
     default:
       return metric.replace(/_/g, " ");
