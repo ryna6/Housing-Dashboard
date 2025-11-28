@@ -129,6 +129,14 @@ body {
   }
 }
 
+/* NEW: allow specific tabs to show all cards in a single row on wide screens */
+@media (min-width: 1024px) {
+  .tab__metrics.tab__metrics--wide {
+    /* Inflation has 5 overview cards */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
 .tab__charts {
   display: flex;
   flex-direction: column;
