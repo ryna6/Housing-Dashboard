@@ -865,9 +865,7 @@ def fetch_statcan_wage_index() -> Dict[str, float]:
     We use average weekly earnings including overtime for all employees,
     Canada, industrial aggregate excl. unclassified businesses.
     """
-    meta_url = (
-        f"{WDS_BASE}/getFullTableDownloadCSV/14100222/en"
-    )
+    meta_url = f"{WDS_BASE}/getFullTableDownloadCSV/14100222/en"
 
     try:
         with urllib.request.urlopen(meta_url, timeout=30) as resp:
@@ -910,22 +908,23 @@ def fetch_statcan_wage_index() -> Dict[str, float]:
     reader = csv.DictReader(io.StringIO(csv_data))
 
     for row in reader:
-    geo = row.get("GEO") or ""
-    stat = row.get("Statistics") or ""
-    naics = row.get("North American Industry Classification System (NAICS)") or ""
-    val_str = row.get("VALUE")
-    ref = row.get("REF_DATE")
+        geo = (row.get("GEO") or "").strip()
+        stat = (row.get("Statistics") or "").strip()
+        naics = (
+            row.get("North American Industry Classification System (NAICS)") or ""
+        ).strip()
+        val_str = row.get("VALUE")
+        ref = row.get("REF_DATE")
 
-    # We only care about national, industrial aggregate, average weekly earnings
-    if "Canada" not in geo:
-        continue
-    if "Industrial aggregate excluding unclassified businesses" not in naics:
-        continue
-    if "Average weekly earnings" not in stat or "all employees" not in stat:
-        continue
-    if not ref or val_str in (None, "", "..."):
-        continue
-
+        # We only care about national, industrial aggregate, average weekly earnings
+        if "Canada" not in geo:
+            continue
+        if "Industrial aggregate excluding unclassified businesses" not in naics:
+            continue
+        if "Average weekly earnings" not in stat or "all employees" not in stat:
+            continue
+        if not ref or val_str in (None, "", "..."):
+            continue
 
         # REF_DATE is "YYYY-MM"
         try:
