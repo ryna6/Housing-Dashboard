@@ -20,14 +20,14 @@ from __future__ import annotations
 import json
 import math
 import urllib.request
+import csv
+import io
 from urllib.error import HTTPError, URLError
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
-
-
 
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
@@ -154,121 +154,26 @@ def fetch_boc_series_monthly(
         monthly[month_key] = dict(per_sid)
 
     return monthly
-
-# synthetic rates if boc valet does not return
-def generate_rates_synthetic() -> List[PanelRow]:
+def generate_rates() -> List[PanelRow]:
     """
-    Synthetic fallback for rates if BoC Valet is unavailable.
-    This is essentially your original test-data version.
+    Wrapper used by main(): try real BoC data; if it fails, just log
+    and return an empty list. We deliberately do NOT generate synthetic
+    fallback so the UI can surface "data not available" instead of
+    fake rates.
     """
-    rows: List[PanelRow] = []
-    region = "canada"
+    try:
+        rows = generate_rates_from_boc()
+    except Exception as e:
+        print(f"[WARN] BoC Valet error ({e!r}); no rate rows will be generated")
+        return []
 
-    # Policy rate (slow decline)
-    base = 4.5
-    vals: List[float] = []
-    for i, dt in enumerate(MONTHS):
-        vals.append(base - i * 0.05)
-    mom, yoy, ma3 = compute_changes(vals)
-    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-        rows.append(
-            PanelRow(
-                date=dt.isoformat(),
-                region=region,
-                segment="all",
-                metric="policy_rate",
-                value=round(val, 3),
-                unit="pct",
-                source="test_rates",
-                mom_pct=round(m, 3) if m is not None else None,
-                yoy_pct=round(y, 3) if y is not None else None,
-                ma3=round(ma, 3),
-            )
-        )
+    if not rows:
+        print("[WARN] BoC Valet returned no rate data; no rate rows generated")
+        return []
 
-    # 5y mortgage
-    base = 5.0
-    vals = []
-    for i, dt in enumerate(MONTHS):
-        vals.append(base - i * 0.03)
-    mom, yoy, ma3 = compute_changes(vals)
-    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-        rows.append(
-            PanelRow(
-                date=dt.isoformat(),
-                region=region,
-                segment="all",
-                metric="mortgage_5y",
-                value=round(val, 3),
-                unit="pct",
-                source="test_rates",
-                mom_pct=round(m, 3) if m is not None else None,
-                yoy_pct=round(y, 3) if y is not None else None,
-                ma3=round(ma, 3),
-            )
-        )
-
-    def add_yield(metric: str, start: float, step: float) -> None:
-        vals: List[float] = []
-        for i, dt in enumerate(MONTHS):
-            vals.append(start - i * step)
-        mom, yoy, ma3 = compute_changes(vals)
-        for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt.isoformat(),
-                    region=region,
-                    segment="all",
-                    metric=metric,
-                    value=round(val, 3),
-                    unit="pct",
-                    source="test_rates",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-
-    add_yield("gov_2y_yield", 4.0, 0.04)
-    add_yield("gov_5y_yield", 3.8, 0.03)
-    add_yield("gov_10y_yield", 3.5, 0.02)
-
-    # Spread = mortgage_5y - gov_5y_yield
-    mort_by_date = {
-        r.date: r
-        for r in rows
-        if r.metric == "mortgage_5y" and r.region == region
-    }
-    gov5_by_date = {
-        r.date: r
-        for r in rows
-        if r.metric == "gov_5y_yield" and r.region == region
-    }
-
-    vals = []
-    for dt in MONTHS:
-        ds = dt.isoformat()
-        mv = mort_by_date[ds].value
-        gv = gov5_by_date[ds].value
-        vals.append(mv - gv)
-    mom, yoy, ma3 = compute_changes(vals)
-    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-        rows.append(
-            PanelRow(
-                date=dt.isoformat(),
-                region=region,
-                segment="all",
-                metric="mortgage_5y_spread",
-                value=round(val, 3),
-                unit="pct",
-                source="test_rates",
-                mom_pct=round(m, 3) if m is not None else None,
-                yoy_pct=round(y, 3) if y is not None else None,
-                ma3=round(ma, 3),
-            )
-        )
-
+    print(f"[INFO] Loaded {len(rows)} rate rows from BoC Valet")
     return rows
+
 
 
 # generating real rates
@@ -807,7 +712,7 @@ def generate_inflation() -> List[PanelRow]:
     rows: List[PanelRow] = []
     region = "canada"
 
-    # 1) Try to populate CPI metrics from real StatCan data
+    # 1) CPI (headline, shelter, rent) – StatCan CPI index (18-10-0004-01)
     cpi_series = fetch_statcan_cpi()
 
     if cpi_series:
@@ -833,129 +738,242 @@ def generate_inflation() -> List[PanelRow]:
                     )
                 )
     else:
-        # If StatCan is unavailable, fall back to the existing synthetic CPI logic
-        print("[WARN] StatCan CPI unavailable, falling back to synthetic CPI series")
-
-        # --- Headline CPI (synthetic fallback) ---
-        base = 150.0
-        vals: List[float] = []
-        for i, dt in enumerate(MONTHS):
-            seasonal = 0.3 * math.sin(2.0 * math.pi * (i % 12) / 12.0)
-            vals.append(base + i * 0.6 + seasonal)
-        mom, yoy, ma3 = compute_changes(vals)
-        for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt.isoformat(),
-                    region=region,
-                    segment="all",
-                    metric="cpi_headline",
-                    value=round(val, 3),
-                    unit="index",
-                    source="test_inflation",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-
-        # --- Shelter CPI (synthetic fallback) ---
-        base = 160.0
-        vals = []
-        for i, dt in enumerate(MONTHS):
-            seasonal = 0.4 * math.sin(2.0 * math.pi * (i % 12) / 12.0 + 0.5)
-            vals.append(base + i * 0.7 + seasonal)
-        mom, yoy, ma3 = compute_changes(vals)
-        for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt.isoformat(),
-                    region=region,
-                    segment="all",
-                    metric="cpi_shelter",
-                    value=round(val, 3),
-                    unit="index",
-                    source="test_inflation",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-
-        # --- Rent CPI (synthetic fallback) ---
-        base = 155.0
-        vals = []
-        for i, dt in enumerate(MONTHS):
-            seasonal = 0.5 * math.sin(2.0 * math.pi * (i % 12) / 12.0 + 0.8)
-            vals.append(base + i * 0.65 + seasonal)
-        mom, yoy, ma3 = compute_changes(vals)
-        for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt.isoformat(),
-                    region=region,
-                    segment="all",
-                    metric="cpi_rent",
-                    value=round(val, 3),
-                    unit="index",
-                    source="test_inflation",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-
-    # 2) Keep wage index & unemployment rate synthetic for now (same as before)
-
-    # Wage index
-    base = 140.0
-    vals = []
-    for i, dt in enumerate(MONTHS):
-        seasonal = 0.7 * math.sin(2.0 * math.pi * (i % 12) / 12.0 + 0.2)
-        vals.append(base + i * 0.8 + seasonal)
-    mom, yoy, ma3 = compute_changes(vals)
-    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-        rows.append(
-            PanelRow(
-                date=dt.isoformat(),
-                region=region,
-                segment="all",
-                metric="wage_index",
-                value=round(val, 3),
-                unit="index",
-                source="test_inflation",
-                mom_pct=round(m, 3) if m is not None else None,
-                yoy_pct=round(y, 3) if y is not None else None,
-                ma3=round(ma, 3),
-            )
+        # No synthetic fallback: just log and let the UI say "No data"
+        print(
+            "[WARN] StatCan CPI unavailable – "
+            "no CPI rows will be generated for inflation_labour.json"
         )
 
-    # Unemployment rate
-    base = 6.0
-    vals = []
-    for i, dt in enumerate(MONTHS):
-        seasonal = 0.3 * math.sin(2.0 * math.pi * (i % 12) / 12.0 + 1.0)
-        vals.append(base + math.sin(i / 5.0) * 0.2 + seasonal)
-    mom, yoy, ma3 = compute_changes(vals)
-    for dt, val, m, y, ma in zip(MONTHS, vals, mom, yoy, ma3):
-        rows.append(
-            PanelRow(
-                date=dt.isoformat(),
-                region=region,
-                segment="all",
-                metric="unemployment_rate",
-                value=round(val, 3),
-                unit="pct",
-                source="test_inflation",
-                mom_pct=round(m, 3) if m is not None else None,
-                yoy_pct=round(y, 3) if y is not None else None,
-                ma3=round(ma, 3),
+    # 2) Wage index – average weekly earnings (14-10-0222-01)
+    wage_index = fetch_statcan_wage_index()
+    if wage_index:
+        dates = sorted(wage_index.keys())
+        values = [wage_index[d] for d in dates]
+        mom, yoy, ma3 = compute_changes(values)
+
+        for dt_str, val, m, y, ma in zip(dates, values, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt_str,
+                    region=region,
+                    segment="all",
+                    metric="wage_index",
+                    # Actual dollars per week; we treat as a generic index
+                    # so cards show raw numbers and the chart uses a real
+                    # level series instead of YoY %.
+                    value=round(val, 3),
+                    unit="index",
+                    source="statcan_seph",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
             )
+    else:
+        print(
+            "[WARN] StatCan wage index unavailable – "
+            "no wage_index rows will be generated"
+        )
+
+    # 3) Unemployment rate – LFS (14-10-0287-01)
+    unemployment = fetch_statcan_unemployment_rate()
+    if unemployment:
+        dates = sorted(unemployment.keys())
+        values = [unemployment[d] for d in dates]
+        mom, yoy, ma3 = compute_changes(values)
+
+        for dt_str, val, m, y, ma in zip(dates, values, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt_str,
+                    region=region,
+                    segment="all",
+                    metric="unemployment_rate",
+                    value=round(val, 3),
+                    unit="pct",
+                    source="statcan_lfs",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+    else:
+        print(
+            "[WARN] StatCan unemployment rate unavailable – "
+            "no unemployment_rate rows will be generated"
         )
 
     return rows
 
+def fetch_statcan_wage_index() -> Dict[str, float]:
+    """
+    Fetch Canada average weekly earnings (including overtime) for the
+    industrial aggregate excluding unclassified businesses from
+    StatCan table 14-10-0222-01.
 
+    We use the Open Government CSV “datastore dump” endpoint for that table. 
+
+    Returns:
+        { "YYYY-MM-01": value_in_dollars_per_week }
+    """
+    url = (
+        "https://open.canada.ca/data/en/datastore/dump/"
+        "4ebc050f-6c3c-4dfd-817e-875b2caf3ec6?bom=True"
+    )
+
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            raw = resp.read().decode("utf-8-sig")
+    except (HTTPError, URLError, TimeoutError, ValueError) as e:
+        print(f"[WARN] StatCan wage index fetch failed: {e}")
+        return {}
+
+    f = io.StringIO(raw)
+    reader = csv.DictReader(f)
+    if not reader.fieldnames:
+        print("[WARN] StatCan wage index CSV has no header")
+        return {}
+
+    cols = reader.fieldnames
+
+    def find_col(substr: str) -> Optional[str]:
+        substr_l = substr.lower()
+        for c in cols:
+            if substr_l in c.lower():
+                return c
+        return None
+
+    ref_col = find_col("ref_date") or find_col("ref_date".upper()) or cols[0]
+    geo_col = find_col("geo")
+    naics_col = find_col("north american industry classification")
+    dtype_col = find_col("data type")
+    value_col = find_col("value")
+
+    if not (ref_col and geo_col and naics_col and dtype_col and value_col):
+        print(
+            "[WARN] Could not infer columns for wage index from CSV header: "
+            f"{cols}"
+        )
+        return {}
+
+    per_date: Dict[str, float] = {}
+
+    for row in reader:
+        geo = (row.get(geo_col) or "").strip()
+        if geo != "Canada":
+            continue
+
+        dtype = (row.get(dtype_col) or "").strip()
+        if "Average weekly earnings including overtime" not in dtype:
+            continue
+
+        naics = (row.get(naics_col) or "").strip()
+        if "Industrial aggregate excluding unclassified businesses" not in naics:
+            continue
+
+        ref = (row.get(ref_col) or "").strip()
+        if not ref:
+            continue
+
+        # Normalise monthly reference to YYYY-MM-01
+        if len(ref) == 7 and ref[4] == "-":
+            key = ref + "-01"
+        else:
+            key = ref
+
+        raw_val = row.get(value_col)
+        if raw_val in (None, "", "NaN"):
+            continue
+
+        try:
+            v = float(raw_val)
+        except ValueError:
+            continue
+
+        per_date[key] = v
+
+    return per_date
+
+def fetch_statcan_unemployment_rate() -> Dict[str, float]:
+    """
+    Fetch Canada unemployment rate (both sexes, 15 years and over,
+    monthly, seasonally adjusted) from StatCan table 14-10-0287-01
+    (formerly CANSIM 282-0087).
+
+    We use vector v2062815. 
+
+    Returns:
+        { "YYYY-MM-01": unemployment_rate_percent }
+    """
+    base_url = (
+        "https://www150.statcan.gc.ca/"
+        "t1/wds/rest/getDataFromVectorsAndLatestNPeriods"
+    )
+
+    # v2062815 -> unemployment rate, Canada, SA, both sexes 15+
+    payload = [{"vectorId": 2062815, "latestN": 2000}]
+    data_bytes = json.dumps(payload).encode("utf-8")
+
+    req = urllib.request.Request(
+        base_url,
+        data=data_bytes,
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            res = json.load(resp)
+    except (HTTPError, URLError, TimeoutError, ValueError) as e:
+        print(f"[WARN] StatCan unemployment fetch failed: {e}")
+        return {}
+
+    per_date: Dict[str, float] = {}
+
+    if not isinstance(res, list):
+        print("[WARN] StatCan unemployment response not a list")
+        return {}
+
+    for entry in res:
+        if entry.get("status") != "SUCCESS":
+            continue
+        obj = entry.get("object") or {}
+
+        for dp in obj.get("vectorDataPoint", []):
+            value = dp.get("value")
+            symbol = dp.get("symbolCode")
+
+            if value in (None, "", "NaN"):
+                continue
+            if symbol and symbol not in ("", "E"):  # ignore suppressed
+                continue
+
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                continue
+
+            ref = dp.get("refPer") or dp.get("refPerRaw")
+            if not ref:
+                continue
+
+            # Normalise to YYYY-MM-01
+            try:
+                dt = datetime.fromisoformat(ref)
+                key = dt.date().isoformat()
+            except Exception:
+                if len(ref) == 7 and ref[4] == "-":  # "YYYY-MM"
+                    key = ref + "-01"
+                else:
+                    key = ref
+
+            per_date[key] = v
+
+    return per_date
+  
 
 
 def write_json(path: Path, rows: List[PanelRow]) -> None:
