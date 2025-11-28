@@ -82,7 +82,7 @@ export const RatesBondsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Rates</h1>
         <p className="tab__subtitle">
-          Bank of Canada policy rate, 5-year mortgage rate & Government of
+          Bank of Canada policy rate, 5-year mortgage rate and Government of
           Canada bond yields (Bank of Canada)
         </p>
       </header>
