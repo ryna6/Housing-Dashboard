@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import json
 import math
-import urllib.request
 import csv
 import io
+import zipfile
+import urllib.request
 from urllib.error import HTTPError, URLError
 from collections import defaultdict
 from dataclasses import asdict, dataclass
@@ -154,26 +155,23 @@ def fetch_boc_series_monthly(
         monthly[month_key] = dict(per_sid)
 
     return monthly
+
 def generate_rates() -> List[PanelRow]:
     """
-    Wrapper used by main(): try real BoC data; if it fails, just log
-    and return an empty list. We deliberately do NOT generate synthetic
-    fallback so the UI can surface "data not available" instead of
-    fake rates.
+    Wrapper used by main(): generate rate data from the real
+    Bank of Canada Valet API.
+
+    If anything fails or BoC is unavailable, we return an empty list so
+    the frontend simply shows "Not available for this selection" instead
+    of silently filling synthetic values.
     """
     try:
         rows = generate_rates_from_boc()
+        print(f"[INFO] Loaded {len(rows)} rate rows from BoC Valet")
+        return rows
     except Exception as e:
-        print(f"[WARN] BoC Valet error ({e!r}); no rate rows will be generated")
+        print(f"[ERROR] generate_rates_from_boc failed: {e!r}")
         return []
-
-    if not rows:
-        print("[WARN] BoC Valet returned no rate data; no rate rows generated")
-        return []
-
-    print(f"[INFO] Loaded {len(rows)} rate rows from BoC Valet")
-    return rows
-
 
 
 # generating real rates
@@ -708,6 +706,78 @@ def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
 
     return series
 
+WDS_BASE = "https://www150.statcan.gc.ca/t1/wds/rest"
+
+
+def fetch_statcan_vectors(
+    vector_ids: Dict[str, int],
+    latest_n: int = 600,
+) -> Dict[str, Dict[str, float]]:
+    """
+    Fetch one or more Statistics Canada WDS vectors and return
+    monthly series { metric: { 'YYYY-MM-01': value, ... } }.
+
+    Uses getDataFromVectorsAndLatestNPeriods:
+      POST https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods
+      BODY: [{"vectorId": 41690973, "latestN": 600}, ...]
+    """
+    url = f"{WDS_BASE}/getDataFromVectorsAndLatestNPeriods"
+
+    payload = [
+        {"vectorId": vid, "latestN": latest_n} for vid in vector_ids.values()
+    ]
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = json.load(resp)
+    except (HTTPError, URLError, TimeoutError, ValueError) as e:
+        print(f"[WARN] StatCan WDS fetch failed: {e}")
+        # Return empty dicts for each metric so callers don't crash
+        return {metric: {} for metric in vector_ids.keys()}
+
+    series_by_metric: Dict[str, Dict[str, float]] = {
+        metric: {} for metric in vector_ids.keys()
+    }
+
+    for metric, obj in zip(vector_ids.keys(), raw):
+        status = obj.get("status")
+        if status != "SUCCESS":
+            print(f"[WARN] StatCan WDS status for {metric}: {status}")
+            continue
+
+        points = obj.get("object", {}).get("vectorDataPoint", [])
+        for pt in points:
+            ref = pt.get("refPer")
+            val_str = pt.get("value")
+
+            if not ref or val_str in (None, "", "..."):
+                continue
+
+            # refPer is usually "YYYY-MM-01" or "YYYY-MM"
+            if len(ref) == 7:
+                ref += "-01"
+
+            try:
+                d = datetime.fromisoformat(ref[:10]).date()
+            except Exception:
+                continue
+
+            try:
+                val = float(val_str)
+            except ValueError:
+                continue
+
+            key = date(d.year, d.month, 1).isoformat()
+            series_by_metric[metric][key] = val
+
+    return series_by_metric
+
+
 def generate_inflation() -> List[PanelRow]:
     rows: List[PanelRow] = []
     region = "canada"
@@ -807,92 +877,93 @@ def generate_inflation() -> List[PanelRow]:
 
 def fetch_statcan_wage_index() -> Dict[str, float]:
     """
-    Fetch Canada average weekly earnings (including overtime) for the
-    industrial aggregate excluding unclassified businesses from
-    StatCan table 14-10-0222-01.
+    Wage index from StatCan table 14-10-0222-01:
+    'Employment, average hourly and weekly earnings (including overtime),
+     and average weekly hours for the industrial aggregate excluding
+     unclassified businesses, monthly, seasonally adjusted'.
 
-    We use the Open Government CSV “datastore dump” endpoint for that table. 
-
-    Returns:
-        { "YYYY-MM-01": value_in_dollars_per_week }
+    We use average weekly earnings including overtime for all employees,
+    Canada, industrial aggregate excl. unclassified businesses.
     """
-    url = (
-        "https://open.canada.ca/data/en/datastore/dump/"
-        "4ebc050f-6c3c-4dfd-817e-875b2caf3ec6?bom=True"
+    meta_url = (
+        f"{WDS_BASE}/getFullTableDownloadCSV/14100222/en"
     )
 
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:
-            raw = resp.read().decode("utf-8-sig")
+        with urllib.request.urlopen(meta_url, timeout=30) as resp:
+            meta = json.load(resp)
     except (HTTPError, URLError, TimeoutError, ValueError) as e:
-        print(f"[WARN] StatCan wage index fetch failed: {e}")
+        print(f"[WARN] StatCan wage meta fetch failed: {e}")
         return {}
 
-    f = io.StringIO(raw)
-    reader = csv.DictReader(f)
-    if not reader.fieldnames:
-        print("[WARN] StatCan wage index CSV has no header")
+    if meta.get("status") != "SUCCESS":
+        print(f"[WARN] StatCan wage meta status: {meta.get('status')}")
         return {}
 
-    cols = reader.fieldnames
-
-    def find_col(substr: str) -> Optional[str]:
-        substr_l = substr.lower()
-        for c in cols:
-            if substr_l in c.lower():
-                return c
-        return None
-
-    ref_col = find_col("ref_date") or find_col("ref_date".upper()) or cols[0]
-    geo_col = find_col("geo")
-    naics_col = find_col("north american industry classification")
-    dtype_col = find_col("data type")
-    value_col = find_col("value")
-
-    if not (ref_col and geo_col and naics_col and dtype_col and value_col):
-        print(
-            "[WARN] Could not infer columns for wage index from CSV header: "
-            f"{cols}"
-        )
+    csv_url = meta.get("object")
+    if not csv_url:
+        print("[WARN] StatCan wage meta missing 'object' URL")
         return {}
 
-    per_date: Dict[str, float] = {}
+    try:
+        with urllib.request.urlopen(csv_url, timeout=60) as resp:
+            zip_bytes = resp.read()
+    except (HTTPError, URLError, TimeoutError) as e:
+        print(f"[WARN] StatCan wage CSV download failed: {e}")
+        return {}
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            csv_name = next(
+                (n for n in zf.namelist() if n.lower().endswith(".csv")),
+                None,
+            )
+            if not csv_name:
+                print("[WARN] StatCan wage ZIP has no CSV file")
+                return {}
+            csv_data = zf.read(csv_name).decode("utf-8-sig")
+    except Exception as e:
+        print(f"[WARN] StatCan wage ZIP parse failed: {e}")
+        return {}
+
+    out: Dict[str, float] = {}
+    reader = csv.DictReader(io.StringIO(csv_data))
 
     for row in reader:
-        geo = (row.get(geo_col) or "").strip()
+        geo = row.get("GEO")
+        stat = row.get("Statistics")
+        naics = row.get("North American Industry Classification System (NAICS)")
+        val_str = row.get("VALUE")
+        ref = row.get("REF_DATE")
+
         if geo != "Canada":
             continue
-
-        dtype = (row.get(dtype_col) or "").strip()
-        if "Average weekly earnings including overtime" not in dtype:
+        if naics != "Industrial aggregate excluding unclassified businesses":
+            continue
+        if stat != "Average weekly earnings including overtime for all employees":
+            continue
+        if not ref or val_str in (None, "", "..."):
             continue
 
-        naics = (row.get(naics_col) or "").strip()
-        if "Industrial aggregate excluding unclassified businesses" not in naics:
-            continue
-
-        ref = (row.get(ref_col) or "").strip()
-        if not ref:
-            continue
-
-        # Normalise monthly reference to YYYY-MM-01
-        if len(ref) == 7 and ref[4] == "-":
-            key = ref + "-01"
-        else:
-            key = ref
-
-        raw_val = row.get(value_col)
-        if raw_val in (None, "", "NaN"):
+        # REF_DATE is "YYYY-MM"
+        try:
+            if len(ref) == 7:
+                d = datetime.strptime(ref + "-01", "%Y-%m-%d").date()
+            else:
+                d = datetime.strptime(ref, "%Y-%m-%d").date()
+        except Exception:
             continue
 
         try:
-            v = float(raw_val)
+            val = float(val_str)
         except ValueError:
             continue
 
-        per_date[key] = v
+        key = date(d.year, d.month, 1).isoformat()
+        out[key] = val
 
-    return per_date
+    return out
+
 
 def fetch_statcan_unemployment_rate() -> Dict[str, float]:
     """
