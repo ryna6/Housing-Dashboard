@@ -62,6 +62,7 @@ function labelForMetric(metric: string): string {
       return "Average price";
     case "teranet_hpi":
       return "Teranet HPI";
+      
     case "sales":
       return "Sales";
     case "new_listings":
@@ -91,6 +92,7 @@ function labelForMetric(metric: string): string {
       return "Average rent";
     case "vacancy_rate":
       return "Vacancy rate";
+      
     case "cpi_headline":
       return "Headline CPI";
     case "cpi_shelter":
