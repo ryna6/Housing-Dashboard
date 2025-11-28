@@ -118,7 +118,7 @@ def generate_prices() -> List[PanelRow]:
     # Map dashboard region codes to Excel sheet names
     region_sheets: Dict[str, str] = {
         "canada": "AGGREGATE",
-        "vancouver": "GREATER_VANCOUVER",
+        "greater_vancouver": "GREATER_VANCOUVER",
         "lower_mainland": "LOWER_MAINLAND",
         "calgary": "CALGARY",
         "greater_toronto": "GREATER_TORONTO",
