@@ -6,27 +6,23 @@ import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
 
-// Regions available on the Prices tab only
-// (UI labels are exactly what the user should see.)
-const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
-  { value: "canada", label: "Canada (aggregate)" },
-  { value: "vancouver", label: "Vancouver" },
-  { value: "lower_mainland" as RegionCode, label: "Lower Mainland" },
-  {
-    value: "greater_toronto" as RegionCode,
-    label: "Greater Toronto Area",
-  },
-  { value: "calgary" as RegionCode, label: "Calgary" },
-  { value: "montreal" as RegionCode, label: "Montreal" },
-];
-
-// Housing types (segments) available on this tab
-export type HousingType =
+// Housing type values are the same as your Segment union
+type HousingType =
   | "composite"
   | "one_storey"
   | "two_storey"
   | "townhouse"
   | "apartment";
+
+// Regions for the Prices tab only – using your RegionCode strings
+const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
+  { value: "canada", label: "Canada" },
+  { value: "greater_vancouver", label: "Vancouver" },
+  {value: "lower_mainland", label: "Lower Mainland (Burnaby, Surrey, New West, Coquitlam)", },
+  { value: "calgary", label: "Calgary" },
+  { value: "greater_toronto", label: "Greater Toronto Area (GTA)" },
+  { value: "montreal", label: "Montreal" },
+];
 
 const HOUSING_TYPE_OPTIONS: { value: HousingType; label: string }[] = [
   { value: "composite", label: "Composite" },
@@ -39,7 +35,7 @@ const HOUSING_TYPE_OPTIONS: { value: HousingType; label: string }[] = [
 export const PricesTab: React.FC = () => {
   const { data, loading, error } = useTabData("prices");
 
-  // Default selection: Canada (aggregate), Composite
+  // Default selection: Canada + Composite
   const [region, setRegion] = useState<RegionCode>("canada");
   const [housingType, setHousingType] = useState<HousingType>("composite");
 
@@ -53,13 +49,13 @@ export const PricesTab: React.FC = () => {
     setHousingType(event.target.value as HousingType);
   };
 
-  // Three snapshot cards: Benchmark HPI, Housing type HPI, Average price
+  // Three cards: Benchmark HPI, Housing type HPI, Average price
   const snapshots: MetricSnapshot[] = useMemo(() => {
     if (!data.length) return [];
 
     const all: MetricSnapshot[] = [];
 
-    // 1) Benchmark HPI (composite, region-only)
+    // 1) Benchmark HPI – uses composite HPI for the selected region
     const benchmark = getLatestByMetric(
       data,
       region,
@@ -67,10 +63,10 @@ export const PricesTab: React.FC = () => {
       "composite"
     );
 
-    // 2) Housing type HPI (region + housing type)
+    // 2) Housing type HPI – selected region + housing type
     const hpiType = getLatestByMetric(data, region, ["hpi_type"], housingType);
 
-    // 3) Average price (region + housing type)
+    // 3) Average price – selected region + housing type
     const avgPrice = getLatestByMetric(
       data,
       region,
@@ -85,7 +81,7 @@ export const PricesTab: React.FC = () => {
     return all;
   }, [data, region, housingType]);
 
-  // Chart series – values only (no MoM/YoY charts)
+  // Time series for the three charts – **levels only** (no MoM/YoY charts)
   const benchmarkSeries: PanelPoint[] = useMemo(
     () =>
       data.filter(
@@ -128,6 +124,7 @@ export const PricesTab: React.FC = () => {
         </p>
       </header>
 
+      {/* Controls: Regions + Housing type (no market / city hierarchy) */}
       <div className="tab__controls">
         {/* Regions selector */}
         <div className="tab__regions-group">
@@ -147,7 +144,7 @@ export const PricesTab: React.FC = () => {
 
         {/* Housing type selector */}
         <div className="tab__segment">
-          Housing type
+          Housing type:
           <select value={housingType} onChange={handleHousingTypeChange}>
             {HOUSING_TYPE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -165,6 +162,7 @@ export const PricesTab: React.FC = () => {
         </div>
       )}
 
+      {/* Cards */}
       <section className="tab__metrics">
         {!loading && !snapshots.length && (
           <div className="tab__status">
@@ -176,6 +174,7 @@ export const PricesTab: React.FC = () => {
         ))}
       </section>
 
+      {/* Level charts */}
       <section className="tab__charts">
         <ChartPanel
           title="Benchmark HPI"
