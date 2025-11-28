@@ -98,7 +98,7 @@ export const InflationLabourTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Inflation</h1>
         <p className="tab__subtitle">
-          CPI, shelter and rent CPI, & unemployment rate (StatCan)
+          CPI, shelter & rent CPI, and unemployment rate (Statistics Canada)
         </p>
       </header>
 
