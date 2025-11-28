@@ -121,27 +121,31 @@ export const InflationLabourTab: React.FC = () => {
         ))}
       </section>
 
-      {/* One chart for each overview metric */}
+            {/* One chart for each overview metric, all using actual levels */}
       <section className="tab__charts">
         <ChartPanel
-          title="Headline CPI – YoY %"
+          title="Headline CPI – index level"
           series={headlineSeries}
-          valueKey="yoy_pct"
+          valueKey="value"
+          valueAxisLabel="Index (2002=100)"
         />
         <ChartPanel
-          title="Shelter CPI – YoY %"
+          title="Shelter CPI – index level"
           series={shelterSeries}
-          valueKey="yoy_pct"
+          valueKey="value"
+          valueAxisLabel="Index (2002=100)"
         />
         <ChartPanel
-          title="Rent CPI – YoY %"
+          title="Rent CPI – index level"
           series={rentSeries}
-          valueKey="yoy_pct"
+          valueKey="value"
+          valueAxisLabel="Index (2002=100)"
         />
         <ChartPanel
-          title="Wage index – YoY %"
+          title="Wage index – level"
           series={wageSeries}
-          valueKey="yoy_pct"
+          valueKey="value"
+          valueAxisLabel="$/week"
         />
         <ChartPanel
           title="Unemployment rate – level %"
