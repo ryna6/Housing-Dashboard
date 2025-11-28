@@ -14,11 +14,11 @@ type HousingType =
   | "apartment";
 
 const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
-  { value: "canada", label: "Canada (aggregate)" },
+  { value: "canada", label: "Canada" },
   { value: "vancouver", label: "Vancouver" },
   { value: "lower_mainland", label: "Lower Mainland" },
   { value: "calgary", label: "Calgary" },
-  { value: "greater_toronto", label: "Greater Toronto" },
+  { value: "greater_toronto", label: "Greater Toronto Area (GTA)" },
   { value: "montreal", label: "Montreal" },
 ];
 
