@@ -8,8 +8,6 @@ export type RegionCode =
   | "montreal";
 
 // Segment values:
-// - "all" / "condo" / "freehold" are used by the Sales Listings tab
-// - Housing-type segments are used by the Prices tab
 export type Segment =
   | "all"
   | "condo"
