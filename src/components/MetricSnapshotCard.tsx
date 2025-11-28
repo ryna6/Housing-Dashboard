@@ -96,7 +96,7 @@ function labelForMetric(metric: string): string {
     case "cpi_headline":
       return "Headline CPI";
     case "cpi_shelter":
-      return "Shelter CPI";
+      return "Owned Accommodation CPI";
     case "cpi_rent":
       return "Rent CPI";
     case "wage_index":
