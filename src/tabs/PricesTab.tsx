@@ -18,7 +18,10 @@ type HousingType =
 const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
   { value: "canada", label: "Canada" },
   { value: "greater_vancouver", label: "Vancouver" },
-  { value: "lower_mainland", label: "Lower Mainland (Burnaby, Surrey, New West, Coquitlam)", },
+  {
+    value: "lower_mainland",
+    label: "Lower Mainland (Burnaby, Surrey, New West, Coquitlam)",
+  },
   { value: "calgary", label: "Calgary" },
   { value: "greater_toronto", label: "Greater Toronto Area (GTA)" },
   { value: "montreal", label: "Montreal" },
@@ -31,6 +34,22 @@ const HOUSING_TYPE_OPTIONS: { value: HousingType; label: string }[] = [
   { value: "townhouse", label: "Townhouse" },
   { value: "apartment", label: "Apartment" },
 ];
+
+// Helper: trim a series to the last `years` years based on its latest date
+function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
+  if (!series.length) return series;
+
+  // Ensure sorted by date ascending
+  const sorted = [...series].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+
+  const lastDate = new Date(sorted[sorted.length - 1].date);
+  const cutoff = new Date(lastDate);
+  cutoff.setFullYear(cutoff.getFullYear() - years);
+
+  return sorted.filter((p) => new Date(p.date) >= cutoff);
+}
 
 export const PricesTab: React.FC = () => {
   const { data, loading, error } = useTabData("prices");
@@ -81,78 +100,44 @@ export const PricesTab: React.FC = () => {
     return all;
   }, [data, region, housingType]);
 
-  // Time series for the three charts – **levels only** (no MoM/YoY charts)
-  const benchmarkSeries: PanelPoint[] = useMemo(
-    () =>
-      data.filter(
-        (p) =>
-          p.metric === "hpi_benchmark" &&
-          p.region === region &&
-          p.segment === "composite"
-      ),
-    [data, region]
-  );
+  // Time series for the three charts – levels only, trimmed to last 10 years
+  const benchmarkSeries: PanelPoint[] = useMemo(() => {
+    const full = data.filter(
+      (p) =>
+        p.metric === "hpi_benchmark" &&
+        p.region === region &&
+        p.segment === "composite"
+    );
+    return trimLastYears(full, 10);
+  }, [data, region]);
 
-  const hpiTypeSeries: PanelPoint[] = useMemo(
-    () =>
-      data.filter(
-        (p) =>
-          p.metric === "hpi_type" &&
-          p.region === region &&
-          p.segment === housingType
-      ),
-    [data, region, housingType]
-  );
+  const hpiTypeSeries: PanelPoint[] = useMemo(() => {
+    const full = data.filter(
+      (p) =>
+        p.metric === "hpi_type" &&
+        p.region === region &&
+        p.segment === housingType
+    );
+    return trimLastYears(full, 10);
+  }, [data, region, housingType]);
 
-  const avgPriceSeries: PanelPoint[] = useMemo(
-    () =>
-      data.filter(
-        (p) =>
-          p.metric === "avg_price" &&
-          p.region === region &&
-          p.segment === housingType
-      ),
-    [data, region, housingType]
-  );
+  const avgPriceSeries: PanelPoint[] = useMemo(() => {
+    const full = data.filter(
+      (p) =>
+        p.metric === "avg_price" &&
+        p.region === region &&
+        p.segment === housingType
+    );
+    return trimLastYears(full, 10);
+  }, [data, region, housingType]);
 
-  // Per-metric series, trimmed to the last 10 years
-  const benchmarkSeries: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter(
-          (p) => p.metric === "hpi_benchmark" && p.region === REGION
-        ),
-        10
-      ),
-    [data]
-  );
-
-  const hpiTypeSeries: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter(
-          (p) => p.metric === "hpi_type" && p.region === REGION
-        ),
-        10
-      ),
-    [data]
-  );
-
-  const avgPriceSeries: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter((p) => p.metric === "avg_price" && p.region === REGION),
-        10
-      ),
-    [data]
-  );
-  
   return (
     <div className="tab">
       <header className="tab__header">
         <h1 className="tab__title">Prices</h1>
         <p className="tab__subtitle">
-          MLS Housing Price Index (HPI) benchmark and average sale prices (Canadian Real Estate Association)
+          MLS Housing Price Index (HPI) benchmark and average sale prices
+          (Canadian Real Estate Association)
         </p>
       </header>
 
