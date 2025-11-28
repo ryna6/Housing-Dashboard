@@ -1,5 +1,5 @@
 """
-Generate synthetic test data for the housing dashboard.
+Generate data for the housing dashboard.
 
 This script overwrites the following files under data/processed/:
 
@@ -78,201 +78,21 @@ def generate_months(start_year: int = 2023, start_month: int = 1, periods: int =
 
 MONTHS = generate_months()
 
-# rates test 
-def fetch_boc_series_monthly(
-    series_ids: List[str],
-    start: str = "2000-01-01",
-    end: Optional[str] = None,
-) -> Dict[str, Dict[str, float]]:
-    """
-    Fetch one or more Bank of Canada Valet series and aggregate to monthly levels.
-
-    We use one HTTP call *per series* using the documented pattern:
-      https://www.bankofcanada.ca/valet/observations/{seriesId}/json?start_date=...
-
-    For each calendar month we keep the **last available daily observation**
-    (rather than an average). This matches how policy-rate decisions work and
-    avoids fractional values like 4.73% when the target actually moves in 0.25
-    percentage-point steps.
-
-    Returns a dict:
-        {
-          "YYYY-MM-01": { "V39079": 4.75, "V122538": 3.10, ... },
-          ...
-        }
-
-    Any HTTP/connection errors are logged but do NOT raise, so builds don't fail.
-    """
-    base = "https://www.bankofcanada.ca/valet/observations"
-
-    # month_key -> series_id -> last daily value seen in that month
-    monthly_last: Dict[str, Dict[str, float]] = defaultdict(dict)
-
-    for sid in series_ids:
-        params = f"?start_date={start}"
-        if end:
-            params += f"&end_date={end}"
-        url = f"{base}/{sid}/json{params}"
-
-        try:
-            with urllib.request.urlopen(url, timeout=30) as resp:
-                payload = json.load(resp)
-        except (HTTPError, URLError, TimeoutError, ValueError) as e:
-            # Don't kill the build if BoC is down or series is missing
-            print(f"[WARN] BoC Valet fetch failed for {sid}: {e}")
-            continue
-
-        observations = payload.get("observations", [])
-        for o in observations:
-            d_str = o.get("d")
-            if not d_str:
-                continue
-
-            try:
-                d = datetime.fromisoformat(d_str[:10]).date()
-            except Exception:
-                continue
-
-            month_key = date(d.year, d.month, 1).isoformat()
-
-            v_obj = o.get(sid)
-            if not isinstance(v_obj, dict):
-                continue
-            v_str = v_obj.get("v")
-            if v_str is None:
-                continue
-            try:
-                v = float(v_str)
-            except Exception:
-                continue
-
-            # Rely on Valet returning observations in chronological order;
-            # the last assignment in a month will be the last daily value.
-            monthly_last[month_key][sid] = v
-
-    monthly: Dict[str, Dict[str, float]] = {}
-    for month_key, per_sid in monthly_last.items():
-        monthly[month_key] = dict(per_sid)
-
-    return monthly
-
-def generate_rates() -> List[PanelRow]:
-    """
-    Wrapper used by main(): generate rate data from the real
-    Bank of Canada Valet API.
-
-    If anything fails or BoC is unavailable, we return an empty list so
-    the frontend simply shows "Not available for this selection" instead
-    of silently filling synthetic values.
-    """
-    try:
-        rows = generate_rates_from_boc()
-        print(f"[INFO] Loaded {len(rows)} rate rows from BoC Valet")
-        return rows
-    except Exception as e:
-        print(f"[ERROR] generate_rates_from_boc failed: {e!r}")
-        return []
-
-
-# generating real rates
-def generate_rates_from_boc() -> List[PanelRow]:
-    """
-    Generate rates data using *real* Bank of Canada series via the Valet API.
-
-    Metrics → BoC series:
-      - policy_rate      -> V39079   (Target for the overnight rate, %)
-      - gov_2y_yield     -> V122538  (2-year GoC benchmark bond yield, %)
-      - gov_5y_yield     -> V122540  (5-year GoC benchmark bond yield, %)
-      - gov_10y_yield    -> V122487  (Long-term GoC bond yield >10y, %)
-      - mortgage_5y      -> V80691311  (Prime rate, %)
-    """
-    rows: List[PanelRow] = []
-    region = "canada"
-
-    series_by_metric: Dict[str, Tuple[str, str]] = {
-        "policy_rate": ("V39079", "pct"),
-        "gov_2y_yield": ("V122538", "pct"),
-        "gov_5y_yield": ("V122540", "pct"),
-        "gov_10y_yield": ("V122487", "pct"),
-        "mortgage_5y": ("V80691311", "pct"),
-    }
-
-    all_series_ids = [cfg[0] for cfg in series_by_metric.values()]
-
-    monthly = fetch_boc_series_monthly(all_series_ids, start="2000-01-01")
-    if not monthly:
-        # Let caller decide whether to fall back
-        return []
-
-    for metric, (series_id, unit) in series_by_metric.items():
-        month_keys = sorted(
-            d
-            for d, per_sid in monthly.items()
-            if series_id in per_sid and per_sid[series_id] is not None
-        )
-        if not month_keys:
-            continue
-
-        vals: List[float] = [monthly[d][series_id] for d in month_keys]
-        mom, yoy, ma3 = compute_changes(vals)
-
-        for dt_str, val, m, y, ma in zip(month_keys, vals, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt_str,
-                    region=region,
-                    segment="all",
-                    metric=metric,
-                    value=round(val, 3),
-                    unit=unit,
-                    source="boc_valet",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-
-    # Derive mortgage_5y_spread where both mortgage_5y and gov_5y_yield are available
-    mort_by_date = {r.date: r for r in rows if r.metric == "mortgage_5y"}
-    g5_by_date = {r.date: r for r in rows if r.metric == "gov_5y_yield"}
-
-    common_dates = sorted(set(mort_by_date.keys()) & set(g5_by_date.keys()))
-    if common_dates:
-        spread_vals: List[float] = [
-            mort_by_date[d].value - g5_by_date[d].value for d in common_dates
-        ]
-        mom, yoy, ma3 = compute_changes(spread_vals)
-
-        for dt_str, val, m, y, ma in zip(common_dates, spread_vals, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt_str,
-                    region=region,
-                    segment="all",
-                    metric="mortgage_5y_spread",
-                    value=round(val, 3),
-                    unit="pct",
-                    source="boc_valet_derived",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-
-    return rows
-
-# end of rates test
-
-
 
 def compute_changes(values: List[float]) -> Tuple[List[Optional[float]], List[Optional[float]], List[float]]:
+    """
+    Compute:
+      - month-over-month % change
+      - year-over-year % change
+      - 3-month trailing moving average (level)
+    """
     n = len(values)
     mom: List[Optional[float]] = [None] * n
     yoy: List[Optional[float]] = [None] * n
     ma3: List[float] = [0.0] * n
 
     for i, v in enumerate(values):
-        window = values[max(0, i - 2) : i + 1]
+        window = values[max(0, i - 2): i + 1]
         ma3[i] = sum(window) / len(window)
 
         if i > 0 and values[i - 1] != 0:
@@ -283,6 +103,10 @@ def compute_changes(values: List[float]) -> Tuple[List[Optional[float]], List[Op
 
     return mom, yoy, ma3
 
+
+# ---------------------------------------------------------------------------
+# Prices – still synthetic for now
+# ---------------------------------------------------------------------------
 
 def generate_prices() -> List[PanelRow]:
     rows: List[PanelRow] = []
@@ -356,6 +180,10 @@ def generate_prices() -> List[PanelRow]:
 
     return rows
 
+
+# ---------------------------------------------------------------------------
+# Sales – synthetic
+# ---------------------------------------------------------------------------
 
 def generate_sales() -> List[PanelRow]:
     rows: List[PanelRow] = []
@@ -503,6 +331,10 @@ def generate_sales() -> List[PanelRow]:
     return rows
 
 
+# ---------------------------------------------------------------------------
+# Rentals – synthetic
+# ---------------------------------------------------------------------------
+
 def generate_rentals() -> List[PanelRow]:
     rows: List[PanelRow] = []
 
@@ -595,30 +427,195 @@ def generate_rentals() -> List[PanelRow]:
 
     return rows
 
-# --- StatCan CPI (real data) -----------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Rates – real BoC Valet
+# ---------------------------------------------------------------------------
+
+def fetch_boc_series_monthly(
+    series_ids: List[str],
+    start: str = "2000-01-01",
+    end: Optional[str] = None,
+) -> Dict[str, Dict[str, float]]:
+    """
+    Fetch one or more Bank of Canada Valet series and aggregate to monthly levels.
+    For each calendar month we keep the *last* available daily observation.
+    """
+    base = "https://www.bankofcanada.ca/valet/observations"
+
+    # month_key -> series_id -> last daily value seen in that month
+    monthly_last: Dict[str, Dict[str, float]] = defaultdict(dict)
+
+    for sid in series_ids:
+        params = f"?start_date={start}"
+        if end:
+            params += f"&end_date={end}"
+        url = f"{base}/{sid}/json{params}"
+
+        try:
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                payload = json.load(resp)
+        except (HTTPError, URLError, TimeoutError, ValueError) as e:
+            print(f"[WARN] BoC Valet fetch failed for {sid}: {e}")
+            continue
+
+        observations = payload.get("observations", [])
+        for o in observations:
+            d_str = o.get("d")
+            if not d_str:
+                continue
+
+            try:
+                d = datetime.fromisoformat(d_str[:10]).date()
+            except Exception:
+                continue
+
+            month_key = date(d.year, d.month, 1).isoformat()
+
+            v_obj = o.get(sid)
+            if not isinstance(v_obj, dict):
+                continue
+            v_str = v_obj.get("v")
+            if v_str is None:
+                continue
+            try:
+                v = float(v_str)
+            except Exception:
+                continue
+
+            monthly_last[month_key][sid] = v
+
+    monthly: Dict[str, Dict[str, float]] = {}
+    for month_key, per_sid in monthly_last.items():
+        monthly[month_key] = dict(per_sid)
+
+    return monthly
+
+
+def generate_rates_from_boc() -> List[PanelRow]:
+    """
+    Generate rates data using real Bank of Canada series via the Valet API.
+
+    Metrics → BoC series:
+      - policy_rate      -> V39079    (Target for the overnight rate, %)
+      - gov_2y_yield     -> V122538   (2-year GoC benchmark bond yield, %)
+      - gov_5y_yield     -> V122540   (5-year GoC benchmark bond yield, %)
+      - gov_10y_yield    -> V122487   (Long-term GoC bond yield >10y, %)
+      - mortgage_5y      -> V80691311 (Prime rate, %)
+    """
+    rows: List[PanelRow] = []
+    region = "canada"
+
+    series_by_metric: Dict[str, Tuple[str, str]] = {
+        "policy_rate": ("V39079", "pct"),
+        "gov_2y_yield": ("V122538", "pct"),
+        "gov_5y_yield": ("V122540", "pct"),
+        "gov_10y_yield": ("V122487", "pct"),
+        "mortgage_5y": ("V80691311", "pct"),
+    }
+
+    all_series_ids = [cfg[0] for cfg in series_by_metric.values()]
+
+    monthly = fetch_boc_series_monthly(all_series_ids, start="2000-01-01")
+    if not monthly:
+        return []
+
+    for metric, (series_id, unit) in series_by_metric.items():
+        month_keys = sorted(
+            d
+            for d, per_sid in monthly.items()
+            if series_id in per_sid and per_sid[series_id] is not None
+        )
+        if not month_keys:
+            continue
+
+        vals: List[float] = [monthly[d][series_id] for d in month_keys]
+        mom, yoy, ma3 = compute_changes(vals)
+
+        for dt_str, val, m, y, ma in zip(month_keys, vals, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt_str,
+                    region=region,
+                    segment="all",
+                    metric=metric,
+                    value=round(val, 3),
+                    unit=unit,
+                    source="boc_valet",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+
+    # Derive mortgage_5y_spread where both mortgage_5y and gov_5y_yield are available
+    mort_by_date = {r.date: r for r in rows if r.metric == "mortgage_5y"}
+    g5_by_date = {r.date: r for r in rows if r.metric == "gov_5y_yield"}
+
+    common_dates = sorted(set(mort_by_date.keys()) & set(g5_by_date.keys()))
+    if common_dates:
+        spread_vals: List[float] = [
+            mort_by_date[d].value - g5_by_date[d].value for d in common_dates
+        ]
+        mom, yoy, ma3 = compute_changes(spread_vals)
+
+        for dt_str, val, m, y, ma in zip(common_dates, spread_vals, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt_str,
+                    region=region,
+                    segment="all",
+                    metric="mortgage_5y_spread",
+                    value=round(val, 3),
+                    unit="pct",
+                    source="boc_valet_derived",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+
+    return rows
+
+
+def generate_rates() -> List[PanelRow]:
+    """
+    Top-level wrapper for BoC rates.
+    If BoC is unavailable, we return an empty list (no synthetic fallback).
+    """
+    try:
+        rows = generate_rates_from_boc()
+        print(f"[INFO] Loaded {len(rows)} rate rows from BoC Valet")
+        return rows
+    except Exception as e:
+        print(f"[ERROR] generate_rates_from_boc failed: {e!r}")
+        return []
+
+
+# ---------------------------------------------------------------------------
+# StatCan – CPI, wage index, unemployment
+# ---------------------------------------------------------------------------
+
+WDS_BASE = "https://www150.statcan.gc.ca/t1/wds/rest"
+
 
 def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
     """
     Fetch CPI index series for Canada from Statistics Canada Web Data Service.
 
-    We use the following vectors (all from table 18-10-0004-01, 2002=100):
+    We use the following vectors (table 18-10-0004-01, 2002=100):
       - cpi_headline: v41690973  (All-items)
-      - cpi_shelter:  v41691055  (Owned accomodation)
+      - cpi_shelter:  v41691055  (Owned accommodation)
       - cpi_rent:     v41691052  (Rent)
     """
-    base_url = (
-        "https://www150.statcan.gc.ca/"
-        "t1/wds/rest/getDataFromVectorsAndLatestNPeriods"
-    )
+    base_url = f"{WDS_BASE}/getDataFromVectorsAndLatestNPeriods"
 
-    # metric -> numeric vectorId (drop the leading 'v')
     vector_ids: Dict[str, int] = {
         "cpi_headline": 41690973,
         "cpi_shelter": 41691055,
         "cpi_rent": 41691052,
     }
 
-    # WDS expects a JSON *array* of requests
     payload = [{"vectorId": vid, "latestN": 2000} for vid in vector_ids.values()]
     data_bytes = json.dumps(payload).encode("utf-8")
 
@@ -636,11 +633,9 @@ def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
         with urllib.request.urlopen(req, timeout=30) as resp:
             res = json.load(resp)
     except (HTTPError, URLError, TimeoutError, ValueError) as e:
-        # Don't break the build if StatCan is down
         print(f"[WARN] StatCan CPI fetch failed: {e}")
         return {}
 
-    # metric -> date -> value
     series: Dict[str, Dict[str, float]] = {m: {} for m in vector_ids.keys()}
     vector_to_metric = {vid: m for m, vid in vector_ids.items()}
 
@@ -661,7 +656,6 @@ def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
             value = dp.get("value")
             symbol = dp.get("symbolCode")
 
-            # Skip missing / suppressed points
             if value in (None, "", "NaN"):
                 continue
             if symbol not in (0, None):
@@ -672,188 +666,22 @@ def fetch_statcan_cpi() -> Dict[str, Dict[str, float]]:
             except (TypeError, ValueError):
                 continue
 
-            # Monthly CPI uses the first of month, e.g. "2025-10-01"
             ref = dp.get("refPer") or dp.get("refPerRaw")
             if not ref:
                 continue
-            try:
-                dt = datetime.fromisoformat(ref)
-                key = dt.date().isoformat()
-            except Exception:
-                key = ref
-
-            series[metric][key] = v
-
-    return series
-
-WDS_BASE = "https://www150.statcan.gc.ca/t1/wds/rest"
-
-
-def fetch_statcan_vectors(
-    vector_ids: Dict[str, int],
-    latest_n: int = 600,
-) -> Dict[str, Dict[str, float]]:
-    """
-    Fetch one or more Statistics Canada WDS vectors and return
-    monthly series { metric: { 'YYYY-MM-01': value, ... } }.
-
-    Uses getDataFromVectorsAndLatestNPeriods:
-      POST https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods
-      BODY: [{"vectorId": 41690973, "latestN": 600}, ...]
-    """
-    url = f"{WDS_BASE}/getDataFromVectorsAndLatestNPeriods"
-
-    payload = [
-        {"vectorId": vid, "latestN": latest_n} for vid in vector_ids.values()
-    ]
-
-    try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            raw = json.load(resp)
-    except (HTTPError, URLError, TimeoutError, ValueError) as e:
-        print(f"[WARN] StatCan WDS fetch failed: {e}")
-        # Return empty dicts for each metric so callers don't crash
-        return {metric: {} for metric in vector_ids.keys()}
-
-    series_by_metric: Dict[str, Dict[str, float]] = {
-        metric: {} for metric in vector_ids.keys()
-    }
-
-    for metric, obj in zip(vector_ids.keys(), raw):
-        status = obj.get("status")
-        if status != "SUCCESS":
-            print(f"[WARN] StatCan WDS status for {metric}: {status}")
-            continue
-
-        points = obj.get("object", {}).get("vectorDataPoint", [])
-        for pt in points:
-            ref = pt.get("refPer")
-            val_str = pt.get("value")
-
-            if not ref or val_str in (None, "", "..."):
-                continue
-
-            # refPer is usually "YYYY-MM-01" or "YYYY-MM"
-            if len(ref) == 7:
-                ref += "-01"
-
+            # normalize to YYYY-MM-01
+            if len(ref) == 7:  # "YYYY-MM"
+                ref = ref + "-01"
             try:
                 d = datetime.fromisoformat(ref[:10]).date()
             except Exception:
                 continue
 
-            try:
-                val = float(val_str)
-            except ValueError:
-                continue
-
             key = date(d.year, d.month, 1).isoformat()
-            series_by_metric[metric][key] = val
+            series[metric][key] = v
 
-    return series_by_metric
+    return series
 
-
-def generate_inflation() -> List[PanelRow]:
-    rows: List[PanelRow] = []
-    region = "canada"
-
-    # 1) CPI (headline, shelter, rent) – StatCan CPI index (18-10-0004-01)
-    cpi_series = fetch_statcan_cpi()
-
-    if cpi_series:
-        for metric, per_date in cpi_series.items():
-            # per_date: { "YYYY-MM-01": index_value }
-            dates = sorted(per_date.keys())
-            values = [per_date[d] for d in dates]
-            mom, yoy, ma3 = compute_changes(values)
-
-            for dt_str, val, m, y, ma in zip(dates, values, mom, yoy, ma3):
-                rows.append(
-                    PanelRow(
-                        date=dt_str,
-                        region=region,
-                        segment="all",
-                        metric=metric,
-                        value=round(val, 3),
-                        unit="index",
-                        source="statcan_cpi",
-                        mom_pct=round(m, 3) if m is not None else None,
-                        yoy_pct=round(y, 3) if y is not None else None,
-                        ma3=round(ma, 3),
-                    )
-                )
-    else:
-        # No synthetic fallback: just log and let the UI say "No data"
-        print(
-            "[WARN] StatCan CPI unavailable – "
-            "no CPI rows will be generated for inflation_labour.json"
-        )
-
-    # 2) Wage index – average weekly earnings (14-10-0222-01)
-    wage_index = fetch_statcan_wage_index()
-    if wage_index:
-        dates = sorted(wage_index.keys())
-        values = [wage_index[d] for d in dates]
-        mom, yoy, ma3 = compute_changes(values)
-
-        for dt_str, val, m, y, ma in zip(dates, values, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt_str,
-                    region=region,
-                    segment="all",
-                    metric="wage_index",
-                    # Actual dollars per week; we treat as a generic index
-                    # so cards show raw numbers and the chart uses a real
-                    # level series instead of YoY %.
-                    value=round(val, 3),
-                    unit="index",
-                    source="statcan_seph",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-    else:
-        print(
-            "[WARN] StatCan wage index unavailable – "
-            "no wage_index rows will be generated"
-        )
-
-    # 3) Unemployment rate – LFS (14-10-0287-01)
-    unemployment = fetch_statcan_unemployment_rate()
-    if unemployment:
-        dates = sorted(unemployment.keys())
-        values = [unemployment[d] for d in dates]
-        mom, yoy, ma3 = compute_changes(values)
-
-        for dt_str, val, m, y, ma in zip(dates, values, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt_str,
-                    region=region,
-                    segment="all",
-                    metric="unemployment_rate",
-                    value=round(val, 3),
-                    unit="pct",
-                    source="statcan_lfs",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-    else:
-        print(
-            "[WARN] StatCan unemployment rate unavailable – "
-            "no unemployment_rate rows will be generated"
-        )
-
-    return rows
 
 def fetch_statcan_wage_index() -> Dict[str, float]:
     """
@@ -864,6 +692,9 @@ def fetch_statcan_wage_index() -> Dict[str, float]:
 
     We use average weekly earnings including overtime for all employees,
     Canada, industrial aggregate excl. unclassified businesses.
+
+    Returns:
+        { "YYYY-MM-01": value_in_dollars }
     """
     meta_url = f"{WDS_BASE}/getFullTableDownloadCSV/14100222/en"
 
@@ -893,13 +724,18 @@ def fetch_statcan_wage_index() -> Dict[str, float]:
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             csv_name = next(
-                (n for n in zf.namelist() if n.lower().endswith(".csv")),
+                (n for n in zf.namelist()
+                 if n.lower().endswith(".csv") and "_metadata" not in n.lower()),
                 None,
             )
             if not csv_name:
-                print("[WARN] StatCan wage ZIP has no CSV file")
+                print("[WARN] StatCan wage ZIP has no data CSV file")
                 return {}
-            csv_data = zf.read(csv_name).decode("utf-8-sig")
+            raw_csv = zf.read(csv_name)
+            try:
+                csv_data = raw_csv.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                csv_data = raw_csv.decode("latin1")
     except Exception as e:
         print(f"[WARN] StatCan wage ZIP parse failed: {e}")
         return {}
@@ -914,14 +750,16 @@ def fetch_statcan_wage_index() -> Dict[str, float]:
             row.get("North American Industry Classification System (NAICS)") or ""
         ).strip()
         val_str = row.get("VALUE")
-        ref = row.get("REF_DATE")
+        ref = (row.get("REF_DATE") or "").strip()
 
-        # We only care about national, industrial aggregate, average weekly earnings
+        # We only care about national, industrial aggregate, avg weekly earnings
         if "Canada" not in geo:
             continue
         if "Industrial aggregate excluding unclassified businesses" not in naics:
             continue
-        if "Average weekly earnings" not in stat or "all employees" not in stat:
+        if "Average weekly earnings" not in stat:
+            continue
+        if "all employees" not in stat:
             continue
         if not ref or val_str in (None, "", "..."):
             continue
@@ -943,26 +781,21 @@ def fetch_statcan_wage_index() -> Dict[str, float]:
         key = date(d.year, d.month, 1).isoformat()
         out[key] = val
 
+    print(f"[INFO] StatCan wage_index points loaded: {len(out)}")
     return out
 
 
 def fetch_statcan_unemployment_rate() -> Dict[str, float]:
     """
     Fetch Canada unemployment rate (both sexes, 15 years and over,
-    monthly, seasonally adjusted) from StatCan table 14-10-0287-01
-    (formerly CANSIM 282-0087).
+    monthly, seasonally adjusted) from StatCan table 14-10-0287-01.
 
-    We use vector v2062815. 
-
+    We use vector v2062815.
     Returns:
         { "YYYY-MM-01": unemployment_rate_percent }
     """
-    base_url = (
-        "https://www150.statcan.gc.ca/"
-        "t1/wds/rest/getDataFromVectorsAndLatestNPeriods"
-    )
+    base_url = f"{WDS_BASE}/getDataFromVectorsAndLatestNPeriods"
 
-    # v2062815 -> unemployment rate, Canada, SA, both sexes 15+
     payload = [{"vectorId": 2062815, "latestN": 2000}]
     data_bytes = json.dumps(payload).encode("utf-8")
 
@@ -1012,21 +845,123 @@ def fetch_statcan_unemployment_rate() -> Dict[str, float]:
             if not ref:
                 continue
 
-            # Normalise to YYYY-MM-01
+            if len(ref) == 7:
+                ref = ref + "-01"
             try:
-                dt = datetime.fromisoformat(ref)
-                key = dt.date().isoformat()
+                d = datetime.fromisoformat(ref[:10]).date()
             except Exception:
-                if len(ref) == 7 and ref[4] == "-":  # "YYYY-MM"
-                    key = ref + "-01"
-                else:
-                    key = ref
+                continue
 
+            key = date(d.year, d.month, 1).isoformat()
             per_date[key] = v
 
     return per_date
-  
 
+
+def generate_inflation() -> List[PanelRow]:
+    """
+    Build inflation & labour series using real Statistics Canada data:
+      - cpi_headline       (CPI all-items index)
+      - cpi_shelter        (Owned accommodation CPI)
+      - cpi_rent           (Rent CPI)
+      - wage_index         (average weekly earnings, 14-10-0222-01)
+      - unemployment_rate  (LFS unemployment rate, 14-10-0287-01)
+
+    If a StatCan fetch fails, we simply omit that series (no synthetic fallback).
+    """
+    rows: List[PanelRow] = []
+    region = "canada"
+
+    cpi_series = fetch_statcan_cpi()
+    wage_index = fetch_statcan_wage_index()
+    unemployment = fetch_statcan_unemployment_rate()
+
+    # CPI indices (2002=100)
+    for metric in ("cpi_headline", "cpi_shelter", "cpi_rent"):
+        per_date = cpi_series.get(metric, {})
+        if not per_date:
+            continue
+        dates = sorted(per_date.keys())
+        values = [per_date[d] for d in dates]
+        mom, yoy, ma3 = compute_changes(values)
+
+        for dt_str, val, m, y, ma in zip(dates, values, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt_str,
+                    region=region,
+                    segment="all",
+                    metric=metric,
+                    value=round(val, 3),
+                    unit="index",
+                    source="statcan_cpi_18-10-0004-01",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+
+    # Wage index – average weekly earnings (CAD per week)
+    if wage_index:
+        dates = sorted(wage_index.keys())
+        values = [wage_index[d] for d in dates]
+        mom, yoy, ma3 = compute_changes(values)
+
+        for dt_str, val, m, y, ma in zip(dates, values, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt_str,
+                    region=region,
+                    segment="all",
+                    metric="wage_index",
+                    value=round(val, 3),
+                    unit="cad_per_week",
+                    source="statcan_14-10-0222-01",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+    else:
+        print(
+            "[WARN] StatCan wage index unavailable – "
+            "no wage_index rows will be generated"
+        )
+
+    # Unemployment rate – %
+    if unemployment:
+        dates = sorted(unemployment.keys())
+        values = [unemployment[d] for d in dates]
+        mom, yoy, ma3 = compute_changes(values)
+
+        for dt_str, val, m, y, ma in zip(dates, values, mom, yoy, ma3):
+            rows.append(
+                PanelRow(
+                    date=dt_str,
+                    region=region,
+                    segment="all",
+                    metric="unemployment_rate",
+                    value=round(val, 3),
+                    unit="pct",
+                    source="statcan_14-10-0287-01",
+                    mom_pct=round(m, 3) if m is not None else None,
+                    yoy_pct=round(y, 3) if y is not None else None,
+                    ma3=round(ma, 3),
+                )
+            )
+    else:
+        print(
+            "[WARN] StatCan unemployment rate unavailable – "
+            "no unemployment_rate rows will be generated"
+        )
+
+    print(f"[INFO] Generated {len(rows)} inflation/labour rows from StatCan")
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# IO + entry point
+# ---------------------------------------------------------------------------
 
 def write_json(path: Path, rows: List[PanelRow]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1043,7 +978,6 @@ def main() -> None:
     rates = generate_rates()
     inflation = generate_inflation()
 
-    # panel.json = all rows together
     panel = prices + sales + rentals + rates + inflation
 
     write_json(DATA_DIR / "panel.json", panel)
@@ -1053,7 +987,7 @@ def main() -> None:
     write_json(DATA_DIR / "rates_bonds.json", rates)
     write_json(DATA_DIR / "inflation_labour.json", inflation)
 
-    print(f"Wrote synthetic data to {DATA_DIR}")
+    print(f"Wrote dashboard data to {DATA_DIR}")
 
 
 if __name__ == "__main__":
