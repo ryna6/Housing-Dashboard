@@ -98,7 +98,7 @@ export const InflationLabourTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Inflation</h1>
         <p className="tab__subtitle">
-          CPI, shelter & rent CPI, and unemployment rate (Statistics Canada)
+          CPI, owned & rented housing CPI, and unemployment rate (Statistics Canada)
         </p>
       </header>
 
@@ -129,7 +129,7 @@ export const InflationLabourTab: React.FC = () => {
           valueKey="value"
         />
         <ChartPanel
-          title="Shelter CPI"
+          title="Owned accommodation CPI"
           series={shelterSeries}
           valueKey="value"
         />
