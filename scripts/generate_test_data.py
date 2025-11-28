@@ -40,7 +40,6 @@ REGION_OFFSETS: Dict[str, float] = {
     "hamilton": 6.0,
     "halton": 6.5,
     "niagara": 5.5,
-    "vancouver": 9.0,
     "burnaby": 8.5,
     "surrey": 7.5,
     "richmond": 8.8,
