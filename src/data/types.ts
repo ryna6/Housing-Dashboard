@@ -1,10 +1,10 @@
-// Top-level market buckets used by MarketSelector on other tabs
+// Top-level market buckets used by the legacy MarketSelector component
+// (kept for compatibility; the new tabs use the unified Regions selector)
 export type MarketCode = "canada" | "on" | "bc";
 
 // All region codes used anywhere in the app
-// - Original city-level regions (GTA, Hamilton, etc.) for Rentals/Sales
-// - New aggregate regions for the Prices tab (greater_vancouver, lower_mainland, etc.)
-export type RegionCode =
+// - Original city-level regions (GTA, Hamilton, etc.) for older tabs / data
+// - New aggregate regions for the unified Regions selector
 export type RegionCode =
   | MarketCode
   | "gta"
@@ -16,7 +16,7 @@ export type RegionCode =
   | "surrey"
   | "richmond"
   | "victoria"
-  // Aggregate / new regions for the Prices tab
+  // New aggregate regions used by Prices / Sales / Rentals
   | "greater_vancouver"
   | "lower_mainland"
   | "calgary"
@@ -24,8 +24,8 @@ export type RegionCode =
   | "montreal";
 
 // Segment values:
-// - "all" / "condo" / "freehold" are used by the SalesListings tab
-// - The housing-type segments are used by the new Prices tab
+// - "all" / "condo" / "freehold" are used by the Sales Listings tab
+// - Housing-type segments are used by the Prices tab
 export type Segment =
   | "all"
   | "condo"
