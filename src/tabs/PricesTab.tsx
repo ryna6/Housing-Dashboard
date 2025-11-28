@@ -18,7 +18,7 @@ type HousingType =
 const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
   { value: "canada", label: "Canada" },
   { value: "greater_vancouver", label: "Vancouver" },
-  {value: "lower_mainland", label: "Lower Mainland (Burnaby, Surrey, New West, Coquitlam)", },
+  { value: "lower_mainland", label: "Lower Mainland (Burnaby, Surrey, New West, Coquitlam)", },
   { value: "calgary", label: "Calgary" },
   { value: "greater_toronto", label: "Greater Toronto Area (GTA)" },
   { value: "montreal", label: "Montreal" },
@@ -120,7 +120,7 @@ export const PricesTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Prices</h1>
         <p className="tab__subtitle">
-          MLS HPI benchmark and average prices (monthly)
+          MLS Housing Price Index (HPI) benchmark and average sale prices (Canadian Real Estate Association)
         </p>
       </header>
 
@@ -180,19 +180,16 @@ export const PricesTab: React.FC = () => {
           title="Benchmark HPI"
           series={benchmarkSeries}
           valueKey="value"
-          valueAxisLabel="HPI (index)"
         />
         <ChartPanel
           title="Housing type HPI"
           series={hpiTypeSeries}
           valueKey="value"
-          valueAxisLabel="HPI (index)"
         />
         <ChartPanel
           title="Average price"
           series={avgPriceSeries}
           valueKey="value"
-          valueAxisLabel="Benchmark price ($)"
         />
       </section>
     </div>
