@@ -32,6 +32,20 @@ import pandas as pd
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
+REGION_OFFSETS: Dict[str, float] = {
+    "canada": 0.0,
+    "on": 5.0,
+    "bc": 7.0,
+    "gta": 8.0,
+    "hamilton": 6.0,
+    "halton": 6.5,
+    "niagara": 5.5,
+    "vancouver": 9.0,
+    "burnaby": 8.5,
+    "surrey": 7.5,
+    "richmond": 8.8,
+    "victoria": 7.8,
+}
 
 @dataclass
 class PanelRow:
