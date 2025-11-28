@@ -9,6 +9,11 @@ export interface MetricSnapshot {
 
 interface Props {
   snapshot: MetricSnapshot;
+  /**
+   * Optional override for the card title.
+   * If not provided, we fall back to a label based on the metric name.
+   */
+  titleOverride?: string;
 }
 
 /**
@@ -62,7 +67,7 @@ function labelForMetric(metric: string): string {
       return "Housing type HPI";
     case "avg_price":
       return "Average price";
-      
+
     case "sales":
       return "Sales";
     case "new_listings":
@@ -92,7 +97,7 @@ function labelForMetric(metric: string): string {
       return "Average rent";
     case "vacancy_rate":
       return "Vacancy rate";
-      
+
     case "cpi_headline":
       return "Headline CPI";
     case "cpi_shelter":
@@ -109,7 +114,7 @@ function labelForMetric(metric: string): string {
   }
 }
 
-export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
+export const MetricSnapshotCard: React.FC<Props> = ({ snapshot, titleOverride }) => {
   const { metric, latest, prev } = snapshot;
 
   const latestVal = latest?.value;
@@ -204,7 +209,9 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot }) => {
 
   return (
     <div className="metric-card">
-      <div className="metric-card__title">{labelForMetric(metric)}</div>
+      <div className="metric-card__title">
+        {titleOverride ?? labelForMetric(metric)}
+      </div>
       <div className="metric-card__value">
         {formatValue(latestVal, latest.unit)}
       </div>
