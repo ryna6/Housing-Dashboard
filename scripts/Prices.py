@@ -1,23 +1,21 @@
 from __future__ import annotations
 
 import json
-import math
-import urllib.request
-from urllib.error import HTTPError, URLError
-from collections import defaultdict
 from dataclasses import asdict, dataclass
-from datetime import date, datetime
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
-RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
+# Root paths
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = ROOT_DIR / "data" / "processed"
+RAW_DATA_DIR = ROOT_DIR / "data" / "raw"
+
 
 @dataclass
 class PanelRow:
-    date: str          # YYYY-MM-01
+    date: str          # YYYY-MM-DD (first of month)
     region: str
     segment: str
     metric: str
@@ -29,27 +27,14 @@ class PanelRow:
     ma3: Optional[float]
 
 
-def generate_months(start_year: int = 2023, start_month: int = 1, periods: int = 18) -> List[date]:
-    y, m = start_year, start_month
-    out: List[date] = []
-    for _ in range(periods):
-        out.append(date(y, m, 1))
-        m += 1
-        if m > 12:
-            m = 1
-            y += 1
-    return out
-
-
-MONTHS = generate_months()
-
-
-def compute_changes(values: List[float]) -> Tuple[List[Optional[float]], List[Optional[float]], List[float]]:
+def compute_changes(
+    values: List[float],
+) -> Tuple[List[Optional[float]], List[Optional[float]], List[float]]:
     """
     Compute:
-      - month-over-month % change
-      - year-over-year % change
-      - 3-month trailing moving average (level)
+    - month-over-month % change
+    - year-over-year % change
+    - 3-month trailing moving average (level)
     """
     n = len(values)
     mom: List[Optional[float]] = [None] * n
@@ -57,7 +42,7 @@ def compute_changes(values: List[float]) -> Tuple[List[Optional[float]], List[Op
     ma3: List[float] = [0.0] * n
 
     for i, v in enumerate(values):
-        window = values[max(0, i - 2): i + 1]
+        window = values[max(0, i - 2) : i + 1]
         ma3[i] = sum(window) / len(window)
 
         if i > 0 and values[i - 1] != 0:
@@ -68,13 +53,14 @@ def compute_changes(values: List[float]) -> Tuple[List[Optional[float]], List[Op
 
     return mom, yoy, ma3
 
+
 def generate_prices() -> List[PanelRow]:
     """
     Generate price / HPI series for the dashboard using the CREA MLS HPI
     Excel workbook located under data/raw.
 
     Outputs three metrics:
-      - hpi_benchmark: composite HPI index (segment="composite")
+      - hpi_benchmark: composite HPI index (segment = "composite")
       - hpi_type: HPI index by housing type (segment varies)
       - avg_price: benchmark price by housing type (segment varies)
     """
@@ -185,7 +171,7 @@ def generate_prices() -> List[PanelRow]:
 
     return rows
 
-    
+
 # ---------------------------------------------------------------------------
 # IO + entry point
 # ---------------------------------------------------------------------------
@@ -198,23 +184,9 @@ def write_json(path: Path, rows: List[PanelRow]) -> None:
 
 def main() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-
     prices = generate_prices()
-    sales = generate_sales()
-    rentals = generate_rentals()
-    rates = generate_rates()
-    inflation = generate_inflation()
-
-    panel = prices + sales + rentals + rates + inflation
-
-    write_json(DATA_DIR / "panel.json", panel)
     write_json(DATA_DIR / "prices.json", prices)
-    write_json(DATA_DIR / "sales_listings.json", sales)
-    write_json(DATA_DIR / "rentals.json", rentals)
-    write_json(DATA_DIR / "rates_bonds.json", rates)
-    write_json(DATA_DIR / "inflation_labour.json", inflation)
-
-    print(f"Wrote dashboard data to {DATA_DIR}")
+    print(f"Wrote {len(prices)} price rows to {DATA_DIR / 'prices.json'}")
 
 
 if __name__ == "__main__":
