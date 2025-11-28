@@ -1,54 +1,116 @@
 import React, { useMemo, useState } from "react";
-import type {
-  PanelPoint,
-  RegionCode,
-  Segment,
-  MarketCode
-} from "../data/types";
-import { RegionToggle } from "../components/RegionToggle";
-import { MarketSelector } from "../components/MarketSelector";
+import type { PanelPoint, RegionCode } from "../data/types";
+import type { MetricSnapshot } from "../components/MetricSnapshotCard";
 import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
-import { REGIONS_BY_MARKET } from "../data/regions";
 
-const PRICE_METRICS = ["hpi_benchmark", "avg_price", "teranet_hpi"];
+type HousingType =
+  | "composite"
+  | "one_storey"
+  | "two_storey"
+  | "townhouse"
+  | "apartment";
+
+const REGION_OPTIONS: { value: RegionCode; label: string }[] = [
+  { value: "canada", label: "Canada (aggregate)" },
+  { value: "vancouver", label: "Vancouver" },
+  { value: "lower_mainland", label: "Lower Mainland" },
+  { value: "calgary", label: "Calgary" },
+  { value: "greater_toronto", label: "Greater Toronto" },
+  { value: "montreal", label: "Montreal" },
+];
+
+const HOUSING_TYPE_OPTIONS: { value: HousingType; label: string }[] = [
+  { value: "composite", label: "Composite" },
+  { value: "one_storey", label: "One storey" },
+  { value: "two_storey", label: "Two storey" },
+  { value: "townhouse", label: "Townhouse" },
+  { value: "apartment", label: "Apartment" },
+];
 
 export const PricesTab: React.FC = () => {
   const { data, loading, error } = useTabData("prices");
-  const [market, setMarket] = useState<MarketCode>("canada");
-  const [region, setRegion] = useState<RegionCode | null>(null);
-  const [segment, setSegment] = useState<Segment>("all");
 
-  const effectiveRegion: RegionCode = region ?? market;
-  const hasRegions = REGIONS_BY_MARKET[market].length > 0;
+  // Default selection: Canada + Composite
+  const [region, setRegion] = useState<RegionCode>("canada");
+  const [housingType, setHousingType] = useState<HousingType>("composite");
 
-  const handleMarketChange = (next: MarketCode) => {
-    setMarket(next);
-    setRegion(null); // reset region when switching markets
+  const handleRegionChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setRegion(event.target.value as RegionCode);
   };
 
-  const handleSegmentChange = (
+  const handleHousingTypeChange = (
     event: React.ChangeEvent<HTMLSelectElement>
   ) => {
-    setSegment(event.target.value as Segment);
+    setHousingType(event.target.value as HousingType);
   };
 
-  const snapshots = useMemo(
-    () => getLatestByMetric(data, effectiveRegion, PRICE_METRICS, segment),
-    [data, effectiveRegion, segment]
-  );
+  // Three cards: Benchmark HPI, Housing type HPI, Average price
+  const snapshots: MetricSnapshot[] = useMemo(() => {
+    if (!data.length) return [];
 
-  const hpiSeries: PanelPoint[] = useMemo(
+    const all: MetricSnapshot[] = [];
+
+    // Benchmark HPI – always composite
+    const benchmark = getLatestByMetric(
+      data,
+      region,
+      ["hpi_benchmark"],
+      "composite"
+    );
+
+    // Housing-type HPI – varies with housingType
+    const hpiType = getLatestByMetric(data, region, ["hpi_type"], housingType);
+
+    // Average price – varies with housingType
+    const avgPrice = getLatestByMetric(
+      data,
+      region,
+      ["avg_price"],
+      housingType
+    );
+
+    if (benchmark.length) all.push(benchmark[0]);
+    if (hpiType.length) all.push(hpiType[0]);
+    if (avgPrice.length) all.push(avgPrice[0]);
+
+    return all;
+  }, [data, region, housingType]);
+
+  // Charts – level values only (no MoM/YoY charts)
+  const benchmarkSeries: PanelPoint[] = useMemo(
     () =>
       data.filter(
         (p) =>
           p.metric === "hpi_benchmark" &&
-          p.region === effectiveRegion &&
-          (segment === "all" || p.segment === segment)
+          p.region === region &&
+          p.segment === "composite"
       ),
-    [data, effectiveRegion, segment]
+    [data, region]
+  );
+
+  const hpiTypeSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) =>
+          p.metric === "hpi_type" &&
+          p.region === region &&
+          p.segment === housingType
+      ),
+    [data, region, housingType]
+  );
+
+  const avgPriceSeries: PanelPoint[] = useMemo(
+    () =>
+      data.filter(
+        (p) =>
+          p.metric === "avg_price" &&
+          p.region === region &&
+          p.segment === housingType
+      ),
+    [data, region, housingType]
   );
 
   return (
@@ -56,30 +118,36 @@ export const PricesTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Prices</h1>
         <p className="tab__subtitle">
-          Benchmark & average resale prices (monthly)
+          MLS HPI benchmark and average prices (monthly)
         </p>
       </header>
 
       <div className="tab__controls">
-        <MarketSelector value={market} onChange={handleMarketChange} />
+        {/* Regions selector */}
+        <div className="tab__regions-group">
+          <span className="tab__regions-label">Regions:</span>
+          <select
+            className="tab__regions-select"
+            value={region}
+            onChange={handleRegionChange}
+          >
+            {REGION_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        {hasRegions && (
-          <div className="tab__regions-group">
-            <span className="tab__regions-label">Regions:</span>
-            <RegionToggle
-              market={market}
-              value={region}
-              onChange={setRegion}
-            />
-          </div>
-        )}
-
+        {/* Housing type selector */}
         <div className="tab__segment">
-          Segment
-          <select value={segment} onChange={handleSegmentChange}>
-            <option value="all">All</option>
-            <option value="condo">Condo</option>
-            <option value="freehold">Freehold</option>
+          Housing type
+          <select value={housingType} onChange={handleHousingTypeChange}>
+            {HOUSING_TYPE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -104,14 +172,22 @@ export const PricesTab: React.FC = () => {
 
       <section className="tab__charts">
         <ChartPanel
-          title="HPI benchmark – MoM %"
-          series={hpiSeries}
-          valueKey="mom_pct"
+          title="Benchmark HPI"
+          series={benchmarkSeries}
+          valueKey="value"
+          valueAxisLabel="HPI (index)"
         />
         <ChartPanel
-          title="HPI benchmark – YoY %"
-          series={hpiSeries}
-          valueKey="yoy_pct"
+          title="Housing type HPI"
+          series={hpiTypeSeries}
+          valueKey="value"
+          valueAxisLabel="HPI (index)"
+        />
+        <ChartPanel
+          title="Average price"
+          series={avgPriceSeries}
+          valueKey="value"
+          valueAxisLabel="Benchmark price ($)"
         />
       </section>
     </div>
