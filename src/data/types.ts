@@ -6,16 +6,7 @@ export type MarketCode = "canada" | "on" | "bc";
 // - New aggregate regions for the Prices tab (greater_vancouver, lower_mainland, etc.)
 export type RegionCode =
   | MarketCode
-  | "gta"
-  | "hamilton"
-  | "halton"
-  | "niagara"
-  | "vancouver"
-  | "burnaby"
-  | "surrey"
-  | "richmond"
-  | "victoria"
-  // Aggregate / new regions for the Prices tab
+  | "canada"
   | "greater_vancouver"
   | "lower_mainland"
   | "calgary"
