@@ -95,7 +95,7 @@ export const ChartPanel: React.FC<Props> = ({
     let min = rawMin - stepSize;
     let max = rawMax + stepSize;
 
-    if (isPercentScale && clampYMinToZero) {
+    if (clampYMinToZero) {
       min = Math.max(0, min);
     }
 
