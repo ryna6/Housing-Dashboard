@@ -210,9 +210,9 @@ export const RentalsTab: React.FC = () => {
   // NEW: short label just for chart titles
   const selectedBedroomLabelShort =
     bedroom === "1bd"
-      ? "1-bd"
+      ? "1-Bd"
       : bedroom === "2bd"
-      ? "2-bd"
+      ? "2-Bd"
       : "Bachelor";
   
   return (
