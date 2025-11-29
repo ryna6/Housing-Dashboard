@@ -37,12 +37,12 @@ def main() -> None:
     # Call each tab’s generator
     prices = generate_prices()
     sales = generate_sales()
-    rentals = generate_rentals()
     rates = generate_rates()
     inflation = generate_inflation()
     credit = generate_credit_stress()
     market = generate_market_risk()
     supply = generate_supply()
+    rentals = generate_rentals(prices, inflation)
 
     panel = prices + sales + rentals + rates + inflation + credit + market + supply
 
