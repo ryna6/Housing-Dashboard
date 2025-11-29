@@ -122,6 +122,10 @@ body {
   color: var(--text);
 }
 
+.tab__segment--left {
+  margin-left: 0;
+}
+
 .tab__regions-select {
   margin-left: 6px;
   padding: 4px 8px;
