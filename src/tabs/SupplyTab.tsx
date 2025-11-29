@@ -1,4 +1,3 @@
-// src/tabs/SupplyTab.tsx
 import React, { useMemo } from "react";
 import type { PanelPoint, RegionCode, Segment } from "../data/types";
 import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
@@ -37,7 +36,7 @@ function formatCompactCount(value: number): string {
 
 /**
  * Compact currency formatter for charts, e.g. $100K, $1.2M, $18.2B.
- * (Assumes values are in dollars – backend can decide whether to scale.)
+ * (Assumes values are in dollars after any scaling done in the backend.)
  */
 function formatCompactCurrency(value: number): string {
   if (!Number.isFinite(value)) return "–";
@@ -54,11 +53,28 @@ function formatCompactCurrency(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
+/**
+ * Keep only the last N years in a time series (by date field).
+ */
+function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
+  if (series.length <= 1) return series;
+
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const last = new Date(sorted[sorted.length - 1].date);
+  const cutoff = new Date(last);
+  cutoff.setFullYear(cutoff.getFullYear() - years);
+
+  return sorted.filter((p) => {
+    const d = new Date(p.date);
+    return d >= cutoff;
+  });
+}
+
 const CARD_TITLES: Record<string, string> = {
   housing_starts: "Housing starts",
   under_construction: "Under construction",
   completions: "Completions",
-  investment_construction: "Construction investment",
+  investment_construction: "Investment in building construction",
   vacancy_rate: "Rental vacancy rate",
 };
 
@@ -107,22 +123,28 @@ export const SupplyTab: React.FC = () => {
 
   const investmentSeries: PanelPoint[] = useMemo(
     () =>
-      data.filter(
-        (p) =>
-          p.metric === "investment_construction" &&
-          p.region === REGION &&
-          p.segment === SEGMENT
+      trimLastYears(
+        data.filter(
+          (p) =>
+            p.metric === "investment_construction" &&
+            p.region === REGION &&
+            p.segment === SEGMENT
+        ),
+        5
       ),
     [data]
   );
 
   const vacancySeries: PanelPoint[] = useMemo(
     () =>
-      data.filter(
-        (p) =>
-          p.metric === "vacancy_rate" &&
-          p.region === REGION &&
-          p.segment === SEGMENT
+      trimLastYears(
+        data.filter(
+          (p) =>
+            p.metric === "vacancy_rate" &&
+            p.region === REGION &&
+            p.segment === SEGMENT
+        ),
+        5
       ),
     [data]
   );
@@ -132,7 +154,11 @@ export const SupplyTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Supply</h1>
         <p className="tab__subtitle">
-          Housing starts, under-construction, completions, residential construction investment, and rental vacancy rate (Canada Mortgage and Housing Corporation & Statistics Canada)
+          Housing starts, under-construction pipeline, completions, residential
+          construction investment, and rental vacancy rate (CMHC & Statistics
+          Canada). Housing starts and completions are shown as monthly levels
+          derived from SAAR (annual rate ÷ 12), and construction investment
+          is shown as monthly levels derived from StatCan SAAR estimates.
         </p>
       </header>
 
@@ -160,7 +186,7 @@ export const SupplyTab: React.FC = () => {
       {/* Level charts – one per metric */}
       <section className="tab__charts">
         <ChartPanel
-          title="Housing starts"
+          title="Housing starts (monthly, SAAR-derived)"
           series={housingStartsSeries}
           valueKey="value"
           valueFormatter={formatCompactCount}
@@ -174,14 +200,14 @@ export const SupplyTab: React.FC = () => {
           clampYMinToZero
         />
         <ChartPanel
-          title="Completions"
+          title="Completions (monthly, derived)"
           series={completionsSeries}
           valueKey="value"
           valueFormatter={formatCompactCount}
           clampYMinToZero
         />
         <ChartPanel
-          title="Construction investment"
+          title="Investment in residential building construction"
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCompactCurrency}
