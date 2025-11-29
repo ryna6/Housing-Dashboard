@@ -10,6 +10,8 @@ interface Props {
   valueAxisLabel?: string;
   /** Optional formatter for numeric values (axis ticks + tooltip) when not using percent scale. */
   valueFormatter?: (value: number) => string;
+
+  tooltipValueFormatter?: (value: number) => string;
   /** Render as a step line (discrete jumps between months). */
   step?: boolean;
   /**
