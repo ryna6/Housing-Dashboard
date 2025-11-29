@@ -232,7 +232,7 @@ export const RentalsTab: React.FC = () => {
       {/* Controls: city + bedroom type */}
       <div className="tab__controls">
         <div className="tab__region-group">
-          <span>City:</span>
+          <span className="tab__regions-label">City:</span>
           <select
             className="tab__regions-select"
             value={city}
