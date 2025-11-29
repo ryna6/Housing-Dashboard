@@ -52,7 +52,7 @@ def main() -> None:
     write_json(DATA_DIR / "rentals.json", rentals)
     write_json(DATA_DIR / "rates_bonds.json", rates)
     write_json(DATA_DIR / "inflation_labour.json", inflation)
-    #credit/market/supply JSONs are written by their own scripts if you call main()
+    write_json(DATA_DIR / "supply.json", supply)
 
 
     print(f"Wrote dashboard data to {DATA_DIR}")
