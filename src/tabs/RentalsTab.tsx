@@ -6,12 +6,11 @@ export const RentalsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Rentals</h1>
         <p className="tab__subtitle">
-          Rents & vacancy (CMHC, TRREB / GVR where available)
+          Rentals & vacancy (coming soon)
         </p>
       </header>
       <p className="tab__status">
-        This tab will show equity and credit market signals and a simple risk
-        composite once external market data sources are integrated.
+        This tab will show rentals and vacancy rates once external market data sources are integrated.
       </p>
     </div>
   );
