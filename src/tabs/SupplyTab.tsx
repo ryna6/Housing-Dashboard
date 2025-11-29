@@ -7,14 +7,14 @@ import { useTabData } from "./useTabData";
 
 const REGION: RegionCode = "canada";
 
-type HousingType = "total_residential" | "single" | "row" | "apartment";
-
 const HOUSING_TYPE_OPTIONS: { value: HousingType; label: string }[] = [
   { value: "total_residential", label: "Total residential" },
   { value: "single", label: "Single detached" },
   { value: "row", label: "Row" },
   { value: "apartment", label: "Apartment" },
 ];
+
+type HousingType = "total_residential" | "single" | "row" | "apartment";
 
 const HOUSING_TYPE_METRICS: string[] = [
   "housing_starts",
@@ -27,7 +27,7 @@ const CARD_TITLES: Record<string, string> = {
   housing_starts: "Housing starts",
   under_construction: "Under construction",
   completions: "Completions",
-  investment_construction: "Residential construction investment",
+  investment_construction: "Construction investment",
   vacancy_rate: "Rental vacancy rate",
 };
 
@@ -261,14 +261,14 @@ export const SupplyTab: React.FC = () => {
           clampYMinToZero
         />
         <ChartPanel
-          title={`Residential construction investment — ${housingTypeLabel}`}
+          title={`Construction investment — ${housingTypeLabel}`}
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCurrencyBillions}
           clampYMinToZero
         />
         <ChartPanel
-          title="Rental vacancy rate"
+          title="Rental vacancy rate (Annual)"
           series={vacancySeries}
           valueKey="value"
           treatAsPercentScale
