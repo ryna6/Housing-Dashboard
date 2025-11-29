@@ -57,11 +57,12 @@ function formatCompactCurrency(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
-// In RentalsTab.tsx, replace the old formatCompactCurrency with:
-
 function formatCurrencyDetailed(value: number): string {
   // e.g. 2450 -> "$2,450"
-  return `$${value.toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
+  return `$${value.toLocaleString("en-CA", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}`;
 }
 
 function formatYears(value: number): string {
