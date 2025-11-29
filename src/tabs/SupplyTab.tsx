@@ -202,7 +202,7 @@ export const SupplyTab: React.FC = () => {
         </div>
         <p className="tab__subtitle">
           Housing starts, units under construction, completions, residential
-          construction investment, and rental vacancy rate (StatCan).
+          construction investment, and rental vacancy rate (Statistics Canada)
         </p>
       </header>
 
