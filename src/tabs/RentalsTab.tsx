@@ -110,7 +110,7 @@ export const RentalsTab: React.FC = () => {
 
     // 2) Price-to-rent – depends on bedroom type (bachelor / 1bd / 2bd)
     snaps.push(
-      ...getLatestByMetric(data, region, ["price_to_rent"], bedroom)
+      ...getLatestByMetric(data, region, ["price_to_rent"], "2bd")
     );
 
     // 3) Rental vacancy rate – city-level (segment "all")
@@ -151,7 +151,7 @@ export const RentalsTab: React.FC = () => {
         (p) =>
           p.metric === "rent_level" &&
           p.region === region &&
-          p.segment === bedroom
+          p.segment === "2bd"
       ),
       10
     );
