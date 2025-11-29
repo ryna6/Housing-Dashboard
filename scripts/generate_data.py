@@ -11,7 +11,7 @@ from SalesListings import generate_sales
 from Rentals import generate_rentals
 from RatesBonds import generate_rates
 from InflationLabour import generate_inflation
-from CreditStress import generate_credit_stress
+from Credit import generate_credit
 from MarketRisk import generate_market_risk
 from Supply import generate_supply
 
@@ -39,7 +39,7 @@ def main() -> None:
     sales = generate_sales()
     rates = generate_rates()
     inflation = generate_inflation()
-    credit = generate_credit_stress()
+    credit = generate_credit()
     market = generate_market_risk()
     supply = generate_supply()
     rentals = generate_rentals(prices, inflation)
