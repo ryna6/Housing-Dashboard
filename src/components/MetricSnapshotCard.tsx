@@ -17,11 +17,28 @@ interface Props {
 }
 
 /**
- * Metrics that should show "change vs previous rate" instead of "MoM":
- * - Bank of Canada policy rate
- * - 5-year mortgage / prime proxy
+ * Metrics that should show "change vs previous rate"
+ * instead of a normal MoM / QoQ label.
  */
-const VS_PREVIOUS_RATE_METRICS = new Set<string>(["policy_rate", "mortgage_5y"]);
+const VS_PREVIOUS_RATE_METRICS = new Set<string>([
+  "policy_rate",
+  "mortgage_5y",
+]);
+
+/**
+ * Rentals tab metrics that are quarterly and should say "QoQ"
+ * instead of "MoM" on the delta chip.
+ */
+const QUARTERLY_RENTAL_METRICS = new Set<string>([
+  "rent_level",
+  "rent_to_income",
+  "price_to_rent",
+]);
+
+/**
+ * Rentals tab vacancy metric – annual; we show only YoY.
+ */
+const VACANCY_METRICS = new Set<string>(["rental_vacancy_rate"]);
 
 // More detailed formatting for rent-level metrics (e.g. "$2.45k")
 function formatRentLevelValue(value: number): string {
@@ -166,9 +183,12 @@ export const MetricSnapshotCard: React.FC<Props> = ({
   // Ensure we always have a number for formatting
   const latestVal = latest?.value ?? NaN;
   const yoyPct = latest.yoy_pct ?? null;
-  const useVsPreviousRate = VS_PREVIOUS_RATE_METRICS.has(metric);
 
-  // YoY styling (green up / red down)
+  const useVsPreviousRate = VS_PREVIOUS_RATE_METRICS.has(metric);
+  const isQuarterlyRental = QUARTERLY_RENTAL_METRICS.has(metric);
+  const isVacancy = VACANCY_METRICS.has(metric);
+
+  // YoY styling (green up / red down) – not used for vacancy (custom chip).
   const yoyClass =
     "metric-card__secondary" +
     (yoyPct != null
@@ -181,7 +201,46 @@ export const MetricSnapshotCard: React.FC<Props> = ({
 
   let deltaNode: React.ReactNode = null;
 
-  if (useVsPreviousRate) {
+  if (isVacancy) {
+    // Annual vacancy rate: show a single YoY chip, no separate YoY line.
+    if (prev && Number.isFinite(prev.value) && Number.isFinite(latestVal)) {
+      const absDelta = latest.value - prev.value;
+
+      const effectiveYoyPct =
+        yoyPct != null && Number.isFinite(yoyPct)
+          ? yoyPct
+          : prev.value !== 0
+          ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
+          : null;
+
+      const chipClass =
+        "metric-card__delta-chip" +
+        (effectiveYoyPct != null
+          ? effectiveYoyPct > 0
+            ? " metric-card__delta-chip--up"
+            : effectiveYoyPct < 0
+            ? " metric-card__delta-chip--down"
+            : ""
+          : "");
+
+      deltaNode = (
+        <div className="metric-card__delta-row">
+          <span className={chipClass}>
+            {absDelta > 0 ? "+" : ""}
+            {formatDelta(absDelta, latest.unit)}{" "}
+            {effectiveYoyPct != null && (
+              <>
+                (
+                {effectiveYoyPct > 0 ? "+" : ""}
+                {effectiveYoyPct.toFixed(1)}%)
+              </>
+            )}
+            <span className="metric-card__delta-label"> YoY</span>
+          </span>
+        </div>
+      );
+    }
+  } else if (useVsPreviousRate) {
     // For policy_rate & mortgage_5y: "Δ … vs previous rate"
     if (prev && Number.isFinite(prev.value) && Number.isFinite(latestVal)) {
       const absDelta = latest.value - prev.value;
@@ -220,7 +279,7 @@ export const MetricSnapshotCard: React.FC<Props> = ({
       }
     }
   } else {
-    // All other metrics (including 2y/10y yields): classic MoM change
+    // All other metrics (including rentals): generic period-over-period change.
     const hasPrev = !!prev && Number.isFinite(prev.value);
     const momPct =
       latest.mom_pct != null
@@ -239,6 +298,8 @@ export const MetricSnapshotCard: React.FC<Props> = ({
           ? " metric-card__delta-chip--down"
           : "");
 
+      const label = isQuarterlyRental ? "QoQ" : "MoM";
+
       deltaNode = (
         <div className="metric-card__delta-row">
           <span className={chipClass}>
@@ -251,11 +312,21 @@ export const MetricSnapshotCard: React.FC<Props> = ({
                 {momPct.toFixed(1)}%)
               </>
             )}
-            <span className="metric-card__delta-label"> MoM</span>
+            <span className="metric-card__delta-label"> {label}</span>
           </span>
         </div>
       );
     }
+  }
+
+  let yoyNode: React.ReactNode = null;
+  if (!isVacancy && yoyPct != null) {
+    yoyNode = (
+      <div className={yoyClass}>
+        YoY: {yoyPct > 0 ? "+" : ""}
+        {yoyPct.toFixed(1)}%
+      </div>
+    );
   }
 
   return (
@@ -271,12 +342,7 @@ export const MetricSnapshotCard: React.FC<Props> = ({
 
       {deltaNode}
 
-      {yoyPct != null && (
-        <div className={yoyClass}>
-          YoY: {yoyPct > 0 ? "+" : ""}
-          {yoyPct.toFixed(1)}%
-        </div>
-      )}
+      {yoyNode}
     </div>
   );
 };
