@@ -279,7 +279,7 @@ export const RentalsTab: React.FC = () => {
           title={`${selectedCityLabel} ${selectedBedroomLabelShort} rent`}
           series={rentLevelSeries}
           valueKey="value"
-          valueFormatter={formatCompactCurrency}
+          valueFormatter={formatCurrencyDetailed}
           clampYMinToZero
         />
         <ChartPanel
