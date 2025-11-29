@@ -21,12 +21,12 @@ WDS_BASE = "https://www150.statcan.gc.ca/t1/wds/rest"
 class PanelRow:
     date: str          # "YYYY-MM-DD" (use the first of the month)
     region: str        # always "canada"
-    segment: str       # "total_residential" | "single" | "row" | "apartment" | "all" (for vacancy)
+    segment: str       # "total_residential" | "single" | "row" | "apartment"
     metric: str        # "housing_starts" | "under_construction" |
-                       # "completions" | "investment_construction" | "vacancy_rate"
+                       # "completions" | "investment_construction"
     value: float
-    unit: str          # "count" | "cad" | "pct"
-    source: str        # "statcan_34-10-0154-01" | "statcan_34-10-0130-01" | "statcan_34-10-0293-01"
+    unit: str          # "count" | "cad"
+    source: str        # "statcan_34-10-0154-01" | "statcan_34-10-0293-01"
     mom_pct: Optional[float]
     yoy_pct: Optional[float]
     ma3: Optional[float]
@@ -137,16 +137,6 @@ def fetch_statcan_series(vector_id: int, latest_n: int = 2000) -> Dict[str, floa
     return series
 
 
-def fetch_vacancy_rate() -> Dict[str, float]:
-    """
-    Rental vacancy rate (%) for Canada, row & apartment structures of
-    3+ units, privately initiated.
-
-    StatCan table 34-10-0130-01, vector v1930301.
-    """
-    return fetch_statcan_series(1930301)
-
-
 # Mapping of housing metrics + dwelling type (segment) to StatCan vector IDs.
 #
 # These vectors all come from the CMHC housing estimates tables:
@@ -231,7 +221,6 @@ def generate_supply() -> List[PanelRow]:
       - under_construction       (StatCan, CMHC housing estimates)
       - completions              (StatCan, CMHC housing estimates)
       - investment_construction  (StatCan 34-10-0293-01)
-      - vacancy_rate             (StatCan 34-10-0130-01)
 
     All metrics are Canada aggregate. Dwelling type is encoded in the
     `segment` field as one of:
@@ -239,8 +228,6 @@ def generate_supply() -> List[PanelRow]:
       - "single"
       - "row"
       - "apartment"
-
-    The vacancy_rate metric is stored with segment="all".
     """
     rows: List[PanelRow] = []
 
@@ -269,18 +256,6 @@ def generate_supply() -> List[PanelRow]:
                     segment=segment,
                 )
             )
-
-    # Rental vacancy rate (no dwelling-type breakdown)
-    vacancy_series = fetch_vacancy_rate()
-    rows.extend(
-        _series_to_panel_rows(
-            metric="vacancy_rate",
-            series=vacancy_series,
-            unit="pct",
-            source="statcan_34-10-0130-01",
-            segment="all",
-        )
-    )
 
     return rows
 
