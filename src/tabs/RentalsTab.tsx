@@ -209,8 +209,7 @@ export const RentalsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Rentals</h1>
         <p className="tab__subtitle">
-          Apartment rents, rent-to-income, price-to-rent ratios, and rental
-          vacancy rates (Statistics Canada &amp; CMHC)
+          Apartment rent cost, rent-to-income ratios, price-to-rent ratios, and rental vacancy rates (Statistics Canada & Canadian Mortgage and Housing Corporation)
         </p>
       </header>
 
