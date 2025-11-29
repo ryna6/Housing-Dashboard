@@ -227,7 +227,7 @@ export const SupplyTab: React.FC = () => {
           clampYMinToZero
         />
         <ChartPanel
-          title={`${housingTypeLabel} construction investment`}
+          title={`${housingTypeLabel} investment`}
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCurrencyBillions}
