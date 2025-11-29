@@ -37,8 +37,8 @@ function formatCompactCount(value: number): string {
 const CARD_TITLES: Record<string, string> = {
   new_listings: "New Listings",
   active_listings: "Active Listings",
-  snlr: "SNLR",
-  moi: "MOI",
+  snlr: "Sales to New Listings Ratio",
+  moi: "Months of Inventory",
   absorption_rate: "Absorption Rate",
 };
 
@@ -106,7 +106,7 @@ export const SalesListingsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Sales & Listings</h1>
         <p className="tab__subtitle">
-          New and active listings, sales-to-new listings ratio (SNLR), months of
+          New and active listings, sales to new listings ratio (SNLR), months of
           inventory (MOI), and absorption rate (Canadian Real Estate Association & Statistics Canada)
         </p>
       </header>
@@ -143,12 +143,14 @@ export const SalesListingsTab: React.FC = () => {
           series={newListingsSeries}
           valueKey="value"
           valueFormatter={formatCompactCount}
+          clampYMinToZero
         />
         <ChartPanel
           title="Active listings"
           series={activeListingsSeries}
           valueKey="value"
           valueFormatter={formatCompactCount}
+          clampYMinToZero
         />
         <ChartPanel
           title="SNLR"
@@ -158,10 +160,10 @@ export const SalesListingsTab: React.FC = () => {
           clampYMinToZero
         />
         <ChartPanel
-          title="MOI (months of inventory)"
+          title="MOI"
           series={moiSeries}
           valueKey="value"
-          valueAxisLabel="Months"
+          clampYMinToZero
         />
         <ChartPanel
           title="Absorption rate"
