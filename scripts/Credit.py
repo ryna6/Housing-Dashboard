@@ -24,7 +24,7 @@ class PanelRow:
     ma3: Optional[float]
 
 
-def generate_credit_stress() -> List[PanelRow]:
+def generate_credit() -> List[PanelRow]:
     """
     Placeholder generator for the Credit tab.
 
@@ -42,7 +42,7 @@ def write_json(path: Path, rows: List[PanelRow]) -> None:
 
 def main() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    rows = generate_credit_stress()
+    rows = generate_credit()
     out_path = DATA_DIR / "credit.json"
     write_json(out_path, rows)
     print(f"Wrote {len(rows)} credit rows to {out_path}")
