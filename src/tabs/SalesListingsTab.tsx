@@ -150,7 +150,6 @@ export const SalesListingsTab: React.FC = () => {
           series={activeListingsSeries}
           valueKey="value"
           valueFormatter={formatCompactCount}
-          clampYMinToZero
         />
         <ChartPanel
           title="SNLR"
