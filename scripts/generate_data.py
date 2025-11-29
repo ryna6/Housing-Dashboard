@@ -52,6 +52,7 @@ def main() -> None:
     write_json(DATA_DIR / "rentals.json", rentals)
     write_json(DATA_DIR / "rates_bonds.json", rates)
     write_json(DATA_DIR / "inflation_labour.json", inflation)
+    write_json(DATA_DIR / "credit.json", credit)
     write_json(DATA_DIR / "supply.json", supply)
 
 
