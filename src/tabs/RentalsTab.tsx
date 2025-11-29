@@ -62,6 +62,12 @@ function formatCompactCurrency(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
+// adds decimal point for more detailed rent prices
+function formatCurrencyDetailed(value: number): string {
+  // e.g. 2450 -> "$2,450"
+  return `$${value.toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
+}
+
 /**
  * Simple formatter for price-to-rent ratios, e.g. "23.4 yrs".
  */
