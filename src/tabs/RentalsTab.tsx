@@ -231,7 +231,7 @@ export const RentalsTab: React.FC = () => {
 
       {/* Controls: city + bedroom type */}
       <div className="tab__controls">
-        <div className="tab__region-label">
+        <div className="tab__region-group">
           <span>City:</span>
           <select
             className="tab__regions-select"
