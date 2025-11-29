@@ -32,10 +32,18 @@ function formatValue(value: number, unit: string): string {
   }
 
   if (unit === "cad") {
-    if (Math.abs(value) >= 1_000_000) {
+    const abs = Math.abs(value);
+
+    if (abs >= 1_000_000_000) {
+      // Billions
+      return `$${(value / 1_000_000_000).toFixed(2)}B`;
+    }
+    if (abs >= 1_000_000) {
+      // Millions
       return `$${(value / 1_000_000).toFixed(2)}M`;
     }
-    if (Math.abs(value) >= 1_000) {
+    if (abs >= 1_000) {
+      // Thousands
       return `$${(value / 1_000).toFixed(1)}k`;
     }
     return `$${value.toFixed(0)}`;
@@ -57,11 +65,12 @@ function formatValue(value: number, unit: string): string {
       return `${(value / 1_000_000).toFixed(1)}M`;
     }
     if (abs >= 1_000) {
-      return `${(value / 1_000).toFixed(0)}K`;
+      return `${(value / 1_000).toFixed(1)}k`;
     }
     return value.toFixed(0);
   }
 
+  // Fallback
   return value.toFixed(2);
 }
 
