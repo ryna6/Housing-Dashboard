@@ -49,6 +49,19 @@ function formatValue(value: number, unit: string): string {
     return `$${value.toFixed(0)}`;
   }
 
+  // 2 decimal place for rent
+  function formatRentLevelValue(value: number): string {
+  const abs = Math.abs(value);
+
+  // Use K-format with 2 decimals for typical rent values
+  if (abs >= 1_000) {
+    return `$${(value / 1_000).toFixed(2)}k`; // e.g. 2450 -> $2.45k
+  }
+
+  // For small values, still show 1 decimal
+  return `$${value.toFixed(1)}`;
+}
+  
   if (unit === "index") {
     return value.toFixed(1);
   }
