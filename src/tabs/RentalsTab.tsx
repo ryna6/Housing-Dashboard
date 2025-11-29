@@ -62,7 +62,7 @@ function formatCompactCurrency(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
-// adds decimal point for more detailed rent prices
+// Adds more detailed numeric view for rent prices on the chart
 function formatCurrencyDetailed(value: number): string {
   // e.g. 2450 -> "$2,450"
   return `$${value.toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
@@ -70,7 +70,7 @@ function formatCurrencyDetailed(value: number): string {
 
 /**
  * Axis formatter for price-to-rent ratios, e.g. "16 yrs".
- * (No trailing .0 on the y-axis.)
+ * (No trailing ".0" on the y-axis.)
  */
 function formatYearsAxis(value: number): string {
   return `${value.toFixed(0)} yrs`;
@@ -116,7 +116,7 @@ export const RentalsTab: React.FC = () => {
       )
     );
 
-    // 2) Price-to-rent – depends on bedroom type (bachelor / 1bd / 2bd)
+    // 2) Price-to-rent – always based on 2-bedroom rent
     snaps.push(
       ...getLatestByMetric(data, region, ["price_to_rent"], "2bd")
     );
@@ -189,7 +189,7 @@ export const RentalsTab: React.FC = () => {
       ),
       10
     );
-  }, [data, city, bedroom]);
+  }, [data, city]);
 
   const vacancySeries: PanelPoint[] = useMemo(() => {
     const region = city as unknown as RegionCode;
@@ -213,9 +213,9 @@ export const RentalsTab: React.FC = () => {
   // Shorter label for chart titles: "1-bd", "2-bd", "Bachelor"
   const selectedBedroomLabelShort =
     bedroom === "1bd"
-      ? "1-Bd"
+      ? "1-bd"
       : bedroom === "2bd"
-      ? "2-Bd"
+      ? "2-bd"
       : "Bachelor";
 
   return (
@@ -223,7 +223,9 @@ export const RentalsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Rentals</h1>
         <p className="tab__subtitle">
-          Apartment rent cost, rent-to-income ratios, price-to-rent ratios, and rental vacancy rates (Statistics Canada & Canadian Mortgage and Housing Corporation)
+          Apartment rent cost, rent-to-income ratios, price-to-rent ratios,
+          and rental vacancy rates (Statistics Canada &amp; Canadian Mortgage
+          and Housing Corporation)
         </p>
       </header>
 
@@ -231,9 +233,9 @@ export const RentalsTab: React.FC = () => {
       <div className="tab__controls">
         <div className="tab__region-label">
           <span>City:</span>
-          <select 
+          <select
             className="tab__regions-select"
-            value={city} 
+            value={city}
             onChange={handleCityChange}
           >
             {CITY_OPTIONS.map((opt) => (
@@ -301,7 +303,7 @@ export const RentalsTab: React.FC = () => {
           title={`${selectedCityLabel} price-to-rent`}
           series={priceToRentSeries}
           valueKey="value"
-          valueFormatter={formatYears}
+          valueFormatter={formatYearsAxis}
           tooltipValueFormatter={formatYearsTooltip}
           clampYMinToZero
         />
