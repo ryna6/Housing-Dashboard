@@ -26,6 +26,10 @@ const VS_PREVIOUS_RATE_METRICS = new Set<string>(["policy_rate", "mortgage_5y"])
 function formatValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "–";
 
+  if (metric === "rent_level" && unit === "cad") {
+    return formatRentLevelValue(value);
+  }
+  
   if (unit === "pct") {
     // 2 decimal places for interest rates / percentages
     return `${value.toFixed(2)}%`;
