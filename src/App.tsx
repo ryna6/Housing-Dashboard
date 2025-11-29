@@ -4,6 +4,7 @@ import { SalesListingsTab } from "./tabs/SalesListingsTab";
 import { SupplyTab } from "./tabs/SupplyTab";
 import { RatesBondsTab } from "./tabs/RatesBondsTab";
 import { InflationLabourTab } from "./tabs/InflationLabourTab";
+import { CreditTab } from "./tabs/CreditTab";
 import { RentalsTab } from "./tabs/RentalsTab";
 import { BottomTabNav } from "./components/BottomTabNav";
 
