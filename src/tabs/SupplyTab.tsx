@@ -27,8 +27,7 @@ const CARD_TITLES: Record<string, string> = {
   housing_starts: "Housing starts",
   under_construction: "Under construction",
   completions: "Completions",
-  investment_construction: "Construction investment",
-  vacancy_rate: "Rental vacancy rate",
+  investment_construction: "Residential construction investment",
 };
 
 function getHousingTypeLabel(ht: HousingType): string {
@@ -104,12 +103,6 @@ export const SupplyTab: React.FC = () => {
     [data, housingType]
   );
 
-  // Latest reading for rental vacancy (no housing-type breakdown)
-  const vacancySnapshot = useMemo(() => {
-    const snaps = getLatestByMetric(data, REGION, ["vacancy_rate"]);
-    return snaps.length ? snaps[0] : null;
-  }, [data]);
-
   // One time series per metric, filtered to Canada + selected housing type,
   // trimmed to the most recent 10 years.
   const housingStartsSeries: PanelPoint[] = useMemo(
@@ -168,17 +161,6 @@ export const SupplyTab: React.FC = () => {
     [data, housingType]
   );
 
-  const vacancySeries: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter(
-          (p) => p.metric === "vacancy_rate" && p.region === REGION
-        ),
-        10
-      ),
-    [data]
-  );
-
   const housingTypeLabel = getHousingTypeLabel(housingType);
 
   return (
@@ -186,12 +168,12 @@ export const SupplyTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Supply</h1>
         <p className="tab__subtitle">
-          Housing starts, units under construction, completions, residential
-          construction investment, and rental vacancy rate (Statistics Canada)
+          Housing starts, units under construction, completions, and residential
+          construction investment (Statistics Canada)
         </p>
       </header>
 
-      {/* Controls row: housing type selector (aligned with other tabs' controls layout) */}
+      {/* Controls row: housing type selector */}
       <div className="tab__controls">
         <div className="tab__segment">
           <span>Housing type:</span>
@@ -209,12 +191,9 @@ export const SupplyTab: React.FC = () => {
       </div>
 
       <section className="tab__metrics tab__metrics--wide">
-        {!loading &&
-          !error &&
-          !housingSnapshots.length &&
-          !vacancySnapshot && (
-            <div className="tab__status">No supply data yet.</div>
-          )}
+        {!loading && !error && !housingSnapshots.length && (
+          <div className="tab__status">No supply data yet.</div>
+        )}
 
         {housingSnapshots.map((snapshot) => (
           <MetricSnapshotCard
@@ -223,50 +202,35 @@ export const SupplyTab: React.FC = () => {
             titleOverride={CARD_TITLES[snapshot.metric] ?? snapshot.metric}
           />
         ))}
-
-        {vacancySnapshot && (
-          <MetricSnapshotCard
-            key="vacancy_rate"
-            snapshot={vacancySnapshot}
-            titleOverride={CARD_TITLES["vacancy_rate"]}
-          />
-        )}
       </section>
 
       <section className="tab__charts">
         <ChartPanel
-          title={`Housing starts — ${housingTypeLabel}`}
+          title={`${housingTypeLabel} housing starts`}
           series={housingStartsSeries}
           valueKey="value"
           valueFormatter={formatCompactNumber}
           clampYMinToZero
         />
         <ChartPanel
-          title={`Under construction — ${housingTypeLabel}`}
+          title={`${housingTypeLabel} under construction`}
           series={underConstructionSeries}
           valueKey="value"
           valueFormatter={formatCompactNumber}
           clampYMinToZero
         />
         <ChartPanel
-          title={`Completions (${housingTypeLabel})`}
+          title={`${housingTypeLabel} completions`}
           series={completionsSeries}
           valueKey="value"
           valueFormatter={formatCompactNumber}
           clampYMinToZero
         />
         <ChartPanel
-          title={`Construction investment  (${housingTypeLabel})`}
+          title={`${housingTypeLabel} construction investment`}
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCurrencyBillions}
-          clampYMinToZero
-        />
-        <ChartPanel
-          title="Rental vacancy rate"
-          series={vacancySeries}
-          valueKey="value"
-          treatAsPercentScale
           clampYMinToZero
         />
       </section>
