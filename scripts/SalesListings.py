@@ -105,12 +105,17 @@ def _quarter_months(year: int, quarter: int) -> List[date]:
 
 def _build_monthly_from_crea_quarterly(df: pd.DataFrame) -> Dict[str, float]:
     """
-    Take a CREA quarterly dataframe with columns ['Date', 'Canada'] and
-    convert it to a monthly series by spreading each quarter's total evenly
-    across its three months.
+    Take a CREA dataframe with columns ['Date', 'Canada'] where values are
+    SEASONALLY ADJUSTED AT ANNUAL RATES (SAAR), and convert it to a monthly
+    series.
 
-    The CREA workbook also sometimes appends a single monthly observation
-    (e.g. '2025-10-01') – those are treated as already-monthly values.
+    Rules:
+      - Any value (quarterly or monthly) is SAAR.
+      - The underlying monthly level is SAAR / 12.
+      - For pure quarterly rows ('2020 Q1' etc.), we assign the same monthly
+        level (value / 12) to each of the three months in that quarter.
+      - If a more granular monthly row exists (e.g. an October forecast row),
+        it is also SAAR and we apply value / 12 to that specific month only.
     """
     monthly: Dict[str, float] = {}
 
@@ -121,11 +126,12 @@ def _build_monthly_from_crea_quarterly(df: pd.DataFrame) -> Dict[str, float]:
 
         raw_date = row.get("Date")
 
-        # If this is already a datetime-like object, treat as monthly.
+        # If this is already a datetime-like object, treat as a monthly SAAR
+        # and convert to a monthly level by dividing by 12.
         if isinstance(raw_date, (datetime, pd.Timestamp)):
             d = raw_date.date()
             key = date(d.year, d.month, 1).isoformat()
-            monthly[key] = float(val)
+            monthly[key] = float(val) / 12.0
             continue
 
         # Fallback to string parsing
@@ -133,26 +139,28 @@ def _build_monthly_from_crea_quarterly(df: pd.DataFrame) -> Dict[str, float]:
         if not s or s.lower() == "nan":
             continue
 
-        # Quarterly label like "2020-Q1"
+        # Quarterly label like "2020-Q1", "2020 Q1", "2020Q1"
         try:
             year, quarter = _parse_quarter_label(s)
         except ValueError:
-            # Try to parse as a regular date string
+            # Try to parse as a regular date string (still SAAR, so /12)
             try:
                 d = pd.to_datetime(s).date()
             except Exception:
                 continue
             key = date(d.year, d.month, 1).isoformat()
-            monthly[key] = float(val)
+            monthly[key] = float(val) / 12.0
             continue
 
-        per_month = float(val) / 3.0
+        # Proper quarterly SAAR: spread to months in that quarter as SAAR/12
+        per_month = float(val) / 12.0
         for d in _quarter_months(year, quarter):
             key = d.isoformat()
-            monthly[key] = per_month
+            # Don't overwrite if we already have a specific monthly forecast
+            if key not in monthly:
+                monthly[key] = per_month
 
     return monthly
-
 
 # ---------------------------------------------------------------------------
 # StatCan helpers – absorption / unabsorbed inventory
