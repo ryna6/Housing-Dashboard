@@ -132,10 +132,7 @@ export const SupplyTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Supply</h1>
         <p className="tab__subtitle">
-          Housing starts, under-construction pipeline, completions, residential
-          construction investment, and rental vacancy rate (CMHC & Statistics Canada).
-          Housing starts are shown as monthly levels derived from CMHC SAAR
-          (annual rate ÷ 12).
+          Housing starts, under-construction, completions, residential construction investment, and rental vacancy rate (Canada Mortgage and Housing Corporation & Statistics Canada)
         </p>
       </header>
 
@@ -163,7 +160,7 @@ export const SupplyTab: React.FC = () => {
       {/* Level charts – one per metric */}
       <section className="tab__charts">
         <ChartPanel
-          title="Housing starts (monthly, SAAR-derived)"
+          title="Housing starts"
           series={housingStartsSeries}
           valueKey="value"
           valueFormatter={formatCompactCount}
@@ -184,7 +181,7 @@ export const SupplyTab: React.FC = () => {
           clampYMinToZero
         />
         <ChartPanel
-          title="Investment in residential building construction"
+          title="Residential construction investment"
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCompactCurrency}
