@@ -13,7 +13,7 @@ from RatesBonds import generate_rates
 from InflationLabour import generate_inflation
 from CreditStress import generate_credit_stress
 from MarketRisk import generate_market_risk
-from SupplyPipeline import generate_supply_pipeline
+from Supply import generate_supply
 
 
 # Root paths
