@@ -80,7 +80,7 @@ function formatYearsAxis(value: number): string {
  * Tooltip formatter for price-to-rent ratios, e.g. "16.3 yrs".
  */
 function formatYearsTooltip(value: number): string {
-  return `${value.toFixed(1)} yrs`;
+  return `${value.toFixed(2)} yrs`;
 }
 
 export const RentalsTab: React.FC = () => {
