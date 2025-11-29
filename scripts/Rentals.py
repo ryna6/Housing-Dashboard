@@ -47,21 +47,25 @@ class PanelRow:
 
 def compute_changes(
     values: List[float],
+    yoy_lag: int,
 ) -> Tuple[List[Optional[float]], List[Optional[float]], List[float]]:
     """
     Compute:
-      - month-over-month % change (relative to previous observation)
-      - year-over-year % change (12-period lag where possible, otherwise
-        falls back to previous observation)
+      - period-over-period % change (relative to previous observation)
+      - year-over-year % change using a configurable lag (e.g. 4 for
+        quarterly data, 1 for annual data)
       - 3-period trailing moving average of the level
 
-    This is intentionally similar in spirit to the helpers in the other
-    tab scripts (Prices, Supply, InflationLabour).
+    This mirrors the helpers in the other tab scripts but allows the
+    Rentals tab to handle different data frequencies.
     """
     n = len(values)
     mom: List[Optional[float]] = [None] * n
     yoy: List[Optional[float]] = [None] * n
     ma3: List[float] = [0.0] * n
+
+    if yoy_lag <= 0:
+        yoy_lag = 1
 
     for i, v in enumerate(values):
         # 3-period trailing moving average
@@ -69,21 +73,15 @@ def compute_changes(
         if window:
             ma3[i] = sum(window) / len(window)
 
-        # MoM relative to previous point
+        # Period-over-period (MoM / QoQ, depending on series frequency)
         if i > 0:
             prev = values[i - 1]
             if prev not in (0, None):
                 mom[i] = (v / prev - 1.0) * 100.0
 
-        # YoY: prefer 12-period lag; if not available, fall back to prev
-        base_index: Optional[int] = None
-        if i >= 12:
-            base_index = i - 12
-        elif i > 0:
-            base_index = i - 1
-
-        if base_index is not None:
-            base_val = values[base_index]
+        # Year-over-year with explicit lag (no fallback to previous)
+        if i >= yoy_lag:
+            base_val = values[i - yoy_lag]
             if base_val not in (0, None):
                 yoy[i] = (v / base_val - 1.0) * 100.0
 
@@ -364,12 +362,18 @@ def series_to_panel_rows(
     metric: str,
     unit: str,
     source: str,
+    *,
+    yoy_lag: int,
 ) -> List[PanelRow]:
     """
     Convert a simple (date, value) series into PanelRow objects with
-    MoM / YoY / MA3 pre-computed.
+    period-over-period / YoY / MA3 pre-computed.
+
+    The yoy_lag parameter controls how many observations back we look
+    when computing year-over-year % changes (e.g. 4 for quarterly
+    series, 1 for annual series).
     """
-    mom, yoy, ma3 = compute_changes(values)
+    mom, yoy, ma3 = compute_changes(values, yoy_lag=yoy_lag)
     rows: List[PanelRow] = []
 
     for dt, v, mom_val, yoy_val, ma3_val in zip(dates, values, mom, yoy, ma3):
@@ -478,6 +482,7 @@ def generate_rentals(
                     metric="rent_level",
                     unit="cad",
                     source=f"statcan_rent_{vector_id}",
+                    yoy_lag=4,
                 )
             )
 
@@ -508,6 +513,7 @@ def generate_rentals(
                         metric="rent_to_income",
                         unit="pct",
                         source="cmhc_income+statcan_rent",
+                        yoy_lag=4,
                     )
                 )
 
@@ -529,6 +535,7 @@ def generate_rentals(
                 metric="rental_vacancy_rate",
                 unit="pct",
                 source=f"statcan_vacancy_{vector_id}",
+                yoy_lag=1,
             )
         )
 
@@ -597,6 +604,7 @@ def generate_rentals(
                 metric="price_to_rent",
                 unit="ratio",
                 source="derived_price_to_rent",
+                yoy_lag=4,
             )
         )
 
