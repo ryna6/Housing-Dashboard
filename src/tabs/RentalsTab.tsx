@@ -21,8 +21,8 @@ const CITY_OPTIONS: { value: CityCode; label: string }[] = [
 // CHANGED: values + labels
 const BEDROOM_OPTIONS: { value: BedroomType; label: string }[] = [
   { value: "bachelor", label: "Bachelor" },
-  { value: "1bd", label: "1 bedroom" },
-  { value: "2bd", label: "2 bedroom" },
+  { value: "1bd", label: "1-bedroom" },
+  { value: "2bd", label: "2-bedroom" },
 ];
 
 const CARD_TITLES: Record<string, string> = {
