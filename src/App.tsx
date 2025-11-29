@@ -56,12 +56,7 @@ const App: React.FC = () => {
       case "inflation":
         return <InflationLabourTab />;
       case "credit":
-        return (
-          <PlaceholderTab
-            title="Credit"
-            subtitle="Insolvencies and arrears proxies (coming soon)."
-          />
-        );
+        return <CreditTab />;
       case "market":
         return (
           <PlaceholderTab
