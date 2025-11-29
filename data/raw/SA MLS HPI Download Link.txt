@@ -1,4 +1,4 @@
-CREA National Statistics
-https://stats.crea.ca/en-CA/
+CREA MLS HPI Tool
+https://www.crea.ca/housing-market-stats/mls-home-price-index/hpi-tool/
 
-Data released monthly, next release Dec 15 2025
+Data released monthly, next release early to mid Dec 2025?
