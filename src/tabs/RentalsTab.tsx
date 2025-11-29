@@ -204,15 +204,19 @@ export const RentalsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Rentals</h1>
         <p className="tab__subtitle">
-          Apartment rents, rent-to-income, price-to-rent ratios, and rental
-          vacancy rates (Statistics Canada &amp; CMHC)
+          Apartment rent cost, rent-to-income ratios, price-to-rent ratios, and rental
+          vacancy rates (Statistics Canada & Canadian Mortgage and Housing Corporation)
         </p>
       </header>
 
       <div className="tab__controls">
-        <div className="tab__region">
+        <div className="tab__region-label">
           <span>City:</span>
-          <select value={city} onChange={handleCityChange}>
+          <select 
+            className="tab__regions-select"
+            value={city} 
+            onChange={handleCityChange}
+          >
             {CITY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
