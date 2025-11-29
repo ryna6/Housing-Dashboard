@@ -42,7 +42,7 @@ def main() -> None:
     inflation = generate_inflation()
     credit = generate_credit_stress()
     market = generate_market_risk()
-    supply = generate_supply_pipeline()
+    supply = generate_supply()
 
     panel = prices + sales + rentals + rates + inflation + credit + market + supply
 
