@@ -103,6 +103,10 @@ body {
   color: var(--text-muted);
 }
 
+.tab__controls--inline {
+  justify-content: flex-start;
+}
+
 .tab__segment {
   margin-left: auto;
   font-size: 0.75rem;
