@@ -24,7 +24,7 @@ class PanelRow:
     ma3: Optional[float]
 
 
-def generate_supply_pipeline() -> List[PanelRow]:
+def generate_supply() -> List[PanelRow]:
     """
     Placeholder generator for the Supply tab.
 
@@ -41,7 +41,7 @@ def write_json(path: Path, rows: List[PanelRow]) -> None:
 
 def main() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    rows = generate_supply_pipeline()
+    rows = generate_supply()
     out_path = DATA_DIR / "supply.json"
     write_json(out_path, rows)
     print(f"Wrote {len(rows)} supply rows to {out_path}")
