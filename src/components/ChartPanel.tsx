@@ -8,11 +8,17 @@ interface Props {
   valueKey: "value" | "mom_pct" | "yoy_pct";
   /** Optional label for the y-axis (left blank by default). */
   valueAxisLabel?: string;
-  /** Optional formatter for numeric values (axis ticks + tooltip) when not using percent scale. */
+  /**
+   * Optional formatter for numeric values on the Y-axis ticks
+   * when not using percent scale.
+   */
   valueFormatter?: (value: number) => string;
-
+  /**
+   * Optional formatter for numeric values in the tooltip. If omitted,
+   * we fall back to valueFormatter, and then to a generic formatter.
+   */
   tooltipValueFormatter?: (value: number) => string;
-  /** Render as a step line (discrete jumps between months). */
+  /** Render as a step line (discrete jumps between periods). */
   step?: boolean;
   /**
    * Treat numeric values as percentages for formatting (0–5% etc),
@@ -47,6 +53,7 @@ export const ChartPanel: React.FC<Props> = ({
   valueKey,
   valueAxisLabel,
   valueFormatter,
+  tooltipValueFormatter,
   step = false,
   treatAsPercentScale,
   clampYMinToZero = false,
@@ -138,7 +145,11 @@ export const ChartPanel: React.FC<Props> = ({
         let formatted: string;
         if (isPercentScale) {
           formatted = `${val.toFixed(2)}%`;
+        } else if (typeof tooltipValueFormatter === "function") {
+          // Use tooltip-specific formatter if provided
+          formatted = tooltipValueFormatter(val);
         } else if (typeof valueFormatter === "function") {
+          // Fallback to axis formatter
           formatted = valueFormatter(val);
         } else {
           formatted = val.toFixed(2);
@@ -176,7 +187,6 @@ export const ChartPanel: React.FC<Props> = ({
         },
       },
     },
-
     series: [
       {
         type: "line",
