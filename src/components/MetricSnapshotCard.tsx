@@ -23,13 +23,20 @@ interface Props {
  */
 const VS_PREVIOUS_RATE_METRICS = new Set<string>(["policy_rate", "mortgage_5y"]);
 
+// More detailed formatting for rent-level metrics (e.g. "$2.45k")
+function formatRentLevelValue(value: number): string {
+  const abs = Math.abs(value);
+
+  if (abs >= 1_000) {
+    return `$${(value / 1_000).toFixed(2)}k`;
+  }
+
+  return `$${value.toFixed(1)}`;
+}
+
 function formatValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "–";
 
-  if (metric === "rent_level" && unit === "cad") {
-    return formatRentLevelValue(value);
-  }
-  
   if (unit === "pct") {
     // 2 decimal places for interest rates / percentages
     return `${value.toFixed(2)}%`;
@@ -53,19 +60,6 @@ function formatValue(value: number, unit: string): string {
     return `$${value.toFixed(0)}`;
   }
 
-  // 2 decimal place for rent
-  function formatRentLevelValue(value: number): string {
-  const abs = Math.abs(value);
-
-  // Use K-format with 2 decimals for typical rent values
-  if (abs >= 1_000) {
-    return `$${(value / 1_000).toFixed(2)}k`; // e.g. 2450 -> $2.45k
-  }
-
-  // For small values, still show 1 decimal
-  return `$${value.toFixed(1)}`;
-}
-  
   if (unit === "index") {
     return value.toFixed(1);
   }
@@ -148,15 +142,29 @@ function labelForMetric(metric: string): string {
     case "unemployment_rate":
       return "Unemployment Rate";
 
+    // Rentals tab metrics
+    case "rent_level":
+      return "Rent cost";
+    case "rent_to_income":
+      return "Rent-to-income";
+    case "price_to_rent":
+      return "Price-to-rent";
+    case "rental_vacancy_rate":
+      return "Rental vacancy rate";
+
     default:
       return metric.replace(/_/g, " ");
   }
 }
 
-export const MetricSnapshotCard: React.FC<Props> = ({ snapshot, titleOverride }) => {
+export const MetricSnapshotCard: React.FC<Props> = ({
+  snapshot,
+  titleOverride,
+}) => {
   const { metric, latest, prev } = snapshot;
 
-  const latestVal = latest?.value;
+  // Ensure we always have a number for formatting
+  const latestVal = latest?.value ?? NaN;
   const yoyPct = latest.yoy_pct ?? null;
   const useVsPreviousRate = VS_PREVIOUS_RATE_METRICS.has(metric);
 
@@ -175,7 +183,7 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot, titleOverride })
 
   if (useVsPreviousRate) {
     // For policy_rate & mortgage_5y: "Δ … vs previous rate"
-    if (prev && Number.isFinite(prev.value) && latestVal != null) {
+    if (prev && Number.isFinite(prev.value) && Number.isFinite(latestVal)) {
       const absDelta = latest.value - prev.value;
 
       if (absDelta !== 0) {
@@ -236,9 +244,13 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot, titleOverride })
           <span className={chipClass}>
             {absDelta > 0 ? "+" : ""}
             {formatDelta(absDelta, latest.unit)}{" "}
-            (
-            {momPct > 0 ? "+" : ""}
-            {momPct.toFixed(1)}%)
+            {momPct != null && (
+              <>
+                (
+                {momPct > 0 ? "+" : ""}
+                {momPct.toFixed(1)}%)
+              </>
+            )}
             <span className="metric-card__delta-label"> MoM</span>
           </span>
         </div>
@@ -252,7 +264,9 @@ export const MetricSnapshotCard: React.FC<Props> = ({ snapshot, titleOverride })
         {titleOverride ?? labelForMetric(metric)}
       </div>
       <div className="metric-card__value">
-        {formatValue(latestVal, latest.unit)}
+        {metric === "rent_level" && latest.unit === "cad"
+          ? formatRentLevelValue(latestVal)
+          : formatValue(latestVal, latest.unit)}
       </div>
 
       {deltaNode}
