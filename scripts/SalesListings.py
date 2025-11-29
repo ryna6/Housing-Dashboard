@@ -172,117 +172,22 @@ def fetch_statcan_absorption_components() -> Dict[str, Dict[str, float]]:
     Fetch absorption and unabsorbed inventory for Canada-level housing
     from Statistics Canada table 34-10-0149-01 via the Web Data Service.
 
-    We target the series with:
-      - Geography: Canada (if available) OR "Census metropolitan areas"
-      - Completed dwelling units: "Absorptions" and "Unabsorbed inventory"
-      - Type of dwelling unit: "Total units"
+    This implementation uses the known vector IDs for Canada total:
+      - Absorptions:          vector v1930469  (vectorId = 1930469)
+      - Unabsorbed inventory: vector v1930754  (vectorId = 1930754)
 
-    Implementation notes:
-      * We first call getCubeMetadata to discover member IDs for the
-        dimensions above.
-      * We then build coordinates for the two series of interest and
-        call getDataFromCubePidCoordAndLatestNPeriods to pull all
-        available monthly data.
-      * The structure of the response and the parsing of refPer /
-        symbolCode mirror the patterns used in InflationLabour.py.
+    We call getDataFromVectorsAndLatestNPeriods with those two vectors
+    and parse the monthly series. The refPer values are monthly (YYYY-MM)
+    and are normalized to YYYY-MM-01.
     """
-    product_id = 3410014901  # PID for table 34-10-0149-01
+    # Vector IDs without the leading "v"
+    vector_abs = 1930469
+    vector_unabs = 1930754
 
-    meta_url = f"{WDS_BASE}/getCubeMetadata"
-    payload = [{"productId": product_id}]
-    data_bytes = json.dumps(payload).encode("utf-8")
-
-    req = urllib.request.Request(
-        meta_url,
-        data=data_bytes,
-        headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "Accept": "application/json",
-        },
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            res = json.load(resp)
-    except (HTTPError, URLError, TimeoutError, ValueError) as e:
-        print(f"[WARN] StatCan absorption metadata fetch failed: {e}")
-        return {}
-
-    if not isinstance(res, list) or not res or res[0].get("status") != "SUCCESS":
-        print("[WARN] Unexpected StatCan WDS metadata response for 34-10-0149-01")
-        return {}
-
-    meta_obj = res[0].get("object") or {}
-    dims = meta_obj.get("dimension") or []
-
-    def find_dim(name_substring: str) -> Optional[Dict]:
-        for d in dims:
-            name = (d.get("dimensionNameEn") or "").lower()
-            if name_substring.lower() in name:
-                return d
-        return None
-
-    geo_dim = find_dim("geography")
-    completed_dim = find_dim("completed dwelling units")
-    type_dim = find_dim("type of dwelling unit")
-
-    if not geo_dim or not completed_dim or not type_dim:
-        print("[WARN] Could not find expected dimensions in 34-10-0149-01 metadata")
-        return {}
-
-    def find_member_id(dim: Dict, candidates: List[str]) -> Optional[int]:
-        members = dim.get("member") or []
-        for cand in candidates:
-            for m in members:
-                if (m.get("memberNameEn") or "").strip().lower() == cand.lower():
-                    return int(m.get("memberId"))
-        return None
-
-    # Geography: prefer "Canada", fallback to "Census metropolitan areas"
-    geo_member_id = find_member_id(geo_dim, ["Canada", "Census metropolitan areas"])
-    # Completed dwelling units: "Absorptions" and "Unabsorbed inventory"
-    comp_abs_id = find_member_id(completed_dim, ["Absorptions"])
-    comp_unabs_id = find_member_id(completed_dim, ["Unabsorbed inventory"])
-    # Type of dwelling unit: "Total units"
-    type_total_id = find_member_id(type_dim, ["Total units"])
-
-    if None in (geo_member_id, comp_abs_id, comp_unabs_id, type_total_id):
-        print(
-            "[WARN] Missing one or more required members for geography / "
-            "completed units / dwelling type in 34-10-0149-01"
-        )
-        return {}
-
-    # Build coordinates in dimensionPositionId order
-    dims_sorted = sorted(dims, key=lambda d: d.get("dimensionPositionId") or 0)
-
-    def build_coord(completed_member_id: int) -> str:
-        coord_parts: List[str] = []
-        for d in dims_sorted:
-            name = (d.get("dimensionNameEn") or "").lower()
-            if "geography" in name:
-                coord_parts.append(str(geo_member_id))
-            elif "completed dwelling units" in name:
-                coord_parts.append(str(completed_member_id))
-            elif "type of dwelling unit" in name:
-                coord_parts.append(str(type_total_id))
-            else:
-                # Fallback to first member for any unexpected dimension
-                members = d.get("member") or []
-                if members:
-                    coord_parts.append(str(int(members[0].get("memberId"))))
-                else:
-                    coord_parts.append("0")
-        return ".".join(coord_parts)
-
-    coord_abs = build_coord(comp_abs_id)
-    coord_unabs = build_coord(comp_unabs_id)
-
-    data_url = f"{WDS_BASE}/getDataFromCubePidCoordAndLatestNPeriods"
+    data_url = f"{WDS_BASE}/getDataFromVectorsAndLatestNPeriods"
     payload = [
-        {"productId": product_id, "coordinate": coord_abs, "latestN": 2000},
-        {"productId": product_id, "coordinate": coord_unabs, "latestN": 2000},
+        {"vectorId": vector_abs, "latestN": 2000},
+        {"vectorId": vector_unabs, "latestN": 2000},
     ]
     data_bytes = json.dumps(payload).encode("utf-8")
 
@@ -304,7 +209,7 @@ def fetch_statcan_absorption_components() -> Dict[str, Dict[str, float]]:
         return {}
 
     if not isinstance(res, list):
-        print("[WARN] Unexpected StatCan WDS data response for 34-10-0149-01")
+        print("[WARN] Unexpected StatCan WDS data response for absorption vectors")
         return {}
 
     series: Dict[str, Dict[str, float]] = {
@@ -312,10 +217,11 @@ def fetch_statcan_absorption_components() -> Dict[str, Dict[str, float]]:
         "unabsorbed_inventory": {},
     }
 
-    # We sent payload in order: [absorption, unabsorbed]; map by index.
+    # Payload order: [absorption, unabsorbed_inventory]
     for idx, entry in enumerate(res):
         if entry.get("status") != "SUCCESS":
             continue
+
         obj = entry.get("object") or {}
         datapoints = obj.get("vectorDataPoint") or []
 
@@ -327,7 +233,7 @@ def fetch_statcan_absorption_components() -> Dict[str, Dict[str, float]]:
 
             if value in (None, "", "NaN"):
                 continue
-            # Keep only "normal" values: symbol 0 or missing
+            # Keep only "normal" observations: symbol 0 or missing
             if symbol not in (0, None):
                 continue
 
@@ -340,9 +246,10 @@ def fetch_statcan_absorption_components() -> Dict[str, Dict[str, float]]:
             if not ref:
                 continue
 
-            # Standardize YYYY-MM → YYYY-MM-01
+            # Normalize YYYY-MM into YYYY-MM-01
             if len(ref) == 7:
                 ref = ref + "-01"
+
             try:
                 d = datetime.fromisoformat(ref[:10]).date()
             except Exception:
@@ -352,10 +259,11 @@ def fetch_statcan_absorption_components() -> Dict[str, Dict[str, float]]:
             series[metric_key][key] = v
 
     print(
-        f"[INFO] StatCan absorption points loaded: "
+        f"[INFO] StatCan absorption points loaded via vectors: "
         f"{len(series['absorption'])} absorption, "
         f"{len(series['unabsorbed_inventory'])} unabsorbed"
     )
+
     return series
 
 
