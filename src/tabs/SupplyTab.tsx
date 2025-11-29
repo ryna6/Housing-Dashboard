@@ -7,14 +7,14 @@ import { useTabData } from "./useTabData";
 
 const REGION: RegionCode = "canada";
 
+type HousingType = "total_residential" | "single" | "row" | "apartment";
+
 const HOUSING_TYPE_OPTIONS: { value: HousingType; label: string }[] = [
   { value: "total_residential", label: "Total residential" },
   { value: "single", label: "Single detached" },
   { value: "row", label: "Row" },
   { value: "apartment", label: "Apartment" },
 ];
-
-type HousingType = "total_residential" | "single" | "row" | "apartment";
 
 const HOUSING_TYPE_METRICS: string[] = [
   "housing_starts",
@@ -27,7 +27,7 @@ const CARD_TITLES: Record<string, string> = {
   housing_starts: "Housing starts",
   under_construction: "Under construction",
   completions: "Completions",
-  investment_construction: "Construction investment",
+  investment_construction: "Residential construction investment",
   vacancy_rate: "Rental vacancy rate",
 };
 
@@ -111,7 +111,7 @@ export const SupplyTab: React.FC = () => {
   }, [data]);
 
   // One time series per metric, filtered to Canada + selected housing type,
-  // trimmed to the most recent 5 years.
+  // trimmed to the most recent 10 years.
   const housingStartsSeries: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
@@ -121,7 +121,7 @@ export const SupplyTab: React.FC = () => {
             p.region === REGION &&
             p.segment === housingType
         ),
-        5
+        10
       ),
     [data, housingType]
   );
@@ -135,7 +135,7 @@ export const SupplyTab: React.FC = () => {
             p.region === REGION &&
             p.segment === housingType
         ),
-        5
+        10
       ),
     [data, housingType]
   );
@@ -149,7 +149,7 @@ export const SupplyTab: React.FC = () => {
             p.region === REGION &&
             p.segment === housingType
         ),
-        5
+        10
       ),
     [data, housingType]
   );
@@ -163,7 +163,7 @@ export const SupplyTab: React.FC = () => {
             p.region === REGION &&
             p.segment === housingType
         ),
-        5
+        10
       ),
     [data, housingType]
   );
@@ -174,7 +174,7 @@ export const SupplyTab: React.FC = () => {
         data.filter(
           (p) => p.metric === "vacancy_rate" && p.region === REGION
         ),
-        5
+        10
       ),
     [data]
   );
@@ -184,36 +184,33 @@ export const SupplyTab: React.FC = () => {
   return (
     <div className="tab">
       <header className="tab__header">
-        <div className="tab__controls">
-          <h1 className="tab__title">Supply</h1>
-          <div className="tab__segment">
-            <span>Housing type:</span>
-            <select
-              value={housingType}
-              onChange={(e) => setHousingType(e.target.value as HousingType)}
-            >
-              {HOUSING_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <h1 className="tab__title">Supply</h1>
         <p className="tab__subtitle">
           Housing starts, units under construction, completions, residential
-          construction investment, and rental vacancy rate (Statistics Canada)
+          construction investment, and rental vacancy rate (StatCan). Housing
+          pipeline metrics can be viewed for total residential, single detached,
+          row, or apartment dwellings.
         </p>
       </header>
 
-      {loading && <div className="tab__status">Loading supply data…</div>}
-      {error && (
-        <div className="tab__status tab__status--error">
-          Failed to load supply data: {error}
+      {/* Controls row: housing type selector (aligned with other tabs' controls layout) */}
+      <div className="tab__controls">
+        <div className="tab__segment">
+          <span>Housing type:</span>
+          <select
+            value={housingType}
+            onChange={(e) => setHousingType(e.target.value as HousingType)}
+          >
+            {HOUSING_TYPE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
+      </div>
 
-      <section className="tab__metrics">
+      <section className="tab__metrics tab__metrics--wide">
         {!loading &&
           !error &&
           !housingSnapshots.length &&
@@ -261,14 +258,14 @@ export const SupplyTab: React.FC = () => {
           clampYMinToZero
         />
         <ChartPanel
-          title={`Construction investment — ${housingTypeLabel}`}
+          title={`Residential construction investment — ${housingTypeLabel}`}
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCurrencyBillions}
           clampYMinToZero
         />
         <ChartPanel
-          title="Rental vacancy rate (Annual)"
+          title="Rental vacancy rate"
           series={vacancySeries}
           valueKey="value"
           treatAsPercentScale
