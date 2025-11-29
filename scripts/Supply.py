@@ -182,22 +182,23 @@ def load_cmhc_under_construction_and_completions() -> Tuple[Dict[str, float], Di
           0: Year
           1: Period (month, quarter label, etc.)
           3: % absorbed at completion (single detached)
-          4: Completed and absorbed (single detached units)
+          4: Completed and unabsorbed (single detached units)
           5: Under construction (single detached)
           6: % absorbed at completion (row, apartment, other)
-          7: Completed and absorbed (row, apartment, other)
+          7: Completed and unabsorbed (row, apartment, other)
           8: Under construction (row, apartment, other)
 
     For each month:
 
-        under_construction_total = F + I
+        under_construction_total = F + I   # stock, not annualized
 
-        completions_single = completed_absorbed_single / (pct_single / 100)
-        completions_multi  = completed_absorbed_multi  / (pct_multi  / 100)
+        Let p = % absorbed at completion (e.g. 87 → 0.87).
+        Let U = completed & unabsorbed units.
 
-        completions_total  = completions_single + completions_multi
+        Then U = (1 - p) * completions  ⇒  completions = U / (1 - p).
 
-    We skip months where either pct_single or pct_multi is missing or zero.
+        We treat completions as annualized and divide by 12 to obtain
+        a monthly completion flow.
     """
     files = [
         "CMHC Housing & Construction Data 2020-2021.xlsx",
@@ -231,7 +232,7 @@ def load_cmhc_under_construction_and_completions() -> Tuple[Dict[str, float], Di
             if not key:
                 continue
 
-            # Under construction
+            # Under construction: single (F) + multi (I)
             uc_single = row[5]
             uc_multi = row[8]
             uc_total = 0.0
@@ -249,11 +250,11 @@ def load_cmhc_under_construction_and_completions() -> Tuple[Dict[str, float], Di
             if any_uc:
                 under_construction[key] = uc_total
 
-            # Completions – derived from % absorbed and completed & absorbed
+            # Completions – derived from % absorbed and completed & unabsorbed
             pct_single = row[3]
             pct_multi = row[6]
-            comp_abs_single = row[4]
-            comp_abs_multi = row[7]
+            comp_unabs_single = row[4]
+            comp_unabs_multi = row[7]
 
             try:
                 p_single = float(pct_single) if pct_single not in (None, "") else float("nan")
@@ -264,24 +265,44 @@ def load_cmhc_under_construction_and_completions() -> Tuple[Dict[str, float], Di
             except (TypeError, ValueError):
                 p_multi = float("nan")
 
-            # Skip if either percentage is missing or zero
-            if p_single <= 0 or p_multi <= 0 or pd.isna(p_single) or pd.isna(p_multi):
+            # Skip if either percentage is missing, <= 0 or >= 100 (cannot infer reliably)
+            if (
+                pd.isna(p_single)
+                or pd.isna(p_multi)
+                or p_single <= 0
+                or p_single >= 100
+                or p_multi <= 0
+                or p_multi >= 100
+            ):
                 continue
 
             try:
-                ca_single = float(comp_abs_single) if comp_abs_single not in (None, "") else 0.0
+                u_single = float(comp_unabs_single) if comp_unabs_single not in (None, "") else 0.0
             except (TypeError, ValueError):
-                ca_single = 0.0
+                u_single = 0.0
             try:
-                ca_multi = float(comp_abs_multi) if comp_abs_multi not in (None, "") else 0.0
+                u_multi = float(comp_unabs_multi) if comp_unabs_multi not in (None, "") else 0.0
             except (TypeError, ValueError):
-                ca_multi = 0.0
+                u_multi = 0.0
 
-            completions_single = ca_single / (p_single / 100.0) if p_single > 0 else 0.0
-            completions_multi = ca_multi / (p_multi / 100.0) if p_multi > 0 else 0.0
-            completions_total = completions_single + completions_multi
+            # p is the absorbed share; (1 - p) is the unabsorbed share
+            alpha_single = p_single / 100.0
+            alpha_multi = p_multi / 100.0
+            denom_single = 1.0 - alpha_single
+            denom_multi = 1.0 - alpha_multi
 
-            completions[key] = completions_total
+            if denom_single <= 0 or denom_multi <= 0:
+                continue
+
+            # Annualized completions
+            completions_single_annual = u_single / denom_single
+            completions_multi_annual = u_multi / denom_multi
+            completions_total_annual = completions_single_annual + completions_multi_annual
+
+            # Convert to monthly flow
+            completions_total_monthly = completions_total_annual / 12.0
+
+            completions[key] = completions_total_monthly
 
     return under_construction, completions
 
@@ -376,8 +397,8 @@ def fetch_investment_construction() -> Dict[str, float]:
     Investment in residential building construction, Canada total.
 
     StatCan table 34-10-0293-01, vector v1705315944.
-    Units are typically in millions of dollars; we keep the numeric values
-    as-is and treat them as CAD in the frontend.
+    The source vector is at an annualized rate (SAAR); we convert to
+    monthly levels in generate_supply().
     """
     return fetch_statcan_series(1705315944)
 
@@ -426,8 +447,8 @@ def generate_supply() -> List[PanelRow]:
 
       - housing_starts           (CMHC, Table 3, SAAR -> monthly)
       - under_construction       (CMHC, Table 16, F + I)
-      - completions              (CMHC, Table 16, derived)
-      - investment_construction  (StatCan 34-10-0293-01, v1705315944)
+      - completions              (CMHC, Table 16, derived, SAAR -> monthly)
+      - investment_construction  (StatCan 34-10-0293-01, v1705315944, SAAR -> monthly)
       - vacancy_rate             (StatCan 34-10-0130-01, v1930301)
     """
     # CMHC metrics
@@ -435,7 +456,10 @@ def generate_supply() -> List[PanelRow]:
     under_construction_series, completions_series = load_cmhc_under_construction_and_completions()
 
     # StatCan metrics
-    investment_series = fetch_investment_construction()
+    # Investment is reported at an annualized (SAAR) rate → convert to monthly.
+    investment_annual = fetch_investment_construction()
+    investment_series = {d: v / 12.0 for d, v in investment_annual.items()}
+
     vacancy_series = fetch_vacancy_rate()
 
     rows: List[PanelRow] = []
