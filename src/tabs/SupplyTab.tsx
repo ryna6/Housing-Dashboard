@@ -181,7 +181,7 @@ export const SupplyTab: React.FC = () => {
           clampYMinToZero
         />
         <ChartPanel
-          title="Residential construction investment"
+          title="Construction investment"
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCompactCurrency}
