@@ -64,9 +64,8 @@ function formatValue(value: number, unit: string): string {
 
     if (abs >= 1_000_000_000_000) {
       // Trillions
-      return `$${(value / 1_000_000_000_000).toFixed(1)}T`;
+      return `$${(value / 1_000_000_000_000).toFixed(3)}T`;
     }
-
     if (abs >= 1_000_000_000) {
       // Billions
       return `$${(value / 1_000_000_000).toFixed(2)}B`;
