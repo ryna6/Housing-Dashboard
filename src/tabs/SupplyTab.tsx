@@ -190,7 +190,7 @@ export const SupplyTab: React.FC = () => {
         </div>
       </div>
 
-      <section className="tab__metrics tab__metrics--wide">
+      <section className="tab__metrics">
         {!loading && !error && !housingSnapshots.length && (
           <div className="tab__status">No supply data yet.</div>
         )}
