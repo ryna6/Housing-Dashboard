@@ -60,9 +60,7 @@ function formatCompactCurrency(value: number): string {
 function formatCurrencyDetailed(value: number): string {
   // e.g. 2450 -> "$2,450"
   return `$${value.toLocaleString("en-CA", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })}`;
+    return `$${value.toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
 }
 
 function formatYears(value: number): string {
