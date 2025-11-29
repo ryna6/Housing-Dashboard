@@ -74,7 +74,7 @@ const CARD_TITLES: Record<string, string> = {
   housing_starts: "Housing starts",
   under_construction: "Under construction",
   completions: "Completions",
-  investment_construction: "Investment in building construction",
+  investment_construction: "Construction investment",
   vacancy_rate: "Rental vacancy rate",
 };
 
@@ -186,7 +186,7 @@ export const SupplyTab: React.FC = () => {
       {/* Level charts – one per metric */}
       <section className="tab__charts">
         <ChartPanel
-          title="Housing starts (monthly, SAAR-derived)"
+          title="Housing starts"
           series={housingStartsSeries}
           valueKey="value"
           valueFormatter={formatCompactCount}
@@ -200,21 +200,21 @@ export const SupplyTab: React.FC = () => {
           clampYMinToZero
         />
         <ChartPanel
-          title="Completions (monthly, derived)"
+          title="Completions"
           series={completionsSeries}
           valueKey="value"
           valueFormatter={formatCompactCount}
           clampYMinToZero
         />
         <ChartPanel
-          title="Investment in residential building construction"
+          title="Construction investment"
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCompactCurrency}
           clampYMinToZero
         />
         <ChartPanel
-          title="Rental vacancy rate"
+          title="Rental vacancy rate (Annual)"
           series={vacancySeries}
           valueKey="value"
           treatAsPercentScale
