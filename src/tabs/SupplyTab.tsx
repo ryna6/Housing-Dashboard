@@ -58,7 +58,7 @@ const CARD_TITLES: Record<string, string> = {
   housing_starts: "Housing starts",
   under_construction: "Under construction",
   completions: "Completions",
-  investment_construction: "Investment in building construction",
+  investment_construction: "Construction investment",
   vacancy_rate: "Rental vacancy rate",
 };
 
