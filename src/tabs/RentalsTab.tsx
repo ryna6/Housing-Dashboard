@@ -7,8 +7,6 @@ import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
 
 type CityCode = "toronto" | "vancouver" | "montreal" | "calgary";
-
-// CHANGED: bedroom segment codes
 type BedroomType = "bachelor" | "1bd" | "2bd";
 
 const CITY_OPTIONS: { value: CityCode; label: string }[] = [
@@ -18,11 +16,10 @@ const CITY_OPTIONS: { value: CityCode; label: string }[] = [
   { value: "calgary", label: "Calgary" },
 ];
 
-// CHANGED: values + labels
 const BEDROOM_OPTIONS: { value: BedroomType; label: string }[] = [
   { value: "bachelor", label: "Bachelor" },
-  { value: "1bd", label: "1-Bedroom" },
-  { value: "2bd", label: "2-Bedroom" },
+  { value: "1bd", label: "1 bedroom" },
+  { value: "2bd", label: "2 bedroom" },
 ];
 
 const CARD_TITLES: Record<string, string> = {
@@ -32,6 +29,10 @@ const CARD_TITLES: Record<string, string> = {
   rental_vacancy_rate: "Rental vacancy rate",
 };
 
+/**
+ * Trim a series down to the last N years based on the latest observation date,
+ * preserving ordering and all recent data.
+ */
 function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
   if (series.length <= 1) return series;
 
@@ -46,6 +47,10 @@ function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
   });
 }
 
+/**
+ * Compact currency formatter for charts, e.g. $1.8K, $2.4K.
+ * (Cards use MetricSnapshotCard's internal formatting.)
+ */
 function formatCompactCurrency(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 1_000_000) {
@@ -57,12 +62,9 @@ function formatCompactCurrency(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
-function formatCurrencyDetailed(value: number): string {
-  // e.g. 2450 -> "$2,450"
-  return `$${value.toLocaleString("en-CA", {
-    return `$${value.toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
-}
-
+/**
+ * Simple formatter for price-to-rent ratios, e.g. "23.4 yrs".
+ */
 function formatYears(value: number): string {
   return `${value.toFixed(1)} yrs`;
 }
@@ -71,7 +73,6 @@ export const RentalsTab: React.FC = () => {
   const { data, loading, error } = useTabData("rentals");
 
   const [city, setCity] = useState<CityCode>("toronto");
-  // CHANGED: default to "2bd"
   const [bedroom, setBedroom] = useState<BedroomType>("2bd");
 
   const handleCityChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -84,28 +85,29 @@ export const RentalsTab: React.FC = () => {
     setBedroom(event.target.value as BedroomType);
   };
 
+  // Latest readings for the four headline metrics for the selected city / bedroom
   const snapshots: MetricSnapshot[] = useMemo(() => {
     if (!data.length) return [];
 
     const region = city as unknown as RegionCode;
     const snaps: MetricSnapshot[] = [];
 
-    // Rent level & rent-to-income (depend on bedroom type)
+    // 1) Rent level & rent-to-income (depend on bedroom type)
     snaps.push(
       ...getLatestByMetric(
         data,
         region,
         ["rent_level", "rent_to_income"],
-        bedroom // CHANGED: bedroom now "bachelor" | "1bd" | "2bd"
+        bedroom
       )
     );
 
-    // Price-to-rent – always uses 2-bedroom rent
+    // 2) Price-to-rent – depends on bedroom type (bachelor / 1bd / 2bd)
     snaps.push(
-      ...getLatestByMetric(data, region, ["price_to_rent"], "2bd") // CHANGED: "2bd"
+      ...getLatestByMetric(data, region, ["price_to_rent"], bedroom)
     );
 
-    // Rental vacancy rate – city-level (segment "all")
+    // 3) Rental vacancy rate – city-level (segment "all")
     snaps.push(
       ...getLatestByMetric(
         data,
@@ -115,6 +117,7 @@ export const RentalsTab: React.FC = () => {
       )
     );
 
+    // Deduplicate by metric and keep a consistent order
     const byMetric = new Map<string, MetricSnapshot>();
     for (const snap of snaps) {
       if (!byMetric.has(snap.metric)) {
@@ -134,70 +137,58 @@ export const RentalsTab: React.FC = () => {
       .filter((s): s is MetricSnapshot => !!s);
   }, [data, city, bedroom]);
 
-  // CHANGED: filters now use "bachelor" | "1bd" | "2bd"
-  const rentLevelSeries: PanelPoint[] = useMemo(
-    () => {
-      const region = city as unknown as RegionCode;
-      return trimLastYears(
-        data.filter(
-          (p) =>
-            p.metric === "rent_level" &&
-            p.region === region &&
-            p.segment === bedroom
-        ),
-        10
-      );
-    },
-    [data, city, bedroom]
-  );
+  // Time-series for charts (levels only, last 10 years)
+  const rentLevelSeries: PanelPoint[] = useMemo(() => {
+    const region = city as unknown as RegionCode;
+    return trimLastYears(
+      data.filter(
+        (p) =>
+          p.metric === "rent_level" &&
+          p.region === region &&
+          p.segment === bedroom
+      ),
+      10
+    );
+  }, [data, city, bedroom]);
 
-  const rentToIncomeSeries: PanelPoint[] = useMemo(
-    () => {
-      const region = city as unknown as RegionCode;
-      return trimLastYears(
-        data.filter(
-          (p) =>
-            p.metric === "rent_to_income" &&
-            p.region === region &&
-            p.segment === bedroom
-        ),
-        10
-      );
-    },
-    [data, city, bedroom]
-  );
+  const rentToIncomeSeries: PanelPoint[] = useMemo(() => {
+    const region = city as unknown as RegionCode;
+    return trimLastYears(
+      data.filter(
+        (p) =>
+          p.metric === "rent_to_income" &&
+          p.region === region &&
+          p.segment === bedroom
+      ),
+      10
+    );
+  }, [data, city, bedroom]);
 
-  const priceToRentSeries: PanelPoint[] = useMemo(
-    () => {
-      const region = city as unknown as RegionCode;
-      return trimLastYears(
-        data.filter(
-          (p) =>
-            p.metric === "price_to_rent" &&
-            p.region === region &&
-            p.segment === "2bd" // CHANGED
-        ),
-        10
-      );
-    },
-    [data, city]
-  );
+  const priceToRentSeries: PanelPoint[] = useMemo(() => {
+    const region = city as unknown as RegionCode;
+    return trimLastYears(
+      data.filter(
+        (p) =>
+          p.metric === "price_to_rent" &&
+          p.region === region &&
+          p.segment === bedroom
+      ),
+      10
+    );
+  }, [data, city, bedroom]);
 
-  const vacancySeries: PanelPoint[] = useMemo(
-    () => {
-      const region = city as unknown as RegionCode;
-      return trimLastYears(
-        data.filter(
-          (p) =>
-            p.metric === "rental_vacancy_rate" &&
-            p.region === region &&
-            p.segment === "all"
-        ),
-        10
-      );
-    },
-    [data, city]
-  );
+  const vacancySeries: PanelPoint[] = useMemo(() => {
+    const region = city as unknown as RegionCode;
+    return trimLastYears(
+      data.filter(
+        (p) =>
+          p.metric === "rental_vacancy_rate" &&
+          p.region === region &&
+          p.segment === "all"
+      ),
+      10
+    );
+  }, [data, city]);
 
   const selectedCityLabel =
     CITY_OPTIONS.find((opt) => opt.value === city)?.label ?? city;
@@ -205,32 +196,29 @@ export const RentalsTab: React.FC = () => {
   const selectedBedroomLabel =
     BEDROOM_OPTIONS.find((opt) => opt.value === bedroom)?.label ?? bedroom;
 
-  // NEW: short label just for chart titles
+  // Shorter label for chart titles: "1-bd", "2-bd", "Bachelor"
   const selectedBedroomLabelShort =
     bedroom === "1bd"
-      ? "1-Bd"
+      ? "1-bd"
       : bedroom === "2bd"
-      ? "2-Bd"
+      ? "2-bd"
       : "Bachelor";
-  
+
   return (
     <div className="tab">
       <header className="tab__header">
         <h1 className="tab__title">Rentals</h1>
         <p className="tab__subtitle">
-          Apartment rent cost, rent-to-income ratios, price-to-rent ratios, and rental
-          vacancy rates (Statistics Canada & Canadian Mortgage and Housing Corporation)
+          Apartment rents, rent-to-income, price-to-rent ratios, and rental
+          vacancy rates (Statistics Canada &amp; CMHC)
         </p>
       </header>
 
+      {/* Controls: city + bedroom type */}
       <div className="tab__controls">
-        <div className="tab__region-label">
+        <div className="tab__region">
           <span>City:</span>
-          <select 
-            className="tab__regions-select"
-            value={city} 
-            onChange={handleCityChange}
-          >
+          <select value={city} onChange={handleCityChange}>
             {CITY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
@@ -260,6 +248,7 @@ export const RentalsTab: React.FC = () => {
         </div>
       )}
 
+      {/* Four headline cards */}
       <section className="tab__metrics">
         {!loading && !error && !snapshots.length && (
           <div className="tab__status">
@@ -275,12 +264,13 @@ export const RentalsTab: React.FC = () => {
         ))}
       </section>
 
+      {/* Level charts */}
       <section className="tab__charts">
         <ChartPanel
           title={`${selectedCityLabel} ${selectedBedroomLabelShort} rent`}
           series={rentLevelSeries}
           valueKey="value"
-          valueFormatter={formatCurrencyDetailed}
+          valueFormatter={formatCompactCurrency}
           clampYMinToZero
         />
         <ChartPanel
