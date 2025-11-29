@@ -213,25 +213,25 @@ export const CreditTab: React.FC = () => {
           Household, business, and corporate credit and funding (Statistics
           Canada)
         </p>
-      </header>
 
-      {/* View selector */}
-      <div className="tab__controls">
-        <div className="tab__segment">
-          <span>View:</span>
-          <select
-            value={view}
-            onChange={(e) => setView(e.target.value as CreditView)}
-            className="tab__regions-select"
-          >
-            {VIEW_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+        {/* Move controls inside header; they'll naturally sit below the title on the left */}
+        <div className="tab__controls tab__controls--inline">
+          <div className="tab__segment">
+            <span>View:</span>
+            <select
+              value={view}
+              onChange={(e) => setView(e.target.value as CreditView)}
+              className="tab__regions-select"
+            >
+              {VIEW_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-      </div>
+      </header>
 
       {loading && <div className="tab__status">Loading credit data…</div>}
       {error && (
