@@ -57,6 +57,13 @@ function formatCompactCurrency(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
+// In RentalsTab.tsx, replace the old formatCompactCurrency with:
+
+function formatCurrencyDetailed(value: number): string {
+  // e.g. 2450 -> "$2,450"
+  return `$${value.toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
+}
+
 function formatYears(value: number): string {
   return `${value.toFixed(1)} yrs`;
 }
@@ -199,6 +206,14 @@ export const RentalsTab: React.FC = () => {
   const selectedBedroomLabel =
     BEDROOM_OPTIONS.find((opt) => opt.value === bedroom)?.label ?? bedroom;
 
+  // NEW: short label just for chart titles
+  const selectedBedroomLabelShort =
+    bedroom === "1bd"
+      ? "1-bd"
+      : bedroom === "2bd"
+      ? "2-bd"
+      : "Bachelor";
+  
   return (
     <div className="tab">
       <header className="tab__header">
@@ -263,14 +278,14 @@ export const RentalsTab: React.FC = () => {
 
       <section className="tab__charts">
         <ChartPanel
-          title={`${selectedCityLabel} ${selectedBedroomLabel} rent`}
+          title={`${selectedCityLabel} ${selectedBedroomLabelShort} rent`}
           series={rentLevelSeries}
           valueKey="value"
-          valueFormatter={formatCompactCurrency}
+          valueFormatter={formatCurrencyDetailed}
           clampYMinToZero
         />
         <ChartPanel
-          title={`${selectedCityLabel} ${selectedBedroomLabel} rent-to-income`}
+          title={`${selectedCityLabel} ${selectedBedroomLabelShort} rent-to-income`}
           series={rentToIncomeSeries}
           valueKey="value"
           treatAsPercentScale
