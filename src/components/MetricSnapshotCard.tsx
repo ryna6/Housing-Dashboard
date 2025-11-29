@@ -1,348 +1,213 @@
 import React from "react";
+import ReactECharts from "echarts-for-react";
 import type { PanelPoint } from "../data/types";
 
-export interface MetricSnapshot {
-  metric: string;
-  latest: PanelPoint;
-  prev: PanelPoint | null;
-}
-
 interface Props {
-  snapshot: MetricSnapshot;
+  title: string;
+  series: PanelPoint[];
+  valueKey: "value" | "mom_pct" | "yoy_pct";
+  /** Optional label for the y-axis (left blank by default). */
+  valueAxisLabel?: string;
   /**
-   * Optional override for the card title.
-   * If not provided, we fall back to a label based on the metric name.
+   * Optional formatter for numeric values on the Y-axis ticks
+   * when not using percent scale.
    */
-  titleOverride?: string;
+  valueFormatter?: (value: number) => string;
+  /**
+   * Optional formatter for numeric values in the tooltip. If omitted,
+   * we fall back to valueFormatter, and then to a generic formatter.
+   */
+  tooltipValueFormatter?: (value: number) => string;
+  /** Render as a step line (discrete jumps between periods). */
+  step?: boolean;
+  /**
+   * Treat numeric values as percentages for formatting (0–5% etc),
+   * even if the underlying valueKey is "value".
+   */
+  treatAsPercentScale?: boolean;
+  /**
+   * Clamp the y-axis minimum at 0
+   * (e.g. policy rate, CPI, HPI).
+   */
+  clampYMinToZero?: boolean;
 }
 
-/**
- * Metrics that should show "change vs previous rate"
- * instead of a normal MoM / QoQ label.
- */
-const VS_PREVIOUS_RATE_METRICS = new Set<string>([
-  "policy_rate",
-  "mortgage_5y",
-]);
+// Simple "nice number" helper for tick steps: 1, 2, 5 × 10^k
+function niceStep(rawStep: number): number {
+  if (!Number.isFinite(rawStep) || rawStep <= 0) return 1;
+  const exp = Math.floor(Math.log10(rawStep));
+  const base = rawStep / Math.pow(10, exp); // between 1 and 10
+  let niceBase: number;
 
-/**
- * Rentals tab metrics that are quarterly and should say "QoQ"
- * instead of "MoM" on the delta chip.
- */
-const QUARTERLY_RENTAL_METRICS = new Set<string>([
-  "rent_level",
-  "rent_to_income",
-  "price_to_rent",
-]);
+  if (base < 1.5) niceBase = 1;
+  else if (base < 3) niceBase = 2;
+  else if (base < 7) niceBase = 5;
+  else niceBase = 10;
 
-/**
- * Rentals tab vacancy metric – annual; we show only YoY.
- */
-const VACANCY_METRICS = new Set<string>(["rental_vacancy_rate"]);
-
-// More detailed formatting for rent-level metrics (e.g. "$2.45k")
-function formatRentLevelValue(value: number): string {
-  const abs = Math.abs(value);
-
-  if (abs >= 1_000) {
-    return `$${(value / 1_000).toFixed(2)}k`;
-  }
-
-  return `$${value.toFixed(1)}`;
+  return niceBase * Math.pow(10, exp);
 }
 
-function formatValue(value: number, unit: string): string {
-  if (!Number.isFinite(value)) return "–";
-
-  if (unit === "pct") {
-    // 2 decimal places for interest rates / percentages
-    return `${value.toFixed(2)}%`;
-  }
-
-  if (unit === "cad") {
-    const abs = Math.abs(value);
-
-    if (abs >= 1_000_000_000) {
-      // Billions
-      return `$${(value / 1_000_000_000).toFixed(2)}B`;
-    }
-    if (abs >= 1_000_000) {
-      // Millions
-      return `$${(value / 1_000_000).toFixed(2)}M`;
-    }
-    if (abs >= 1_000) {
-      // Thousands
-      return `$${(value / 1_000).toFixed(1)}k`;
-    }
-    return `$${value.toFixed(0)}`;
-  }
-
-  if (unit === "index") {
-    return value.toFixed(1);
-  }
-
-  if (unit === "months") {
-    // e.g. 3.4 months of inventory
-    return `${value.toFixed(1)} months`;
-  }
-
-  if (unit === "count") {
-    // Compact notation for large counts: 100K, 1.0M, etc.
-    const abs = Math.abs(value);
-    if (abs >= 1_000_000) {
-      return `${(value / 1_000_000).toFixed(1)}M`;
-    }
-    if (abs >= 1_000) {
-      return `${(value / 1_000).toFixed(1)}k`;
-    }
-    return value.toFixed(0);
-  }
-
-  // Fallback
-  return value.toFixed(2);
-}
-
-function formatDelta(value: number, unit: string): string {
-  if (unit === "pct") {
-    return `${value.toFixed(2)}%`;
-  }
-  return formatValue(value, unit);
-}
-
-function labelForMetric(metric: string): string {
-  switch (metric) {
-    case "hpi_benchmark":
-      return "Benchmark HPI";
-    case "hpi_type":
-      return "Housing type HPI";
-    case "avg_price":
-      return "Average price";
-
-    case "new_listings":
-      return "New listings";
-    case "active_listings":
-      return "Active listings";
-    case "snlr":
-      return "Sales / New listings";
-    case "moi":
-      return "Months of inventory";
-    case "absorption_rate":
-      return "Absorption rate";
-
-    case "policy_rate":
-      return "BoC policy rate";
-    case "mortgage_5y":
-      return "5y mortgage prime rate";
-
-    case "gov_2y_yield":
-      return "2y GoC yield";
-    case "gov_5y_yield":
-      return "5y GoC yield";
-    case "gov_10y_yield":
-      return "10y GoC yield";
-    case "mortgage_5y_spread":
-      return "5y mortgage spread";
-
-    case "avg_rent":
-      return "Average rent";
-    case "vacancy_rate":
-      return "Vacancy rate";
-
-    case "cpi_headline":
-      return "Headline CPI";
-    case "cpi_shelter":
-      return "Owned Accommodation CPI";
-    case "cpi_rent":
-      return "Rent CPI";
-    case "wage_index":
-      return "Wage Index ($/week)";
-    case "unemployment_rate":
-      return "Unemployment Rate";
-
-    // Rentals tab metrics
-    case "rent_level":
-      return "Rent cost";
-    case "rent_to_income":
-      return "Rent-to-income";
-    case "price_to_rent":
-      return "Price-to-rent";
-    case "rental_vacancy_rate":
-      return "Rental vacancy rate";
-
-    default:
-      return metric.replace(/_/g, " ");
-  }
-}
-
-export const MetricSnapshotCard: React.FC<Props> = ({
-  snapshot,
-  titleOverride,
+export const ChartPanel: React.FC<Props> = ({
+  title,
+  series,
+  valueKey,
+  valueAxisLabel,
+  valueFormatter,
+  tooltipValueFormatter,
+  step = false,
+  treatAsPercentScale,
+  clampYMinToZero = false,
 }) => {
-  const { metric, latest, prev } = snapshot;
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const x = sorted.map((p) => p.date.slice(0, 7)); // YYYY-MM
+  const y = sorted.map((p) => {
+    const v = p[valueKey] as number | null;
+    return v == null ? NaN : v;
+  });
 
-  // Ensure we always have a number for formatting
-  const latestVal = latest?.value ?? NaN;
-  const yoyPct = latest.yoy_pct ?? null;
+  const numeric = y.filter(
+    (v) => typeof v === "number" && !Number.isNaN(v)
+  ) as number[];
 
-  const useVsPreviousRate = VS_PREVIOUS_RATE_METRICS.has(metric);
-  const isQuarterlyRental = QUARTERLY_RENTAL_METRICS.has(metric);
-  const isVacancy = VACANCY_METRICS.has(metric);
+  const hasData = sorted.length > 0 && numeric.length > 0;
 
-  // YoY styling (green up / red down) – not used for vacancy (custom chip).
-  const yoyClass =
-    "metric-card__secondary" +
-    (yoyPct != null
-      ? yoyPct > 0
-        ? " metric-card__secondary--up"
-        : yoyPct < 0
-        ? " metric-card__secondary--down"
-        : ""
-      : "");
+  const isPercentScale =
+    treatAsPercentScale ??
+    (valueKey === "mom_pct" || valueKey === "yoy_pct");
 
-  let deltaNode: React.ReactNode = null;
-
-  if (isVacancy) {
-    // Annual vacancy rate: show a single YoY chip, no separate YoY line.
-    if (prev && Number.isFinite(prev.value) && Number.isFinite(latestVal)) {
-      const absDelta = latest.value - prev.value;
-
-      const effectiveYoyPct =
-        yoyPct != null && Number.isFinite(yoyPct)
-          ? yoyPct
-          : prev.value !== 0
-          ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
-          : null;
-
-      const chipClass =
-        "metric-card__delta-chip" +
-        (effectiveYoyPct != null
-          ? effectiveYoyPct > 0
-            ? " metric-card__delta-chip--up"
-            : effectiveYoyPct < 0
-            ? " metric-card__delta-chip--down"
-            : ""
-          : "");
-
-      deltaNode = (
-        <div className="metric-card__delta-row">
-          <span className={chipClass}>
-            {absDelta > 0 ? "+" : ""}
-            {formatDelta(absDelta, latest.unit)}{" "}
-            {effectiveYoyPct != null && (
-              <>
-                (
-                {effectiveYoyPct > 0 ? "+" : ""}
-                {effectiveYoyPct.toFixed(1)}%)
-              </>
-            )}
-            <span className="metric-card__delta-label"> YoY</span>
-          </span>
+  if (!hasData) {
+    return (
+      <div className="chart-panel chart-panel--empty">
+        <div className="chart-panel__title">{title}</div>
+        <div className="chart-panel__empty-text">
+          Not available for this selection.
         </div>
-      );
-    }
-  } else if (useVsPreviousRate) {
-    // For policy_rate & mortgage_5y: "Δ … vs previous rate"
-    if (prev && Number.isFinite(prev.value) && Number.isFinite(latestVal)) {
-      const absDelta = latest.value - prev.value;
-
-      if (absDelta !== 0) {
-        const relPct =
-          prev.value !== 0
-            ? (absDelta / Math.abs(prev.value)) * 100
-            : null;
-
-        const chipClass =
-          "metric-card__delta-chip" +
-          (absDelta > 0
-            ? " metric-card__delta-chip--up"
-            : " metric-card__delta-chip--down");
-
-        deltaNode = (
-          <div className="metric-card__delta-row">
-            <span className={chipClass}>
-              {absDelta > 0 ? "+" : ""}
-              {formatDelta(absDelta, latest.unit)}{" "}
-              {relPct != null && (
-                <>
-                  (
-                  {relPct > 0 ? "+" : ""}
-                  {relPct.toFixed(1)}%)
-                </>
-              )}
-              <span className="metric-card__delta-label">
-                {" "}
-                vs previous rate
-              </span>
-            </span>
-          </div>
-        );
-      }
-    }
-  } else {
-    // All other metrics (including rentals): generic period-over-period change.
-    const hasPrev = !!prev && Number.isFinite(prev.value);
-    const momPct =
-      latest.mom_pct != null
-        ? latest.mom_pct
-        : hasPrev && prev
-        ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
-        : null;
-
-    if (hasPrev && momPct != null) {
-      const absDelta = latest.value - prev!.value;
-      const chipClass =
-        "metric-card__delta-chip" +
-        (momPct > 0
-          ? " metric-card__delta-chip--up"
-          : momPct < 0
-          ? " metric-card__delta-chip--down"
-          : "");
-
-      const label = isQuarterlyRental ? "QoQ" : "MoM";
-
-      deltaNode = (
-        <div className="metric-card__delta-row">
-          <span className={chipClass}>
-            {absDelta > 0 ? "+" : ""}
-            {formatDelta(absDelta, latest.unit)}{" "}
-            {momPct != null && (
-              <>
-                (
-                {momPct > 0 ? "+" : ""}
-                {momPct.toFixed(1)}%)
-              </>
-            )}
-            <span className="metric-card__delta-label"> {label}</span>
-          </span>
-        </div>
-      );
-    }
-  }
-
-  let yoyNode: React.ReactNode = null;
-  if (!isVacancy && yoyPct != null) {
-    yoyNode = (
-      <div className={yoyClass}>
-        YoY: {yoyPct > 0 ? "+" : ""}
-        {yoyPct.toFixed(1)}%
       </div>
     );
   }
 
+  // ----- Y-axis bounds with "±1 step" logic -----
+  let yMin: number | undefined;
+  let yMax: number | undefined;
+  let interval: number | undefined;
+
+  const rawMin = Math.min(...numeric);
+  const rawMax = Math.max(...numeric);
+
+  if (rawMin === rawMax) {
+    // Flat series: pick a reasonable step based on magnitude
+    const base = Math.abs(rawMin) || 1;
+    const rough = base / 3;
+    const stepSize = niceStep(rough);
+    interval = stepSize;
+
+    let min = rawMin - stepSize;
+    let max = rawMax + stepSize;
+
+    if (clampYMinToZero) {
+      min = Math.max(0, min);
+    }
+
+    yMin = min;
+    yMax = max;
+  } else {
+    const range = rawMax - rawMin;
+    const targetTicks = 5;
+    const rough = range / (targetTicks - 1 || 1);
+    const stepSize = niceStep(rough);
+    interval = stepSize;
+
+    const niceMin = Math.floor(rawMin / stepSize) * stepSize;
+    const niceMax = Math.ceil(rawMax / stepSize) * stepSize;
+
+    let min = niceMin - stepSize; // one extra step below
+    let max = niceMax + stepSize; // one extra step above
+
+    if (clampYMinToZero) {
+      min = Math.max(0, min);
+    }
+
+    yMin = min;
+    yMax = max;
+  }
+
+  const option: any = {
+    grid: { left: 40, right: 16, top: 8, bottom: 28 },
+    tooltip: {
+      trigger: "axis",
+      formatter: (params: any) => {
+        const p = Array.isArray(params) ? params[0] : params;
+        const axisValue = p && p.axisValue ? String(p.axisValue) : "";
+        const val =
+          p && typeof p.data === "number" ? (p.data as number) : NaN;
+        if (Number.isNaN(val)) return axisValue;
+
+        let formatted: string;
+        if (isPercentScale) {
+          formatted = `${val.toFixed(2)}%`;
+        } else if (typeof tooltipValueFormatter === "function") {
+          // Use tooltip-specific formatter if provided
+          formatted = tooltipValueFormatter(val);
+        } else if (typeof valueFormatter === "function") {
+          // Fallback to axis formatter
+          formatted = valueFormatter(val);
+        } else {
+          formatted = val.toFixed(2);
+        }
+
+        return `${axisValue}<br/>${formatted}`;
+      },
+    },
+
+    xAxis: {
+      type: "category",
+      data: x,
+      axisLine: { lineStyle: { opacity: 0.4 } },
+      axisLabel: { fontSize: 10 },
+    },
+    yAxis: {
+      type: "value",
+      name: valueAxisLabel ?? "",
+      min: yMin,
+      max: yMax,
+      interval,
+      axisLine: { lineStyle: { opacity: 0.4 } },
+      splitLine: { lineStyle: { opacity: 0.2 } },
+      axisLabel: {
+        fontSize: 10,
+        formatter: (val: number) => {
+          if (Number.isNaN(val)) return "";
+          if (isPercentScale) {
+            return `${val.toFixed(0)}%`;
+          }
+          if (typeof valueFormatter === "function") {
+            return valueFormatter(val);
+          }
+          return val.toFixed(0);
+        },
+      },
+    },
+    series: [
+      {
+        type: "line",
+        data: y,
+        showSymbol: false,
+        connectNulls: true,
+        smooth: !step,
+        step: step ? "end" : undefined,
+      },
+    ],
+  };
+
   return (
-    <div className="metric-card">
-      <div className="metric-card__title">
-        {titleOverride ?? labelForMetric(metric)}
-      </div>
-      <div className="metric-card__value">
-        {metric === "rent_level" && latest.unit === "cad"
-          ? formatRentLevelValue(latestVal)
-          : formatValue(latestVal, latest.unit)}
-      </div>
-
-      {deltaNode}
-
-      {yoyNode}
+    <div className="chart-panel">
+      <div className="chart-panel__title">{title}</div>
+      <ReactECharts
+        option={option}
+        notMerge
+        lazyUpdate
+        style={{ width: "100%", height: 190 }}
+      />
     </div>
   );
 };
