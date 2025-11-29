@@ -18,8 +18,8 @@ interface Props {
    */
   treatAsPercentScale?: boolean;
   /**
-   * For percent-style series, clamp the y-axis minimum at 0
-   * (e.g. policy rate, mortgage rate).
+   * Clamp the y-axis minimum at 0
+   * (e.g. policy rate, CPI, HPI).
    */
   clampYMinToZero?: boolean;
 }
