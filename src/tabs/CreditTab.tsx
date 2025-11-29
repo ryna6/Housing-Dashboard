@@ -56,7 +56,7 @@ const CREDIT_METRIC_CONFIGS: Record<CreditView, CreditMetricConfig[]> = {
     },
     {
       metric: "household_mortgage_share",
-      title: "Mortgage share of household credit",
+      title: "Mortgage share of household loans",
       treatAsPercent: true,
     },
     {
