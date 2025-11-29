@@ -186,7 +186,7 @@ def _build_metric_rows(
         rows.append(
             PanelRow(
                 date=dt,
-                region="ca",
+                region="canada",
                 segment=segment,
                 metric=metric,
                 value=round(val, 2),
