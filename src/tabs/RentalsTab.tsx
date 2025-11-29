@@ -69,9 +69,17 @@ function formatCurrencyDetailed(value: number): string {
 }
 
 /**
- * Simple formatter for price-to-rent ratios, e.g. "23.4 yrs".
+ * Axis formatter for price-to-rent ratios, e.g. "16 yrs".
+ * (No trailing .0 on the y-axis.)
  */
-function formatYears(value: number): string {
+function formatYearsAxis(value: number): string {
+  return `${value.toFixed(0)} yrs`;
+}
+
+/**
+ * Tooltip formatter for price-to-rent ratios, e.g. "16.3 yrs".
+ */
+function formatYearsTooltip(value: number): string {
   return `${value.toFixed(1)} yrs`;
 }
 
@@ -294,6 +302,7 @@ export const RentalsTab: React.FC = () => {
           series={priceToRentSeries}
           valueKey="value"
           valueFormatter={formatYears}
+          tooltipValueFormatter={formatYearsTooltip}
           clampYMinToZero
         />
         <ChartPanel
