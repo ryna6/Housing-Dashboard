@@ -151,7 +151,7 @@ export const RentalsTab: React.FC = () => {
         (p) =>
           p.metric === "rent_level" &&
           p.region === region &&
-          p.segment === "2bd"
+          p.segment === bedroom
       ),
       10
     );
@@ -177,7 +177,7 @@ export const RentalsTab: React.FC = () => {
         (p) =>
           p.metric === "price_to_rent" &&
           p.region === region &&
-          p.segment === bedroom
+          p.segment === "2bd"
       ),
       10
     );
