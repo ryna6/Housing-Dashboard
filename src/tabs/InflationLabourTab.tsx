@@ -127,21 +127,25 @@ export const InflationLabourTab: React.FC = () => {
           title="Headline CPI"
           series={headlineSeries}
           valueKey="value"
+          clampYMinToZero
         />
         <ChartPanel
           title="Owned accommodation CPI"
           series={shelterSeries}
           valueKey="value"
+          clampYMinToZero
         />
         <ChartPanel
           title="Rent CPI"
           series={rentSeries}
           valueKey="value"
+          clampYMinToZero
         />
         <ChartPanel
           title="Wage index"
           series={wageSeries}
           valueKey="value"
+          clampYMinToZero
         />
         <ChartPanel
           title="Unemployment rate"
