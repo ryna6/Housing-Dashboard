@@ -243,17 +243,20 @@ export const PricesTab: React.FC = () => {
           title="Benchmark HPI"
           series={benchmarkSeries}
           valueKey="value"
+          clampYMinToZero
         />
         <ChartPanel
           title={`${getHousingTypeLabel(housingType)} HPI`}
           series={hpiTypeSeries}
           valueKey="value"
+          clampYMinToZero
         />
         <ChartPanel
           title={`${getHousingTypeLabel(housingType)} average price`}
           series={avgPriceSeries}
           valueKey="value"
           valueFormatter={formatCompactCurrency}
+          clampYMinToZero
         />
       </section>
     </div>
