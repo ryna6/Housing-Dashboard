@@ -62,6 +62,11 @@ function formatValue(value: number, unit: string): string {
   if (unit === "cad") {
     const abs = Math.abs(value);
 
+    if (abs >= 1_000_000_000_000) {
+      // Trillions
+      return `$${(value / 1_000_000_000_000).toFixed(1)}T`;
+    }
+
     if (abs >= 1_000_000_000) {
       // Billions
       return `$${(value / 1_000_000_000).toFixed(2)}B`;
