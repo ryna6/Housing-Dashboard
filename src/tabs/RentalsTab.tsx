@@ -215,9 +215,13 @@ export const RentalsTab: React.FC = () => {
 
       {/* Controls: city + bedroom type */}
       <div className="tab__controls">
-        <div className="tab__region">
+        <div className="tab__region-label">
           <span>City:</span>
-          <select value={city} onChange={handleCityChange}>
+          <select 
+            className="tab__regions-select"
+            value={city} 
+            onChange={handleCityChange}
+          >
             {CITY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
