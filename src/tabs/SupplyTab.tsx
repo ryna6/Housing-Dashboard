@@ -27,7 +27,7 @@ const CARD_TITLES: Record<string, string> = {
   housing_starts: "Housing starts",
   under_construction: "Under construction",
   completions: "Completions",
-  investment_construction: "Residential construction investment",
+  investment_construction: "Construction investment",
   vacancy_rate: "Rental vacancy rate",
 };
 
@@ -187,9 +187,7 @@ export const SupplyTab: React.FC = () => {
         <h1 className="tab__title">Supply</h1>
         <p className="tab__subtitle">
           Housing starts, units under construction, completions, residential
-          construction investment, and rental vacancy rate (StatCan). Housing
-          pipeline metrics can be viewed for total residential, single detached,
-          row, or apartment dwellings.
+          construction investment, and rental vacancy rate (Statistics Canada)
         </p>
       </header>
 
@@ -258,7 +256,7 @@ export const SupplyTab: React.FC = () => {
           clampYMinToZero
         />
         <ChartPanel
-          title={`Residential construction investment — ${housingTypeLabel}`}
+          title={`Construction investment — ${housingTypeLabel}`}
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCurrencyBillions}
