@@ -210,8 +210,7 @@ export const CreditTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Credit</h1>
         <p className="tab__subtitle">
-          Household, business, and corporate credit and funding (Statistics
-          Canada)
+          Household, business, and corporate credit & debt (Statistics Canada)
         </p>
 
         <div className="tab__controls tab__controls--inline">
