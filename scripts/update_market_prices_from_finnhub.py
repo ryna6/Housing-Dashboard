@@ -10,6 +10,7 @@ from urllib.request import urlopen
 
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
+FINNHUB_API_KEY = "d4d73mhr01qovljoddigd4d73mhr01qovljoddj0"
 FINNHUB_BASE_URL = "https://finnhub.io/api/v1/stock/candle"
 FINNHUB_RESOLUTION = "M"
 FINNHUB_COUNT = 500  # last 500 months is plenty
