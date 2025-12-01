@@ -10,8 +10,18 @@ from typing import Dict, List, Optional
 import urllib.request
 from urllib.error import HTTPError, URLError
 
-# ⬅️ Adjust this import to wherever PanelRow is defined in your repo
-from .panel import PanelRow  # e.g. scripts/panel.py
+@dataclass
+class PanelRow:
+    date: str          # YYYY-MM-DD (first of month)
+    region: str
+    segment: str
+    metric: str
+    value: float
+    unit: str
+    source: str
+    mom_pct: Optional[float]
+    yoy_pct: Optional[float]
+    ma3: Optional[float]
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
