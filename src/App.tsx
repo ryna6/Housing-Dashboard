@@ -59,12 +59,7 @@ const App: React.FC = () => {
       case "credit":
         return <CreditTab />;
       case "market":
-        return (
-          <PlaceholderTab
-            title="Market"
-            subtitle="Equity and credit spread proxies (coming soon)."
-          />
-        );
+        return <MarketTab />;
       case "rentals":
         return <RentalsTab />;
       default:
