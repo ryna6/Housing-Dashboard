@@ -12,7 +12,7 @@ from Rentals import generate_rentals
 from RatesBonds import generate_rates
 from InflationLabour import generate_inflation
 from Credit import generate_credit
-from Market import generate_risk
+from Market import generate_market
 from Supply import generate_supply
 
 
