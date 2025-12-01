@@ -10,6 +10,9 @@ from typing import Dict, List, Optional
 import urllib.request
 from urllib.error import HTTPError, URLError
 
+DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
+RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
+
 @dataclass
 class PanelRow:
     date: str          # YYYY-MM-DD (first of month)
