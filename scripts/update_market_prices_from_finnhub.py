@@ -10,15 +10,13 @@ from urllib.request import urlopen
 
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
-FINNHUB_API_KEY = "d4d73mhr01qovljoddigd4d73mhr01qovljoddj0"
 FINNHUB_BASE_URL = "https://finnhub.io/api/v1/stock/candle"
 FINNHUB_RESOLUTION = "M"
 FINNHUB_COUNT = 500  # last 500 months is plenty
 
-# You can override these via env vars if your symbol mapping differs
-TSX_INDEX_SYMBOL = os.getenv("^GSPTSE")
-XRE_ETF_SYMBOL = os.getenv("XRE.TO")
-
+# Hard-code the symbols (these are not secrets)
+TSX_INDEX_SYMBOL = "^GSPTSE"
+XRE_ETF_SYMBOL = "XRE.TO"
 
 def fetch_candles(symbol: str, api_key: str) -> dict:
     """
