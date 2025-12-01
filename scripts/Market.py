@@ -13,6 +13,7 @@ from urllib.error import HTTPError, URLError
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
+
 @dataclass
 class PanelRow:
     date: str          # YYYY-MM-DD (first of month)
@@ -25,80 +26,77 @@ class PanelRow:
     mom_pct: Optional[float]
     yoy_pct: Optional[float]
     ma3: Optional[float]
-    
-# StatCan Web Data Service endpoint for vectors :contentReference[oaicite:1]{index=1}
-STATCAN_WDS_URL = (
-    "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods"
-)
-
-# ---- StatCan vectors ----
-# GDP vector is intentionally left as a placeholder because it depends on
-# your exact choice of "Canada / All industries / Real chained (2017) dollars"
-# in table 36-10-0434-01.
-GDP_VECTOR_ID = "v65201210"  
-
-# Money supply (table 10-10-0116-01), monthly, millions of dollars
-M2_VECTOR_ID = "v41552796"   # M2 (gross)
-M2PP_VECTOR_ID = "v41552801"  # M2++ (gross)
-
-STATCAN_LATEST_N = 600  # enough to cover decades of monthly data
 
 
-def _statcan_vector_id_to_int(vec: str) -> int:
-    """Convert 'v41552796' -> 41552796."""
-    v = vec.lower().lstrip("v")
-    return int(v)
+DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
+RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
+
+# ---- StatCan configuration ----
+
+# Real GDP at basic prices, chain-linked, monthly, Canada, all industries.
+# You've already set this to the correct vector ID.
+GDP_VECTOR_ID = "v65201210"
+
+# Money supply vectors from table 10-10-0116-01:
+#  - M2 (gross)
+#  - M2++ (gross)
+M2_VECTOR_ID = "v41552796"
+M2PP_VECTOR_ID = "v41552801"
 
 
-def fetch_statcan_vectors(
-    vector_ids: List[str], latest_n: int = STATCAN_LATEST_N
-) -> Dict[str, Dict[str, float]]:
+def _statcan_wds_url(vector_ids: List[str]) -> str:
     """
-    Call StatCan WDS getDataFromVectorsAndLatestNPeriods for a set of vectors.
+    Build a StatCan Web Data Service URL for a list of vector IDs.
+
+    We use the JSON format and request all available data for each vector.
+    """
+    base = "https://www150.statcan.gc.ca/t1/wds/en/grp/wds/grp?"
+    # StatCan expects a JSON-like array string of vector IDs
+    vecs = ",".join(vector_ids)
+    return f"{base}vectorIds={vecs}"
+
+
+def fetch_statcan_vectors(vector_ids: List[str]) -> Dict[str, Dict[str, float]]:
+    """
+    Fetch one or more StatCan vectors via WDS.
 
     Returns:
         {
-          "v41552796": {"YYYY-MM-01": value_in_original_units, ...},
-          ...
+          "v12345": {"YYYY-MM-01": value, ...},
+          "v67890": {"YYYY-MM-01": value, ...},
         }
     """
-    payload = [
-        {"vectorId": _statcan_vector_id_to_int(vec), "latestN": latest_n}
-        for vec in vector_ids
-    ]
+    if not vector_ids:
+        return {}
 
-    req = urllib.request.Request(
-        STATCAN_WDS_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-    )
+    url = _statcan_wds_url(vector_ids)
 
+    req = urllib.request.Request(url, headers={"User-Agent": "housing-dashboard"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode("utf-8")
     except (HTTPError, URLError) as e:
-        print(f"[Market] StatCan WDS request failed: {e}")
+        print(f"[Market] StatCan WDS fetch failed: {e}")
         return {}
 
     try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        print("[Market] Failed to parse StatCan WDS JSON response")
+        payload = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"[Market] Failed to decode StatCan WDS response: {e}")
         return {}
 
     result: Dict[str, Dict[str, float]] = {}
-    for item in parsed:
-        if item.get("status") != "SUCCESS":
+    # StatCan WDS returns a list of "object" items, each with a vectorId and points.
+    for obj in payload.get("object", []):
+        vec_id = obj.get("vectorId")
+        if vec_id is None:
             continue
-        obj = item.get("object") or {}
-        vec_id_int = obj.get("vectorId")
-        if vec_id_int is None:
-            continue
-        vec_id_str = f"v{vec_id_int}"
+        vec_id_str = f"v{vec_id}"
+
         series: Dict[str, float] = {}
-        for dp in obj.get("vectorDataPoint", []):
-            ref_per = dp.get("refPer")
-            value_str = dp.get("value")
+        for point in obj.get("points", []):
+            ref_per = point.get("refPer")  # e.g. "2024-09-01"
+            value_str = point.get("value")
             if not ref_per or value_str in (None, "", "NaN", "nan"):
                 continue
             try:
@@ -123,7 +121,7 @@ def _read_finnhub_candles(json_path: Path, label: str) -> Dict[str, float]:
     Read Finnhub candles (t, c arrays) and return monthly close series:
     { 'YYYY-MM-01': close_price, ... }
 
-    Expects raw JSON saved from stock/candle endpoint. :contentReference[oaicite:2]{index=2}
+    Expects raw JSON saved from stock/candle endpoint.
     """
     if not json_path.exists():
         print(f"[Market] Warning: missing Finnhub raw file for {label}: {json_path}")
@@ -131,45 +129,30 @@ def _read_finnhub_candles(json_path: Path, label: str) -> Dict[str, float]:
 
     try:
         raw = json.loads(json_path.read_text())
-    except json.JSONDecodeError:
-        print(f"[Market] Warning: invalid JSON in {json_path}")
+    except json.JSONDecodeError as e:
+        print(f"[Market] Failed to parse {label} Finnhub JSON: {e}")
         return {}
 
-    status = raw.get("s")
-    if status not in ("ok", "no_data"):
-        print(f"[Market] Warning: Finnhub status for {label} is {status!r}")
-        return {}
+    t = raw.get("t") or []
+    c = raw.get("c") or []
 
-    t_list = raw.get("t") or []
-    c_list = raw.get("c") or []
-    if not t_list or not c_list or len(t_list) != len(c_list):
-        print(f"[Market] Warning: candle length mismatch for {label}")
+    if not isinstance(t, list) or not isinstance(c, list) or len(t) != len(c):
+        print(f"[Market] Unexpected Finnhub structure in {json_path}")
         return {}
 
     series: Dict[str, float] = {}
-    for ts, close in zip(t_list, c_list):
+    for ts, close in zip(t, c):
         try:
-            # Finnhub timestamps are seconds since epoch (UTC) :contentReference[oaicite:3]{index=3}
-            dt = datetime.utcfromtimestamp(ts)
-        except Exception:
+            ts_int = int(ts)
+            close_val = float(close)
+        except (TypeError, ValueError):
             continue
+
+        dt = datetime.utcfromtimestamp(ts_int)
         date_str = dt.strftime("%Y-%m-01")
-        series[date_str] = float(close)
+        series[date_str] = close_val
 
     return series
-
-
-def _normalize_to_index(series: Dict[str, float]) -> Dict[str, float]:
-    """
-    Normalize a price series to 100 at the first available month.
-    """
-    if not series:
-        return {}
-    dates_sorted = sorted(series.keys())
-    base_value = series[dates_sorted[0]]
-    if base_value == 0:
-        return {}
-    return {d: (series[d] / base_value) * 100.0 for d in dates_sorted}
 
 
 def _build_panel_rows_for_series(
@@ -179,18 +162,18 @@ def _build_panel_rows_for_series(
     series: Dict[str, float],
 ) -> List[PanelRow]:
     """
-    Turn a {date: value} series into PanelRow list with mom_pct, yoy_pct, ma3.
+    Turn a date->value series into PanelRow list with MoM, YoY, MA3.
     """
     if not series:
         return []
 
-    dates_sorted = sorted(series.keys())
-    values = [series[d] for d in dates_sorted]
+    # Sorted by date ascending
+    items = sorted(series.items(), key=lambda kv: kv[0])
+    dates = [d for (d, _) in items]
+    values = [v for (_, v) in items]
+
     rows: List[PanelRow] = []
-
-    for i, date_str in enumerate(dates_sorted):
-        value = values[i]
-
+    for i, (date_str, value) in enumerate(zip(dates, values)):
         mom_pct: Optional[float] = None
         if i > 0 and values[i - 1] != 0:
             mom_pct = (value / values[i - 1] - 1.0) * 100.0
@@ -205,7 +188,7 @@ def _build_panel_rows_for_series(
         rows.append(
             PanelRow(
                 date=date_str,
-                region="ca",
+                region="canada",
                 segment="market",
                 metric=metric_id,
                 value=round(value, 2),
@@ -233,8 +216,9 @@ def _generate_gdp_rows() -> List[PanelRow]:
 
     statcan_data = fetch_statcan_vectors([GDP_VECTOR_ID])
     gdp_series = statcan_data.get(GDP_VECTOR_ID, {})
-    # Convert from millions of chained dollars to plain dollars (x 1,000,000). :contentReference[oaicite:4]{index=4}
+    # Convert from millions of chained dollars to plain dollars (x 1,000,000).
     gdp_dollars = {d: v * 1_000_000.0 for d, v in gdp_series.items()}
+
     return _build_panel_rows_for_series(
         metric_id="ca_real_gdp",
         unit="cad",
@@ -249,7 +233,7 @@ def _generate_money_rows() -> List[PanelRow]:
     m2_series = statcan_data.get(M2_VECTOR_ID, {})
     m2pp_series = statcan_data.get(M2PP_VECTOR_ID, {})
 
-    # Convert from millions of dollars to dollars (x 1,000,000). :contentReference[oaicite:5]{index=5}
+    # Convert from millions of dollars to dollars (x 1,000,000).
     m2_dollars = {d: v * 1_000_000.0 for d, v in m2_series.items()}
     m2pp_dollars = {d: v * 1_000_000.0 for d, v in m2pp_series.items()}
 
@@ -274,47 +258,57 @@ def _generate_money_rows() -> List[PanelRow]:
 
 
 def _generate_tsx_rows() -> List[PanelRow]:
-    tsx_raw_path = RAW_DATA_DIR / "tsx_finnhub.json"
-    tsx_close_series = _read_finnhub_candles(tsx_raw_path, label="TSX Composite")
-    if not tsx_close_series:
-        return []
-    tsx_index_series = _normalize_to_index(tsx_close_series)
+    tsx_path = RAW_DATA_DIR / "tsx_finnhub.json"
+    tsx_series = _read_finnhub_candles(tsx_path, "TSX Composite")
 
     return _build_panel_rows_for_series(
         metric_id="tsx_composite_index",
         unit="index",
         source="finnhub_tsx_composite",
-        series=tsx_index_series,
+        series=tsx_series,
     )
 
 
 def _generate_xre_rows() -> List[PanelRow]:
-    xre_raw_path = RAW_DATA_DIR / "xre_finnhub.json"
-    xre_close_series = _read_finnhub_candles(xre_raw_path, label="XRE ETF")
-    if not xre_close_series:
+    xre_path = RAW_DATA_DIR / "xre_finnhub.json"
+    xre_series_raw = _read_finnhub_candles(xre_path, "XRE ETF")
+
+    # Normalize to an index (base = first close = 100.0)
+    if not xre_series_raw:
         return []
-    xre_index_series = _normalize_to_index(xre_close_series)
+
+    items = sorted(xre_series_raw.items(), key=lambda kv: kv[0])
+    if not items:
+        return []
+
+    base_close = items[0][1]
+    if base_close == 0:
+        return []
+
+    index_series: Dict[str, float] = {
+        d: (v / base_close) * 100.0 for (d, v) in items
+    }
 
     return _build_panel_rows_for_series(
         metric_id="xre_price_index",
         unit="index",
-        source="finnhub_xre_etf",
-        series=xre_index_series,
+        source="finnhub_xre",
+        series=index_series,
     )
 
 
 def generate_market() -> List[PanelRow]:
     """
-    Generate all Market tab data:
+    Main entry point: generate all PanelRow records for the Market tab.
 
-    - ca_real_gdp
-    - tsx_composite_index
-    - xre_price_index
-    - ca_m2
-    - ca_m2pp
+    Metrics:
+      - ca_real_gdp         (StatCan 36-10-0434-01)
+      - tsx_composite_index (Finnhub)
+      - xre_price_index     (Finnhub, normalized to 100 at first obs)
+      - ca_m2               (StatCan 10-10-0116-01, v41552796)
+      - ca_m2pp             (StatCan 10-10-0116-01, v41552801)
     """
     rows: List[PanelRow] = []
-
     rows.extend(_generate_gdp_rows())
     rows.extend(_generate_tsx_rows())
     rows.extend(_generate_xre_rows())
