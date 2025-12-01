@@ -24,7 +24,7 @@ class PanelRow:
     ma3: Optional[float]
 
 
-def generate_market_risk() -> List[PanelRow]:
+def generate_market() -> List[PanelRow]:
     """
     Placeholder generator for the Market tab.
 
@@ -42,7 +42,7 @@ def write_json(path: Path, rows: List[PanelRow]) -> None:
 
 def main() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    rows = generate_market_risk()
+    rows = generate_market()
     out_path = DATA_DIR / "market.json"
     write_json(out_path, rows)
     print(f"Wrote {len(rows)} market rows to {out_path}")
