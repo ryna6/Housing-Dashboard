@@ -1,11 +1,10 @@
 // src/tabs/MarketTab.tsx
 import React, { useMemo } from "react";
-import { useTabData } from "../hooks/useTabData";
-// ⬅️ Adjust these imports to your actual components / utils
-import { ChartPanel } from "../components/ChartPanel";
+import type { PanelPoint, RegionCode } from "../data/types";
 import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
-import { LoadingState } from "../components/LoadingState";
-import { ErrorState } from "../components/ErrorState";
+import { ChartPanel } from "../components/ChartPanel";
+import { getLatestByMetric } from "../data/dataClient";
+import { useTabData } from "../hooks/useTabData";
 
 type PanelPoint = {
   date: string;      // "YYYY-MM-01"
