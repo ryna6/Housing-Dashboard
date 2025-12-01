@@ -1,94 +1,67 @@
 // src/tabs/MarketTab.tsx
 import React, { useMemo } from "react";
 import type { PanelPoint, RegionCode } from "../data/types";
-import type { MetricSnapshotCard } from "../components/MetricSnapshotCard";
+import type { MetricSnapshot } from "../components/MetricSnapshotCard";
+import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
-import { useTabData } from "../useTabData";
+import { useTabData } from "./useTabData";
 
-type PanelPoint = {
-  date: string;      // "YYYY-MM-01"
-  region: string;    // "ca"
-  segment: string;   // "market"
-  metric: string;
-  value: number;
-  unit: string;      // "cad" | "index"
-  source: string;
-  mom_pct: number | null;
-  yoy_pct: number | null;
-  ma3: number | null;
-};
-
-const REGION = "ca";
+const REGION: RegionCode = "canada";
 const SEGMENT = "market";
 
-const METRIC_GDP = "ca_real_gdp";
-const METRIC_TSX = "tsx_composite_index";
-const METRIC_XRE = "xre_price_index";
-const METRIC_M2 = "ca_m2";
-const METRIC_M2PP = "ca_m2pp";
+const HEADLINE_METRICS: string[] = [
+  "ca_real_gdp",
+  "tsx_composite_index",
+  "xre_price_index",
+];
 
-function filterSeries(
-  points: PanelPoint[] | undefined,
-  metric: string
-): PanelPoint[] {
-  if (!points) return [];
-  return points
-    .filter(
-      (p) =>
-        p.segment === SEGMENT &&
-        p.region === REGION &&
-        p.metric === metric &&
-        p.value != null
-    )
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
+const CARD_TITLES: Record<string, string> = {
+  ca_real_gdp: "Real GDP (Canada)",
+  tsx_composite_index: "S&P/TSX Composite index",
+  xre_price_index: "XRE real estate ETF index",
+};
 
-function getLatest(points: PanelPoint[] | undefined, metric: string) {
-  const series = filterSeries(points, metric);
-  return series.length ? series[series.length - 1] : undefined;
-}
+function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
+  if (series.length <= 1) return series;
 
-function trimLastYears(
-  series: PanelPoint[],
-  years: number
-): PanelPoint[] {
-  if (!series.length) return series;
-  const cutoff = new Date();
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const last = new Date(sorted[sorted.length - 1].date);
+  const cutoff = new Date(last);
   cutoff.setFullYear(cutoff.getFullYear() - years);
 
-  return series.filter((p) => new Date(p.date) >= cutoff);
+  return sorted.filter((p) => {
+    const d = new Date(p.date);
+    return d >= cutoff;
+  });
 }
 
-function formatCompactCurrency(value: number | null | undefined): string {
-  if (value == null || isNaN(value)) return "—";
+function formatCurrencyCompact(value: number): string {
   const abs = Math.abs(value);
-  let scaled = value;
-  let suffix = "";
-  if (abs >= 1e12) {
-    scaled = value / 1e12;
-    suffix = "T";
-  } else if (abs >= 1e9) {
-    scaled = value / 1e9;
-    suffix = "B";
-  } else if (abs >= 1e6) {
-    scaled = value / 1e6;
-    suffix = "M";
-  } else if (abs >= 1e3) {
-    scaled = value / 1e3;
-    suffix = "K";
+  if (!Number.isFinite(value)) return "–";
+
+  if (abs >= 1_000_000_000_000) {
+    return `$${(value / 1_000_000_000_000).toFixed(1)}T`;
   }
-  const decimals = Math.abs(scaled) >= 10 ? 0 : 1;
-  return `$${scaled.toFixed(decimals)}${suffix}`;
+  if (abs >= 1_000_000_000) {
+    return `$${(value / 1_000_000_000).toFixed(1)}B`;
+  }
+  if (abs >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (abs >= 1_000) {
+    return `$${(value / 1_000).toFixed(0)}K`;
+  }
+  return `$${value.toFixed(0)}`;
 }
 
-function formatIndex(value: number | null | undefined): string {
-  if (value == null || isNaN(value)) return "—";
-  return value.toFixed(value >= 100 ? 0 : 1);
+function formatIndex(value: number): string {
+  if (!Number.isFinite(value)) return "–";
+  return value >= 100 ? value.toFixed(0) : value.toFixed(1);
 }
 
-function formatPct(value: number | null | undefined): string {
-  if (value == null || isNaN(value)) return "—";
+function formatPercent(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "–";
   const decimals = Math.abs(value) >= 10 ? 1 : 2;
   return `${value.toFixed(decimals)}%`;
 }
@@ -96,202 +69,176 @@ function formatPct(value: number | null | undefined): string {
 export const MarketTab: React.FC = () => {
   const { data, loading, error } = useTabData("market");
 
-  const gdpLatest = useMemo(
-    () => getLatest(data as PanelPoint[] | undefined, METRIC_GDP),
-    [data]
-  );
-  const tsxLatest = useMemo(
-    () => getLatest(data as PanelPoint[] | undefined, METRIC_TSX),
-    [data]
-  );
-  const xreLatest = useMemo(
-    () => getLatest(data as PanelPoint[] | undefined, METRIC_XRE),
-    [data]
-  );
-  const m2Latest = useMemo(
-    () => getLatest(data as PanelPoint[] | undefined, METRIC_M2),
-    [data]
-  );
-  const m2ppLatest = useMemo(
-    () => getLatest(data as PanelPoint[] | undefined, METRIC_M2PP),
+  const snapshots: MetricSnapshot[] = useMemo(() => {
+    if (!data || !data.length) return [];
+    return getLatestByMetric(data, REGION, HEADLINE_METRICS, SEGMENT);
+  }, [data]);
+
+  const moneySnapshots: MetricSnapshot[] = useMemo(() => {
+    if (!data || !data.length) return [];
+    return getLatestByMetric(data, REGION, ["ca_m2", "ca_m2pp"], SEGMENT);
+  }, [data]);
+
+  const gdpSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        (data || []).filter(
+          (p) =>
+            p.metric === "ca_real_gdp" &&
+            p.region === REGION &&
+            p.segment === SEGMENT
+        ),
+        15
+      ),
     [data]
   );
 
-  const gdpSeries = useMemo(
-    () => trimLastYears(filterSeries(data as PanelPoint[] | undefined, METRIC_GDP), 15),
-    [data]
-  );
-  const tsxSeries = useMemo(
-    () => trimLastYears(filterSeries(data as PanelPoint[] | undefined, METRIC_TSX), 15),
-    [data]
-  );
-  const xreSeries = useMemo(
-    () => trimLastYears(filterSeries(data as PanelPoint[] | undefined, METRIC_XRE), 15),
-    [data]
-  );
-  const m2Series = useMemo(
-    () => trimLastYears(filterSeries(data as PanelPoint[] | undefined, METRIC_M2), 15),
-    [data]
-  );
-  const m2ppSeries = useMemo(
-    () => trimLastYears(filterSeries(data as PanelPoint[] | undefined, METRIC_M2PP), 15),
+  const tsxSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        (data || []).filter(
+          (p) =>
+            p.metric === "tsx_composite_index" &&
+            p.region === REGION &&
+            p.segment === SEGMENT
+        ),
+        15
+      ),
     [data]
   );
 
-  const points = data as PanelPoint[] | undefined;
-  if (!points || !points.length) {
-    return (
-      <div className="p-4 text-sm text-muted-foreground">
-        No Market data available. Make sure you’ve run the StatCan + Finnhub
-        generators.
-      </div>
-    );
-  }
+  const xreSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        (data || []).filter(
+          (p) =>
+            p.metric === "xre_price_index" &&
+            p.region === REGION &&
+            p.segment === SEGMENT
+        ),
+        15
+      ),
+    [data]
+  );
 
-  const moneySeriesCombined = [
-    { id: "M2", series: m2Series },
-    { id: "M2++", series: m2ppSeries },
-  ];
+  const m2ppSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        (data || []).filter(
+          (p) =>
+            p.metric === "ca_m2pp" &&
+            p.region === REGION &&
+            p.segment === SEGMENT
+        ),
+        15
+      ),
+    [data]
+  );
+
+  const hasData = !!data && data.length > 0;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Market</h1>
-        <p className="text-sm text-muted-foreground">
+    <div className="tab">
+      <header className="tab__header">
+        <h1 className="tab__title">Market</h1>
+        <p className="tab__subtitle">
           Macro and market indicators for Canada (GDP, TSX, REITs, money
           supply).
         </p>
-      </div>
+      </header>
 
-      {loading && (
-        <div className="tab__status">Loading market data…</div>
-      )}
+      {loading && <div className="tab__status">Loading market data…</div>}
       {error && (
         <div className="tab__status tab__status--error">
-          Failed to load market metrics: {error}
+          Failed to load market data: {error}
         </div>
       )}
-      
-      {/* Cards */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {/* Real GDP card */}
-        <MetricSnapshotCard
-          title="Real GDP (Canada)"
-          value={formatCompactCurrency(gdpLatest?.value ?? null)}
-          unit="CAD"
-          mom={gdpLatest?.mom_pct ?? null}
-          yoy={gdpLatest?.yoy_pct ?? null}
-          momLabel="MoM"
-          yoyLabel="YoY"
-        />
 
-        {/* TSX Composite index card */}
-        <MetricSnapshotCard
-          title="S&P/TSX Composite index"
-          value={formatIndex(tsxLatest?.value ?? null)}
-          unit="Index"
-          mom={tsxLatest?.mom_pct ?? null}
-          yoy={tsxLatest?.yoy_pct ?? null}
-          momLabel="MoM"
-          yoyLabel="YoY"
-        />
+      {!loading && !error && !hasData && (
+        <div className="tab__status">No market data available.</div>
+      )}
 
-        {/* XRE ETF index card */}
-        <MetricSnapshotCard
-          title="XRE real estate ETF index"
-          value={formatIndex(xreLatest?.value ?? null)}
-          unit="Index"
-          mom={xreLatest?.mom_pct ?? null}
-          yoy={xreLatest?.yoy_pct ?? null}
-          momLabel="MoM"
-          yoyLabel="YoY"
-        />
+      {!loading && !error && hasData && (
+        <>
+          {/* Snapshot cards */}
+          <section className="tab__metrics tab__metrics--wide">
+            {snapshots.map((snapshot) => (
+              <MetricSnapshotCard
+                key={snapshot.metric}
+                snapshot={snapshot}
+                titleOverride={CARD_TITLES[snapshot.metric] ?? undefined}
+              />
+            ))}
 
-        {/* Combined M2 / M2++ card */}
-        <MetricSnapshotCard
-          title="M2 / M2++ money supply"
-          value={`${formatCompactCurrency(m2Latest?.value ?? null)} / ${formatCompactCurrency(
-            m2ppLatest?.value ?? null
-          )}`}
-          unit="CAD"
-          // You can expose both YoY rates in a subtitle or secondary field,
-          // depending on how MetricSnapshotCard is implemented.
-          subtitle={
-            m2Latest?.yoy_pct != null && m2ppLatest?.yoy_pct != null
-              ? `YoY: ${formatPct(m2Latest.yoy_pct)} (M2), ${formatPct(
-                  m2ppLatest.yoy_pct
-                )} (M2++)`
-              : undefined
-          }
-        />
-      </div>
+            {/* Combined M2 / M2++ card */}
+            <div className="metric-card">
+              <div className="metric-card__title">M2 / M2++ money supply</div>
+              <div className="metric-card__value">
+                {(() => {
+                  const m2 = moneySnapshots.find((s) => s.metric === "ca_m2");
+                  const m2pp = moneySnapshots.find(
+                    (s) => s.metric === "ca_m2pp"
+                  );
+                  const v1 = m2 ? m2.latest.value : NaN;
+                  const v2 = m2pp ? m2pp.latest.value : NaN;
+                  return `${formatCurrencyCompact(
+                    v1
+                  )} / ${formatCurrencyCompact(v2)}`;
+                })()}
+              </div>
+              <div className="metric-card__delta-row">
+                {(() => {
+                  const m2 = moneySnapshots.find((s) => s.metric === "ca_m2");
+                  const m2pp = moneySnapshots.find(
+                    (s) => s.metric === "ca_m2pp"
+                  );
+                  const yoy1 = m2?.latest.yoy_pct ?? null;
+                  const yoy2 = m2pp?.latest.yoy_pct ?? null;
+                  if (yoy1 == null && yoy2 == null) return null;
+                  return (
+                    <span className="metric-card__delta-label">
+                      YoY: {formatPercent(yoy1)} (M2),{" "}
+                      {formatPercent(yoy2)} (M2++)
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+          </section>
 
-      {/* Charts */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Real GDP */}
-        <ChartPanel
-          title="Real GDP (Canada, chained 2017 dollars)"
-          series={[
-            {
-              id: "Real GDP",
-              data: gdpSeries,
-              valueKey: "value",
-              dateKey: "date",
-              unit: "cad",
-            },
-          ]}
-          yAxisFormatter={formatCompactCurrency}
-          tooltipValueFormatter={(v: number) => formatCompactCurrency(v)}
-        />
-
-        {/* TSX Composite */}
-        <ChartPanel
-          title="S&P/TSX Composite index"
-          series={[
-            {
-              id: "TSX Composite",
-              data: tsxSeries,
-              valueKey: "value",
-              dateKey: "date",
-              unit: "index",
-            },
-          ]}
-          yAxisFormatter={formatIndex}
-          tooltipValueFormatter={(v: number) => formatIndex(v)}
-        />
-
-        {/* XRE ETF */}
-        <ChartPanel
-          title="XRE real estate ETF index"
-          series={[
-            {
-              id: "XRE ETF",
-              data: xreSeries,
-              valueKey: "value",
-              dateKey: "date",
-              unit: "index",
-            },
-          ]}
-          yAxisFormatter={formatIndex}
-          tooltipValueFormatter={(v: number) => formatIndex(v)}
-        />
-
-        {/* Money supply: M2 vs M2++ */}
-        <ChartPanel
-          title="Money supply: M2 vs M2++"
-          series={moneySeriesCombined.map((s) => ({
-            id: s.id,
-            data: s.series,
-            valueKey: "value",
-            dateKey: "date",
-            unit: "cad",
-          }))}
-          yAxisFormatter={formatCompactCurrency}
-          tooltipValueFormatter={(v: number) => formatCompactCurrency(v)}
-          legend
-        />
-      </div>
+          {/* Charts */}
+          <section className="tab__charts">
+            <ChartPanel
+              title="Real GDP (Canada)"
+              series={gdpSeries}
+              valueKey="value"
+              valueFormatter={formatCurrencyCompact}
+              clampYMinToZero
+            />
+            <ChartPanel
+              title="S&P/TSX Composite index"
+              series={tsxSeries}
+              valueKey="value"
+              valueFormatter={formatIndex}
+              clampYMinToZero
+            />
+            <ChartPanel
+              title="XRE real estate ETF index"
+              series={xreSeries}
+              valueKey="value"
+              valueFormatter={formatIndex}
+              clampYMinToZero
+            />
+            <ChartPanel
+              title="Money supply (M2++)"
+              series={m2ppSeries}
+              valueKey="value"
+              valueFormatter={formatCurrencyCompact}
+              clampYMinToZero
+            />
+          </section>
+        </>
+      )}
     </div>
   );
 };
