@@ -12,7 +12,7 @@ from Rentals import generate_rentals
 from RatesBonds import generate_rates
 from InflationLabour import generate_inflation
 from Credit import generate_credit
-from MarketRisk import generate_market_risk
+from Market import generate_risk
 from Supply import generate_supply
 
 
@@ -40,7 +40,7 @@ def main() -> None:
     rates = generate_rates()
     inflation = generate_inflation()
     credit = generate_credit()
-    market = generate_market_risk()
+    market = generate_risk()
     supply = generate_supply()
     rentals = generate_rentals(prices, inflation)
 
@@ -53,6 +53,7 @@ def main() -> None:
     write_json(DATA_DIR / "rates_bonds.json", rates)
     write_json(DATA_DIR / "inflation_labour.json", inflation)
     write_json(DATA_DIR / "credit.json", credit)
+    write_json(DATA_DIR / "market.json", market)
     write_json(DATA_DIR / "supply.json", supply)
 
 
