@@ -4,7 +4,7 @@ import type { PanelPoint, RegionCode } from "../data/types";
 import type { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
-import { useTabData } from "../hooks/useTabData";
+import { useTabData } from "../useTabData";
 
 type PanelPoint = {
   date: string;      // "YYYY-MM-01"
