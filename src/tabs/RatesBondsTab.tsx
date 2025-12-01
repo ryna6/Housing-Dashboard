@@ -9,7 +9,6 @@ const RATE_METRICS = [
   "policy_rate",
   "mortgage_5y",
   "gov_2y_yield",
-  "gov_5y_yield",
   "gov_10y_yield",
   "mortgage_5y_spread",
 ];
