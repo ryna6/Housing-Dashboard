@@ -15,8 +15,8 @@ FINNHUB_RESOLUTION = "M"
 FINNHUB_COUNT = 500  # last 500 months is plenty
 
 # You can override these via env vars if your symbol mapping differs
-TSX_INDEX_SYMBOL = os.getenv("TSX_INDEX_SYMBOL", "^GSPTSE")
-XRE_ETF_SYMBOL = os.getenv("XRE_ETF_SYMBOL", "XRE.TO")
+TSX_INDEX_SYMBOL = os.getenv("^GSPTSE")
+XRE_ETF_SYMBOL = os.getenv("XRE.TO")
 
 
 def fetch_candles(symbol: str, api_key: str) -> dict:
