@@ -138,9 +138,6 @@ export const MarketTab: React.FC = () => {
     [data]
   );
 
-  if (loading) return <LoadingState />;
-  if (error) return <ErrorState error={error} />;
-
   const points = data as PanelPoint[] | undefined;
   if (!points || !points.length) {
     return (
@@ -167,6 +164,15 @@ export const MarketTab: React.FC = () => {
         </p>
       </div>
 
+      {loading && (
+        <div className="tab__status">Loading market data…</div>
+      )}
+      {error && (
+        <div className="tab__status tab__status--error">
+          Failed to load market metrics: {error}
+        </div>
+      )}
+      
       {/* Cards */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {/* Real GDP card */}
