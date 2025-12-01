@@ -1,7 +1,7 @@
 // src/tabs/MarketTab.tsx
 import React, { useMemo } from "react";
 import type { PanelPoint, RegionCode } from "../data/types";
-import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
+import type { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "../hooks/useTabData";
