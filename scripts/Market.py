@@ -25,10 +25,7 @@ class PanelRow:
     mom_pct: Optional[float]
     yoy_pct: Optional[float]
     ma3: Optional[float]
-
-DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
-RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
-
+    
 # StatCan Web Data Service endpoint for vectors :contentReference[oaicite:1]{index=1}
 STATCAN_WDS_URL = (
     "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods"
