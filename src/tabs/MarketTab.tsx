@@ -1,6 +1,6 @@
 import React from "react";
 
-export const MarketRiskTab: React.FC = () => {
+export const MarketTab: React.FC = () => {
   return (
     <div className="tab">
       <header className="tab__header">
