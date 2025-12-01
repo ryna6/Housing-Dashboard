@@ -40,7 +40,7 @@ def main() -> None:
     rates = generate_rates()
     inflation = generate_inflation()
     credit = generate_credit()
-    market = generate_risk()
+    market = generate_market()
     supply = generate_supply()
     rentals = generate_rentals(prices, inflation)
 
