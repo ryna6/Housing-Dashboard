@@ -20,10 +20,10 @@ const HEADLINE_METRICS: string[] = [
 ];
 
 const CARD_TITLES: Record<string, string> = {
-  ca_real_gdp: "Real GDP (Canada)",
+  ca_real_gdp: "Real GDP",
   tsx_composite_index: "S&P/TSX Composite index",
-  xre_price_index: "XRE real estate ETF index",
-  ca_m2: "Money supply (M2)",
+  xre_price_index: "REIT ETF index",
+  ca_m2: "M2 Money supply",
 };
 
 // Trim a series down to the last N years
@@ -139,8 +139,7 @@ export const MarketTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Market</h1>
         <p className="tab__subtitle">
-          Macro and market indicators for Canada (GDP, TSX, REITs, money
-          supply).
+          Canada GDP, S&P/TSX, Canadian REIT ETF, M2 money supply (Statistics Canada & Finnhub)
         </p>
       </header>
 
@@ -172,7 +171,7 @@ export const MarketTab: React.FC = () => {
           {/* Charts – all trimmed to last 10 years */}
           <section className="tab__charts">
             <ChartPanel
-              title="Real GDP (Canada)"
+              title="Real GDP"
               series={gdpSeries}
               valueKey="value"
               valueFormatter={formatCurrencyCompact}
@@ -186,14 +185,14 @@ export const MarketTab: React.FC = () => {
               clampYMinToZero
             />
             <ChartPanel
-              title="XRE real estate ETF index"
+              title="REIT ETF index"
               series={xreSeries}
               valueKey="value"
               valueFormatter={formatIndex}
               clampYMinToZero
             />
             <ChartPanel
-              title="Money supply (M2)"
+              title="M2 Money supply"
               series={m2Series}
               valueKey="value"
               valueFormatter={formatCurrencyCompact}
