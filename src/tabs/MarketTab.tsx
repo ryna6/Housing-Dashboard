@@ -90,6 +90,8 @@ function formatMoneyTooltip(value: number): string {
 
 function formatIndexTooltip(value: number): string {
   return `${value.toFixed(1)}`; 
+  // Adds more detailed numeric view for index price on the chart
+  return `${value.toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
 }
 
 // Adds more detailed numeric view for index price on the chart
