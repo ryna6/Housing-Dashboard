@@ -204,7 +204,7 @@ export const MarketTab: React.FC = () => {
               title="Real GDP"
               series={gdpSeries}
               valueKey="value"
-              valueFormatter={formatCurrencyDetailed}
+              valueFormatter={formatCurrencyCompact}
               tooltipValueFormatter={formatMoneyTooltip}
               clampYMinToZero
             />
