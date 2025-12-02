@@ -11,7 +11,7 @@ type CreditView = "household" | "business" | "corporate";
 const VIEW_OPTIONS: { value: CreditView; label: string }[] = [
   { value: "household", label: "Household" },
   { value: "business", label: "Business" },
-  { value: "corporate", label: "Corporate debt" },
+  { value: "corporate", label: "Corporate Debt" },
 ];
 
 // Canada aggregate only for this tab
