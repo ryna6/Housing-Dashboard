@@ -17,17 +17,21 @@ RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 BASE_URL = "https://api.twelvedata.com/time_series"
 DEFAULT_OUTPUTSIZE = 180  # ~15 years of monthly data
 
-# Symbols:
-# - Set these explicitly in Netlify env vars if you know the exact Twelve Data symbols.
-# - Or hardcode them once you've confirmed via Twelve Data's request builder / symbol search.
+# ---------------------------------------------------------------------------
+# Symbols for TSX Composite proxy & REIT ETF (Twelve Data format)
 #
-# Example possible formats (you will need to confirm):
-#   - S&P/TSX Composite index: "^GSPTSE" or "GSPTSE"
-#   - XRE ETF: "XRE:XTSE" or "XRE.TO"
+# - TSX uses exchange code XTSE.
+# - We'll use XIU:XTSE as a proxy for the S&P/TSX Composite index,
+#   since Twelve Data doesn't expose the index directly.
+# - We'll use XRE:XTSE for the Canadian REIT ETF.
 #
-# For now we let you override via env vars:
-TSX_INDEX_SYMBOL = os.getenv("TWELVEDATA_TSX_SYMBOL", "^GSPTSE")
-XRE_ETF_SYMBOL = os.getenv("TWELVEDATA_XRE_SYMBOL", "XRE")
+# You can override these via environment variables if needed:
+#   TWELVEDATA_TSX_SYMBOL
+#   TWELVEDATA_XRE_SYMBOL
+# ---------------------------------------------------------------------------
+
+TSX_INDEX_SYMBOL = os.getenv("TWELVEDATA_TSX_SYMBOL", "XIU:XTSE")
+XRE_ETF_SYMBOL = os.getenv("TWELVEDATA_XRE_SYMBOL", "XRE:XTSE")
 
 
 def fetch_time_series(
@@ -65,7 +69,7 @@ def fetch_time_series(
         print(f"[TwelveData] Raw response (first 200 chars): {raw[:200]!r}")
         return {}
 
-    # Twelve Data typically returns:
+    # Typical shape:
     # { "meta": {...}, "values": [ {...}, ... ], "status": "ok" }
     status = data.get("status")
     if status and status != "ok":
@@ -85,23 +89,23 @@ def fetch_time_series(
 
 def _parse_datetime(dt_str: str) -> datetime:
     """
-    Robust-ish ISO/datetime parser for Twelve Data 'datetime' fields.
+    Parse Twelve Data 'datetime' fields.
 
     Handles:
       - 'YYYY-MM-DD'
       - 'YYYY-MM-DD HH:MM:SS'
       - 'YYYY-MM-DDTHH:MM:SS'
+      - optional trailing 'Z'
     """
     s = dt_str.strip()
     if " " in s and "T" not in s:
         s = s.replace(" ", "T")
-    # Strip trailing 'Z' if present
     if s.endswith("Z"):
         s = s[:-1]
+
     try:
         return datetime.fromisoformat(s)
     except ValueError:
-        # Fallback: just take the date part
         return datetime.strptime(s[:10], "%Y-%m-%d")
 
 
@@ -110,14 +114,13 @@ def values_to_candles_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     Convert Twelve Data's 'values' array into a Finnhub-style
     candles payload with 't' (timestamps) and 'c' (closes).
 
-    This lets Market.py keep using its existing _read_finnhub_candles
-    logic without any changes.
+    This lets scripts/Market.py keep using its existing candle reader.
     """
     values = data.get("values", [])
     if not values:
         return {}
 
-    # Sort oldest -> newest by datetime
+    # Oldest -> newest
     sorted_vals = sorted(values, key=lambda row: _parse_datetime(row["datetime"]))
 
     t_list: List[int] = []
@@ -162,25 +165,25 @@ def main() -> None:
 
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    # --- TSX Composite index ---
+    # --- TSX Composite proxy (XIU:XTSE) ---
     tsx_raw = fetch_time_series(TSX_INDEX_SYMBOL, api_key)
     tsx_payload = values_to_candles_payload(tsx_raw) if tsx_raw else {}
     if tsx_payload:
         tsx_path = RAW_DATA_DIR / "tsx_finnhub.json"
         tsx_path.write_text(json.dumps(tsx_payload, indent=2), encoding="utf-8")
-        print(f"[TwelveData] Wrote TSX Composite candles to {tsx_path}")
+        print(f"[TwelveData] Wrote TSX Composite (XIU:XTSE) candles to {tsx_path}")
     else:
-        print("[TwelveData] No TSX Composite data written.")
+        print("[TwelveData] No TSX Composite (XIU:XTSE) data written.")
 
-    # --- XRE ETF ---
+    # --- XRE REIT ETF (XRE:XTSE) ---
     xre_raw = fetch_time_series(XRE_ETF_SYMBOL, api_key)
     xre_payload = values_to_candles_payload(xre_raw) if xre_raw else {}
     if xre_payload:
         xre_path = RAW_DATA_DIR / "xre_finnhub.json"
         xre_path.write_text(json.dumps(xre_payload, indent=2), encoding="utf-8")
-        print(f"[TwelveData] Wrote XRE ETF candles to {xre_path}")
+        print(f"[TwelveData] Wrote XRE ETF (XRE:XTSE) candles to {xre_path}")
     else:
-        print("[TwelveData] No XRE ETF data written.")
+        print("[TwelveData] No XRE ETF (XRE:XTSE) data written.")
 
 
 if __name__ == "__main__":
