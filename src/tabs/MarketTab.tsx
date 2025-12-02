@@ -94,7 +94,7 @@ function formatIndexTooltip(value: number): string {
 
 // Adds more detailed numeric view for index price on the chart
 function formatIndexDetailed(value: number): string {
-  return `$${value.toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
+  return `${value.toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
 }
 
 export const MarketTab: React.FC = () => {
