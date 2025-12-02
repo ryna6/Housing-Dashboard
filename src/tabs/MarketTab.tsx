@@ -71,7 +71,21 @@ function formatIndex(value: number): string {
  * Tooltip formatter for GDP and money supply.
  */
 function formatMoneyTooltip(value: number): string {
-  return `${value.toFixed(3)} yrs`;
+  if (!Number.isFinite(value)) return "–";
+
+  const abs = Math.abs(value);
+  let scaled = value;
+  let suffix = "";
+
+  if (abs >= 1_000_000_000_000) {
+    scaled = value / 1_000_000_000_000;
+    suffix = "T";
+  } else if (abs >= 1_000_000_000) {
+    scaled = value / 1_000_000_000;
+    suffix = "B";
+  } 
+  // 3 decimal places in the tooltip
+  return `$${scaled.toFixed(3)}${suffix}`;
 }
 
 export const MarketTab: React.FC = () => {
