@@ -27,10 +27,6 @@ class PanelRow:
     yoy_pct: Optional[float]
     ma3: Optional[float]
 
-
-DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
-RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
-
 # ---- StatCan configuration ----
 
 # Real GDP at basic prices, chain-linked, monthly, Canada, all industries.
