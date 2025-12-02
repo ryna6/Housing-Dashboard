@@ -9,31 +9,29 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
-# We use the stock/candle endpoint with daily resolution ("D")
-# and then aggregate to monthly on the backend. Each daily bar's close
-# is treated as the "daily price".
-FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
+# Correct candles endpoint
+FINNHUB_BASE_URL = "https://finnhub.io/api/v1/stock/candle"
 FINNHUB_RESOLUTION = "D"  # daily bars
+DEFAULT_YEARS = 12        # ~12 years of history is enough for 10y charts
 
-# Use the same symbols you use elsewhere (adjust if needed)
-TSX_INDEX_SYMBOL = "^GSPTSE"  # S&P/TSX Composite index
-XRE_ETF_SYMBOL = "XRE.TO"     # iShares S&P/TSX Capped REIT Index ETF
+# Adjust these if your Finnhub account uses different symbols.
+# For TSX stocks, Finnhub typically uses ".TO" suffix.
+TSX_INDEX_SYMBOL = "^GSPTSE"  # S&P/TSX Composite index (verify via /stock/symbol if needed)
+XRE_ETF_SYMBOL = "XRE.TO"     # iShares S&P/TSX Capped REIT Index ETF on TSX
 
 
-def fetch_daily_history(symbol: str, api_key: str, years: int = 12) -> dict:
+def fetch_daily_history(symbol: str, api_key: str, years: int = DEFAULT_YEARS) -> dict:
     """
     Fetch up to `years` years of daily history for a symbol from Finnhub.
 
     We use the stock/candle endpoint with resolution=D, and the backend
-    (scripts/Market.py) will bucket these daily closes into monthly
-    values by month.
+    (scripts/Market.py) will bucket these daily closes into monthly values
+    by month.
     """
     now = int(time.time())
-    # Roughly `years` years ago (approximate but fine for our use)
-    start = now - years * 365 * 24 * 60 * 60
+    start = now - years * 365 * 24 * 60 * 60  # rough N-year window
 
     params = {
         "symbol": symbol,
@@ -47,7 +45,7 @@ def fetch_daily_history(symbol: str, api_key: str, years: int = 12) -> dict:
 
     try:
         with urlopen(url, timeout=30) as resp:
-            raw = resp.read().decode("utf-8")
+            raw = resp.read().decode("utf-8", errors="ignore")
     except (HTTPError, URLError) as e:
         print(f"[Finnhub] Error fetching candles for {symbol}: {e}")
         return {}
@@ -56,10 +54,12 @@ def fetch_daily_history(symbol: str, api_key: str, years: int = 12) -> dict:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
         print(f"[Finnhub] JSON decode error for {symbol}: {e}")
+        print(f"[Finnhub] Raw response for {symbol} (first 200 chars): {raw[:200]!r}")
         return {}
 
     status = data.get("s")
     if status != "ok":
+        # Finnhub returns s="no_data" if the symbol is wrong or no history.
         print(f"[Finnhub] Warning: candle status for {symbol} is {status}")
     else:
         print(
