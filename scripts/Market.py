@@ -10,18 +10,20 @@ from typing import Dict, List, Optional
 import urllib.request
 from urllib.error import HTTPError, URLError
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
-RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
+# Root paths
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = ROOT_DIR / "data" / "processed"
+RAW_DATA_DIR = ROOT_DIR / "data" / "raw"
 
 
 @dataclass
 class PanelRow:
-    date: str          # YYYY-MM-DD (first of month)
-    region: str
-    segment: str
-    metric: str
+    date: str          # "YYYY-MM-01"
+    region: str        # e.g. "ca"
+    segment: str       # e.g. "market"
+    metric: str        # e.g. "ca_real_gdp"
     value: float
-    unit: str
+    unit: str          # "cad" | "index"
     source: str
     mom_pct: Optional[float]
     yoy_pct: Optional[float]
@@ -29,7 +31,7 @@ class PanelRow:
 
 
 # ---------------------------------------------------------------------------
-# StatCan WDS helpers (same pattern as other tabs)
+# StatCan WDS helpers
 # ---------------------------------------------------------------------------
 
 STATCAN_WDS_URL = (
@@ -82,7 +84,7 @@ def fetch_statcan_vectors(
         data=data_bytes,
         headers={
             "Content-Type": "application/json",
-            "User-Agent": "housing-dashboard",
+            "User-Agent": "housing-dashboard-market",
         },
     )
 
@@ -235,7 +237,7 @@ def _build_panel_rows_for_series(
         rows.append(
             PanelRow(
                 date=date_str,
-                region="canada",
+                region="ca",          # <-- important for frontend filters
                 segment="market",
                 metric=metric_id,
                 value=round(value, 2),
@@ -394,8 +396,8 @@ def generate_market() -> List[PanelRow]:
     rows.extend(_generate_xre_rows())
     rows.extend(_generate_money_rows())
 
-    # You don't *have* to write market.json here (generate_data.py will), but
-    # this makes the module testable standalone:
+    # Optional: write market.json here for standalone testing.
+    # generate_data.py will also write its own market.json.
     if rows:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         market_json_path = DATA_DIR / "market.json"
