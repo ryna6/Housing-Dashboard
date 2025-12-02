@@ -85,6 +85,14 @@ function formatCurrencyBillions(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
+function formatHousingTooltip(value: number): string {
+  return `${value.toFixed(1)}`; 
+}
+
+function formatMoneyTooltip(value: number): string {
+  return `${value.toFixed(2)}`; 
+}
+
 export const SupplyTab: React.FC = () => {
   const { data, loading, error } = useTabData("supply");
   const [housingType, setHousingType] = useState<HousingType>(
@@ -210,6 +218,7 @@ export const SupplyTab: React.FC = () => {
           series={housingStartsSeries}
           valueKey="value"
           valueFormatter={formatCompactNumber}
+          tooltipValueFormatter={formatHousingTooltip}
           clampYMinToZero
         />
         <ChartPanel
@@ -217,6 +226,7 @@ export const SupplyTab: React.FC = () => {
           series={underConstructionSeries}
           valueKey="value"
           valueFormatter={formatCompactNumber}
+          tooltipValueFormatter={formatHousingTooltip}
           clampYMinToZero
         />
         <ChartPanel
@@ -224,6 +234,7 @@ export const SupplyTab: React.FC = () => {
           series={completionsSeries}
           valueKey="value"
           valueFormatter={formatCompactNumber}
+          tooltipValueFormatter={formatHousingTooltip}
           clampYMinToZero
         />
         <ChartPanel
@@ -231,6 +242,7 @@ export const SupplyTab: React.FC = () => {
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCurrencyBillions}
+          tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
       </section>
