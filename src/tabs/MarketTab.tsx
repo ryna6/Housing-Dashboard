@@ -195,7 +195,6 @@ export const MarketTab: React.FC = () => {
               title="M2 money supply"
               series={m2Series}
               valueKey="value"
-              valueFormatter={formatCurrencyCompact}
               clampYMinToZero
             />
           </section>
