@@ -88,6 +88,10 @@ function formatMoneyTooltip(value: number): string {
   return `$${scaled.toFixed(3)}${suffix}`;
 }
 
+function formatIndexTooltip(value: number): string {
+  return ${value.toFixed(1)}; 
+}
+
 export const MarketTab: React.FC = () => {
   const { data, loading, error } = useTabData("market");
   const hasData = !!data && data.length > 0;
@@ -204,6 +208,7 @@ export const MarketTab: React.FC = () => {
               series={tsxSeries}
               valueKey="value"
               valueFormatter={formatIndex}
+              tooltipValueFormatter={formatIndexTooltip}
               clampYMinToZero
             />
             <ChartPanel
@@ -211,6 +216,7 @@ export const MarketTab: React.FC = () => {
               series={xreSeries}
               valueKey="value"
               valueFormatter={formatIndex}
+              tooltipValueFormatter={formatIndexTooltip}
               clampYMinToZero
             />
             <ChartPanel
