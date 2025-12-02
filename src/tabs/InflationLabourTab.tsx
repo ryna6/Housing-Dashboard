@@ -33,6 +33,10 @@ function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
   });
 }
 
+function formatCPITooltip(value: number): string {
+  return `${value.toFixed(1)}`; 
+}
+
 export const InflationLabourTab: React.FC = () => {
   const { data, loading, error } = useTabData("inflation_labour");
 
@@ -127,18 +131,21 @@ export const InflationLabourTab: React.FC = () => {
           title="Headline CPI"
           series={headlineSeries}
           valueKey="value"
+          tooltipValueFormatter={formatCPITooltip}
           clampYMinToZero
         />
         <ChartPanel
           title="Owned accommodation CPI"
           series={shelterSeries}
           valueKey="value"
+          tooltipValueFormatter={formatCPITooltip}
           clampYMinToZero
         />
         <ChartPanel
           title="Rent CPI"
           series={rentSeries}
           valueKey="value"
+          tooltipValueFormatter={formatCPITooltip}
           clampYMinToZero
         />
         <ChartPanel
