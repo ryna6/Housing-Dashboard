@@ -114,7 +114,7 @@ def _parse_date(date_str: str) -> datetime:
 
 def monthly_to_candles_payload(ts: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Convert Alpha Vantage 'Monthly Time Series' dict into a Finnhub-style
+    Convert Alpha Vantage 'Monthly Time Series' dict into a
     candles payload with 't' (timestamps) and 'c' (closes).
 
     This lets scripts/Market.py keep using its existing candle reader.
@@ -173,7 +173,7 @@ def main() -> None:
     tsx_ts = fetch_monthly_series(TSX_INDEX_SYMBOL, api_key)
     tsx_payload = monthly_to_candles_payload(tsx_ts) if tsx_ts else {}
     if tsx_payload:
-        tsx_path = RAW_DATA_DIR / "tsx_finnhub.json"
+        tsx_path = RAW_DATA_DIR / "tsx_alphavantage.json"
         tsx_path.write_text(json.dumps(tsx_payload, indent=2), encoding="utf-8")
         print(
             f"[AlphaVantage] Wrote TSX proxy ETF ({TSX_INDEX_SYMBOL}) candles "
@@ -188,7 +188,7 @@ def main() -> None:
     xre_ts = fetch_monthly_series(XRE_ETF_SYMBOL, api_key)
     xre_payload = monthly_to_candles_payload(xre_ts) if xre_ts else {}
     if xre_payload:
-        xre_path = RAW_DATA_DIR / "xre_finnhub.json"
+        xre_path = RAW_DATA_DIR / "xre_alphavantage.json"
         xre_path.write_text(json.dumps(xre_payload, indent=2), encoding="utf-8")
         print(
             f"[AlphaVantage] Wrote XRE ETF ({XRE_ETF_SYMBOL}) candles "
