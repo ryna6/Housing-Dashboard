@@ -1,5 +1,5 @@
 [build]
-  command = "pip install pandas openpyxl && python scripts/generate_data.py && npm run build && mkdir -p dist/data && cp -r data/processed dist/data/processed"
+  command = "pip install pandas openpyxl && python scripts/update_market_prices_from_finnhub.py && python scripts/generate_data.py && npm run build && mkdir -p dist/data && cp -r data/processed dist/data/processed"
   publish = "dist"
 
 [functions]
