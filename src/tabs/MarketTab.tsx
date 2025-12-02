@@ -92,6 +92,11 @@ function formatIndexTooltip(value: number): string {
   return `${value.toFixed(1)}`; 
 }
 
+// Adds more detailed numeric view for index price on the chart
+function formatIndexDetailed(value: number): string {
+  return `$${value.toLocaleString("en-CA", { maximumFractionDigits: 1 })}`;
+}
+
 export const MarketTab: React.FC = () => {
   const { data, loading, error } = useTabData("market");
   const hasData = !!data && data.length > 0;
@@ -199,7 +204,7 @@ export const MarketTab: React.FC = () => {
               title="Real GDP"
               series={gdpSeries}
               valueKey="value"
-              valueFormatter={formatCurrencyCompact}
+              valueFormatter={formatCurrencyDetailed}
               tooltipValueFormatter={formatMoneyTooltip}
               clampYMinToZero
             />
@@ -207,7 +212,7 @@ export const MarketTab: React.FC = () => {
               title="S&P/TSX composite index"
               series={tsxSeries}
               valueKey="value"
-              valueFormatter={formatIndex}
+              valueFormatter={formatIndexDetailed}
               tooltipValueFormatter={formatIndexTooltip}
               clampYMinToZero
             />
@@ -215,7 +220,7 @@ export const MarketTab: React.FC = () => {
               title="REIT index"
               series={xreSeries}
               valueKey="value"
-              valueFormatter={formatIndex}
+              valueFormatter={formatIndexDetailed}
               tooltipValueFormatter={formatIndexTooltip}
               clampYMinToZero
             />
