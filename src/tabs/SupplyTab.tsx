@@ -93,12 +93,12 @@ function formatHousingTooltip(value: number): string {
   let suffix = "";
 
   if (abs >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M`;
+    return `${(value / 1_000_000).toFixed(1)}M`;
   }
   if (abs >= 1_000) {
-    return `$${(value / 1_000).toFixed(0)}K`;
+    return `${(value / 1_000).toFixed(0)}K`;
   }
-  return `$${scaled.toFixed(1)}${suffix}`;
+  return `${scaled.toFixed(1)}${suffix}`;
 }
 
 function formatMoneyTooltip(value: number): string {
@@ -114,7 +114,7 @@ function formatMoneyTooltip(value: number): string {
   if (abs >= 1_000_000) {
     return `$${(value / 1_000_000).toFixed(1)}M`;
   }
-  return `$${scaled.toFixed(1)}${suffix}`;
+  return `$${scaled.toFixed(2)}${suffix}`;
 }
 
 export const SupplyTab: React.FC = () => {
