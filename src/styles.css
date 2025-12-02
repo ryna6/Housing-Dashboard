@@ -398,10 +398,11 @@ body {
 }
 
 .chart-panel__title {
-  font-size: 0.9rem;
   font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.7rem;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .chart-panel--empty {
