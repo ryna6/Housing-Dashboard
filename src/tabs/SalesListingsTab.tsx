@@ -34,6 +34,14 @@ function formatCompactCount(value: number): string {
   return value.toFixed(0);
 }
 
+function formatListingTooltip(value: number): string {
+  return `${value.toFixed(2)}`; 
+}
+
+function formatRateTooltip(value: number): string {
+  return `${value.toFixed(2)}`; 
+}
+
 const CARD_TITLES: Record<string, string> = {
   new_listings: "New Listings",
   active_listings: "Active Listings",
@@ -143,6 +151,7 @@ export const SalesListingsTab: React.FC = () => {
           series={newListingsSeries}
           valueKey="value"
           valueFormatter={formatCompactCount}
+          tooltipValueFormatter={formatListingTooltip}
           clampYMinToZero
         />
         <ChartPanel
@@ -150,6 +159,7 @@ export const SalesListingsTab: React.FC = () => {
           series={activeListingsSeries}
           valueKey="value"
           valueFormatter={formatCompactCount}
+          tooltipValueFormatter={formatListingTooltip}
           clampYMinToZero
         />
         <ChartPanel
@@ -169,6 +179,7 @@ export const SalesListingsTab: React.FC = () => {
           title="Absorption rate"
           series={absorptionRateSeries}
           valueKey="value"
+          tooltipValueFormatter={formatRateTooltip}
           treatAsPercentScale
           clampYMinToZero
         />
