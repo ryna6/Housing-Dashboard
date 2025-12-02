@@ -398,9 +398,9 @@ body {
 }
 
 .chart-panel__title {
+  font-size: 0.8rem;
   font-weight: 600;
   text-transform: uppercase;
-  font-size: 0.8rem;
   color: var(--text-muted);
   margin-bottom: 10px;
 }
