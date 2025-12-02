@@ -19,7 +19,7 @@ RAW_DATA_DIR = ROOT_DIR / "data" / "raw"
 @dataclass
 class PanelRow:
     date: str          # "YYYY-MM-01"
-    region: str        # e.g. "ca"
+    region: str        # e.g. "canada"
     segment: str       # e.g. "market"
     metric: str        # e.g. "ca_real_gdp"
     value: float
@@ -237,7 +237,7 @@ def _build_panel_rows_for_series(
         rows.append(
             PanelRow(
                 date=date_str,
-                region="ca",          # <-- important for frontend filters
+                region="canada",          # <-- important for frontend filters
                 segment="market",
                 metric=metric_id,
                 value=round(value, 2),
