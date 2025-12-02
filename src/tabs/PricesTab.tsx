@@ -71,6 +71,10 @@ function formatCompactCurrency(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
+function formatPriceTooltip(value: number): string {
+  return `${value.toFixed(1)}`; 
+}
+
 export const PricesTab: React.FC = () => {
   const { data, loading, error } = useTabData("prices");
 
@@ -243,12 +247,14 @@ export const PricesTab: React.FC = () => {
           title="Benchmark HPI"
           series={benchmarkSeries}
           valueKey="value"
+          tooltipValueFormatter={formatPriceTooltip}
           clampYMinToZero
         />
         <ChartPanel
           title={`${getHousingTypeLabel(housingType)} HPI`}
           series={hpiTypeSeries}
           valueKey="value"
+          tooltipValueFormatter={formatPriceTooltip}
           clampYMinToZero
         />
         <ChartPanel
@@ -256,6 +262,7 @@ export const PricesTab: React.FC = () => {
           series={avgPriceSeries}
           valueKey="value"
           valueFormatter={formatCompactCurrency}
+          tooltipValueFormatter={formatPriceTooltip}
           clampYMinToZero
         />
       </section>
