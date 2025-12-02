@@ -121,12 +121,13 @@ export const MarketTab: React.FC = () => {
     [data]
   );
 
-  const m2ppSeries: PanelPoint[] = useMemo(
+  // Combined money series: includes BOTH M2 and M2++
+  const moneySeries: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
         (data || []).filter(
           (p) =>
-            p.metric === "ca_m2pp" &&
+            (p.metric === "ca_m2" || p.metric === "ca_m2pp") &&
             p.region === REGION &&
             p.segment === SEGMENT
         ),
@@ -170,7 +171,7 @@ export const MarketTab: React.FC = () => {
               />
             ))}
 
-            {/* Combined M2 / M2++ card */}
+            {/* Combined M2 / M2++ card with MoM + YoY */}
             <div className="metric-card">
               <div className="metric-card__title">M2 / M2++ money supply</div>
               <div className="metric-card__value">
@@ -192,14 +193,36 @@ export const MarketTab: React.FC = () => {
                   const m2pp = moneySnapshots.find(
                     (s) => s.metric === "ca_m2pp"
                   );
+
+                  const mom1 = m2?.latest.mom_pct ?? null;
+                  const mom2 = m2pp?.latest.mom_pct ?? null;
                   const yoy1 = m2?.latest.yoy_pct ?? null;
                   const yoy2 = m2pp?.latest.yoy_pct ?? null;
-                  if (yoy1 == null && yoy2 == null) return null;
+
+                  if (
+                    mom1 == null &&
+                    mom2 == null &&
+                    yoy1 == null &&
+                    yoy2 == null
+                  ) {
+                    return null;
+                  }
+
                   return (
-                    <span className="metric-card__delta-label">
-                      YoY: {formatPercent(yoy1)} (M2),{" "}
-                      {formatPercent(yoy2)} (M2++)
-                    </span>
+                    <>
+                      {(mom1 != null || mom2 != null) && (
+                        <span className="metric-card__delta-label">
+                          MoM: {formatPercent(mom1)} (M2),{" "}
+                          {formatPercent(mom2)} (M2++)
+                        </span>
+                      )}
+                      {(yoy1 != null || yoy2 != null) && (
+                        <span className="metric-card__delta-label">
+                          YoY: {formatPercent(yoy1)} (M2),{" "}
+                          {formatPercent(yoy2)} (M2++)
+                        </span>
+                      )}
+                    </>
                   );
                 })()}
               </div>
@@ -230,8 +253,8 @@ export const MarketTab: React.FC = () => {
               clampYMinToZero
             />
             <ChartPanel
-              title="Money supply (M2++)"
-              series={m2ppSeries}
+              title="Money supply (M2 vs M2++)"
+              series={moneySeries}
               valueKey="value"
               valueFormatter={formatCurrencyCompact}
               clampYMinToZero
