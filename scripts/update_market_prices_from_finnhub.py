@@ -14,7 +14,7 @@ RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 # We use the stock/candle endpoint with daily resolution ("D")
 # and then aggregate to monthly on the backend. Each daily bar's close
 # is treated as the "daily price".
-FINNHUB_BASE_URL = "https://finnhub.io/api/v1/stock/candle"
+FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
 FINNHUB_RESOLUTION = "D"  # daily bars
 
 # Use the same symbols you use elsewhere (adjust if needed)
