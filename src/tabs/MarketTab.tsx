@@ -139,7 +139,7 @@ export const MarketTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Market</h1>
         <p className="tab__subtitle">
-          Canada GDP, S&P/TSX, Canadian REIT ETF, M2 money supply (Statistics Canada & Finnhub)
+          Canada GDP, S&P/TSX Index, Canadian REIT Index, M2 money supply (Statistics Canada & Alpha Vantage)
         </p>
       </header>
 
@@ -158,7 +158,7 @@ export const MarketTab: React.FC = () => {
       {!loading && !error && hasData && (
         <>
           {/* Snapshot cards */}
-          <section className="tab__metrics tab__metrics--wide">
+          <section className="tab__metrics">
             {snapshots.map((snapshot) => (
               <MetricSnapshotCard
                 key={snapshot.metric}
@@ -178,21 +178,21 @@ export const MarketTab: React.FC = () => {
               clampYMinToZero
             />
             <ChartPanel
-              title="S&P/TSX Composite index"
+              title="S&P/TSX Composite Index"
               series={tsxSeries}
               valueKey="value"
               valueFormatter={formatIndex}
               clampYMinToZero
             />
             <ChartPanel
-              title="REIT ETF index"
+              title="REIT Index ETF"
               series={xreSeries}
               valueKey="value"
               valueFormatter={formatIndex}
               clampYMinToZero
             />
             <ChartPanel
-              title="M2 Money supply"
+              title="M2 Money Supply"
               series={m2Series}
               valueKey="value"
               valueFormatter={formatCurrencyCompact}
