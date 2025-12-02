@@ -263,14 +263,14 @@ export const PricesTab: React.FC = () => {
           title="Benchmark HPI"
           series={benchmarkSeries}
           valueKey="value"
-          tooltipValueFormatter={formatPriceTooltip}
+          tooltipValueFormatter={formatHPITooltip}
           clampYMinToZero
         />
         <ChartPanel
           title={`${getHousingTypeLabel(housingType)} HPI`}
           series={hpiTypeSeries}
           valueKey="value"
-          tooltipValueFormatter={formatPriceTooltip}
+          tooltipValueFormatter={formatHPITooltip}
           clampYMinToZero
         />
         <ChartPanel
