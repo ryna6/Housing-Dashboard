@@ -42,16 +42,16 @@ function formatListingTooltip(value: number): string {
   let suffix = "";
 
   if (abs >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M`;
+    return `${(value / 1_000_000).toFixed(1)}M`;
   }
   if (abs >= 1_000) {
-    return `$${(value / 1_000).toFixed(0)}K`;
+    return `${(value / 1_000).toFixed(0)}K`;
   }
-  return `$${scaled.toFixed(1)}${suffix}`;
+  return `${scaled.toFixed(1)}${suffix}`;
 }
 
 function formatRateTooltip(value: number): string {
-  return `${value.toFixed(2)}`; 
+  return `{value.toFixed(2)}`; 
 }
 
 const CARD_TITLES: Record<string, string> = {
@@ -185,6 +185,7 @@ export const SalesListingsTab: React.FC = () => {
           title="MOI"
           series={moiSeries}
           valueKey="value"
+          tooltipValueFormatter={formatListingTooltip}
           clampYMinToZero
         />
         <ChartPanel
