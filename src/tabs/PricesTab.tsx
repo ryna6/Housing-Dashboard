@@ -87,6 +87,10 @@ function formatPriceTooltip(value: number): string {
   return `$${scaled.toFixed(1)}${suffix}`;
 }
 
+function formatHPITooltip(value: number): string {
+  return `${value.toFixed(1)}`; 
+}
+
 export const PricesTab: React.FC = () => {
   const { data, loading, error } = useTabData("prices");
 
