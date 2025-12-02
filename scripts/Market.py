@@ -155,6 +155,19 @@ def fetch_statcan_vectors(
 # Alpha Vantage raw data reader (no API calls here)
 # ---------------------------------------------------------------------------
 
+# ---- Index scaling baselines (XIU → TSX, XRE → REIT) ----
+# Based on December 1st 2025 closes you provided:
+#   XIU close: 46.00, TSX Composite: 31,101.78
+#   XRE close: 15.38, REIT index: 154.89
+
+TSX_PROXY_PRICE_BASE = 46.0
+TSX_INDEX_BASE_LEVEL = 31101.78
+TSX_INDEX_SCALE_FACTOR = TSX_INDEX_BASE_LEVEL / TSX_PROXY_PRICE_BASE  # ≈ 676.125652
+
+XRE_PROXY_PRICE_BASE = 15.38
+REIT_INDEX_BASE_LEVEL = 154.89
+REIT_INDEX_SCALE_FACTOR = REIT_INDEX_BASE_LEVEL / XRE_PROXY_PRICE_BASE  # ≈ 10.070871
+
 
 def _read_alphavantage_candles(json_path: Path, label: str) -> Dict[str, float]:
     """
@@ -252,29 +265,33 @@ def _build_panel_rows_for_series(
     return rows
 
 
-def _normalize_to_index(series: Dict[str, float]) -> Dict[str, float]:
+def _normalize_tsx_to_index(series: Dict[str, float]) -> Dict[str, float]:
     """
-    Normalize a date->value series to an index starting at 100 for the first
-    non-zero observation.
+    Scale XIU ETF prices so that the chosen baseline close (~46)
+    corresponds to the actual TSX Composite index level (~31,101.78).
+
+    This keeps all % changes the same but puts the series in
+    "index points" similar to the real TSX Composite.
     """
     if not series:
         return {}
 
-    items = sorted(series.items(), key=lambda kv: kv[0])
-    base_val = None
-    for _, v in items:
-        if v != 0:
-            base_val = v
-            break
+    dates_sorted = sorted(series.keys())
+    factor = TSX_INDEX_SCALE_FACTOR
+    return {d: series[d] * factor for d in dates_sorted}
 
-    if base_val is None:
+
+def _normalize_reit_to_index(series: Dict[str, float]) -> Dict[str, float]:
+    """
+    Scale XRE ETF prices so that the chosen baseline close (~15.38)
+    corresponds to the actual REIT index level (~154.89).
+    """
+    if not series:
         return {}
 
-    index_series: Dict[str, float] = {}
-    for d, v in items:
-        index_series[d] = (v / base_val) * 100.0
-
-    return index_series
+    dates_sorted = sorted(series.keys())
+    factor = REIT_INDEX_SCALE_FACTOR
+    return {d: series[d] * factor for d in dates_sorted}
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +361,7 @@ def _generate_tsx_rows() -> List[PanelRow]:
     if not tsx_close_series:
         return []
 
-    tsx_index_series = _normalize_to_index(tsx_close_series)
+    tsx_index_series = _normalize_tsx_to_index(tsx_close_series)
 
     return _build_panel_rows_for_series(
         metric_id="tsx_composite_index",
@@ -364,7 +381,7 @@ def _generate_xre_rows() -> List[PanelRow]:
     if not xre_close_series:
         return []
 
-    xre_index_series = _normalize_to_index(xre_close_series)
+    xre_index_series = _normalize_reit_to_index(xre_close_series)
 
     return _build_panel_rows_for_series(
         metric_id="xre_price_index",
