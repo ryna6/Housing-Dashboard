@@ -14,7 +14,7 @@ from urllib.request import urlopen
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
 # Twelve Data time series endpoint
-BASE_URL = "https://api.twelvedata.com/time_series"
+BASE_URL = "https://api.twelvedata.com/etfs"
 DEFAULT_OUTPUTSIZE = 180  # ~15 years of monthly data
 
 # ---------------------------------------------------------------------------
