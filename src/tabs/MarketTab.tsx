@@ -10,18 +10,14 @@ import { useTabData } from "./useTabData";
 const REGION: RegionCode = "canada";
 const SEGMENT = "market";
 
+// Headline metrics for standard snapshot cards
 const HEADLINE_METRICS: string[] = [
   "ca_real_gdp",
   "tsx_composite_index",
   "xre_price_index",
 ];
 
-const CARD_TITLES: Record<string, string> = {
-  ca_real_gdp: "Real GDP (Canada)",
-  tsx_composite_index: "S&P/TSX Composite index",
-  xre_price_index: "XRE real estate ETF index",
-};
-
+// Trim a series down to the last N years
 function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
   if (series.length <= 1) return series;
 
@@ -36,6 +32,7 @@ function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
   });
 }
 
+// Compact CAD formatter (supports K / M / B / T)
 function formatCurrencyCompact(value: number): string {
   const abs = Math.abs(value);
   if (!Number.isFinite(value)) return "–";
@@ -55,9 +52,10 @@ function formatCurrencyCompact(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
+// Simple index formatter (no suffix, 0–1 decimals)
 function formatIndex(value: number): string {
   if (!Number.isFinite(value)) return "–";
-  return value >= 100 ? value.toFixed(0) : value.toFixed(1);
+  return Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1);
 }
 
 function formatPercent(value: number | null | undefined): string {
@@ -66,19 +64,31 @@ function formatPercent(value: number | null | undefined): string {
   return `${value.toFixed(decimals)}%`;
 }
 
+const CARD_TITLES: Record<string, string> = {
+  ca_real_gdp: "Real GDP (Canada)",
+  tsx_composite_index: "S&P/TSX Composite index",
+  xre_price_index: "XRE real estate ETF index",
+};
+
 export const MarketTab: React.FC = () => {
   const { data, loading, error } = useTabData("market");
 
+  const hasData = !!data && data.length > 0;
+
+  // Standard headline snapshots (GDP, TSX, XRE)
   const snapshots: MetricSnapshot[] = useMemo(() => {
     if (!data || !data.length) return [];
     return getLatestByMetric(data, REGION, HEADLINE_METRICS, SEGMENT);
   }, [data]);
 
-  const moneySnapshots: MetricSnapshot[] = useMemo(() => {
-    if (!data || !data.length) return [];
-    return getLatestByMetric(data, REGION, ["ca_m2", "ca_m2pp"], SEGMENT);
+  // Money supply snapshot for M2 only
+  const m2Snapshot: MetricSnapshot | null = useMemo(() => {
+    if (!data || !data.length) return null;
+    const [snap] = getLatestByMetric(data, REGION, ["ca_m2"], SEGMENT);
+    return snap ?? null;
   }, [data]);
 
+  // Time series (trimmed to last 10 years)
   const gdpSeries: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
@@ -88,7 +98,7 @@ export const MarketTab: React.FC = () => {
             p.region === REGION &&
             p.segment === SEGMENT
         ),
-        15
+        10
       ),
     [data]
   );
@@ -102,7 +112,7 @@ export const MarketTab: React.FC = () => {
             p.region === REGION &&
             p.segment === SEGMENT
         ),
-        15
+        10
       ),
     [data]
   );
@@ -116,27 +126,24 @@ export const MarketTab: React.FC = () => {
             p.region === REGION &&
             p.segment === SEGMENT
         ),
-        15
+        10
       ),
     [data]
   );
 
-  // Combined money series: includes BOTH M2 and M2++
-  const moneySeries: PanelPoint[] = useMemo(
+  const m2Series: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
         (data || []).filter(
           (p) =>
-            (p.metric === "ca_m2" || p.metric === "ca_m2pp") &&
+            p.metric === "ca_m2" &&
             p.region === REGION &&
             p.segment === SEGMENT
         ),
-        15
+        10
       ),
     [data]
   );
-
-  const hasData = !!data && data.length > 0;
 
   return (
     <div className="tab">
@@ -149,7 +156,8 @@ export const MarketTab: React.FC = () => {
       </header>
 
       {loading && <div className="tab__status">Loading market data…</div>}
-      {error && (
+
+      {error && !loading && (
         <div className="tab__status tab__status--error">
           Failed to load market data: {error}
         </div>
@@ -171,65 +179,28 @@ export const MarketTab: React.FC = () => {
               />
             ))}
 
-            {/* Combined M2 / M2++ card with MoM + YoY */}
-            <div className="metric-card">
-              <div className="metric-card__title">M2 / M2++ money supply</div>
-              <div className="metric-card__value">
-                {(() => {
-                  const m2 = moneySnapshots.find((s) => s.metric === "ca_m2");
-                  const m2pp = moneySnapshots.find(
-                    (s) => s.metric === "ca_m2pp"
-                  );
-                  const v1 = m2 ? m2.latest.value : NaN;
-                  const v2 = m2pp ? m2pp.latest.value : NaN;
-                  return `${formatCurrencyCompact(
-                    v1
-                  )} / ${formatCurrencyCompact(v2)}`;
-                })()}
+            {/* M2 money supply card */}
+            {m2Snapshot && (
+              <div className="metric-card">
+                <div className="metric-card__title">Money supply (M2)</div>
+                <div className="metric-card__value">
+                  {formatCurrencyCompact(m2Snapshot.latest.value)}
+                </div>
+                <div className="metric-card__delta-row">
+                  <span className="metric-card__delta-label">
+                    MoM: {formatPercent(m2Snapshot.latest.mom_pct)}
+                  </span>
+                </div>
+                <div className="metric-card__delta-row">
+                  <span className="metric-card__delta-label">
+                    YoY: {formatPercent(m2Snapshot.latest.yoy_pct)}
+                  </span>
+                </div>
               </div>
-              <div className="metric-card__delta-row">
-                {(() => {
-                  const m2 = moneySnapshots.find((s) => s.metric === "ca_m2");
-                  const m2pp = moneySnapshots.find(
-                    (s) => s.metric === "ca_m2pp"
-                  );
-
-                  const mom1 = m2?.latest.mom_pct ?? null;
-                  const mom2 = m2pp?.latest.mom_pct ?? null;
-                  const yoy1 = m2?.latest.yoy_pct ?? null;
-                  const yoy2 = m2pp?.latest.yoy_pct ?? null;
-
-                  if (
-                    mom1 == null &&
-                    mom2 == null &&
-                    yoy1 == null &&
-                    yoy2 == null
-                  ) {
-                    return null;
-                  }
-
-                  return (
-                    <>
-                      {(mom1 != null || mom2 != null) && (
-                        <span className="metric-card__delta-label">
-                          MoM: {formatPercent(mom1)} (M2),{" "}
-                          {formatPercent(mom2)} (M2++)
-                        </span>
-                      )}
-                      {(yoy1 != null || yoy2 != null) && (
-                        <span className="metric-card__delta-label">
-                          YoY: {formatPercent(yoy1)} (M2),{" "}
-                          {formatPercent(yoy2)} (M2++)
-                        </span>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
+            )}
           </section>
 
-          {/* Charts */}
+          {/* Charts – all trimmed to last 10 years */}
           <section className="tab__charts">
             <ChartPanel
               title="Real GDP (Canada)"
@@ -253,8 +224,8 @@ export const MarketTab: React.FC = () => {
               clampYMinToZero
             />
             <ChartPanel
-              title="Money supply (M2 vs M2++)"
-              series={moneySeries}
+              title="Money supply (M2)"
+              series={m2Series}
               valueKey="value"
               valueFormatter={formatCurrencyCompact}
               clampYMinToZero
