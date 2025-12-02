@@ -10,13 +10,21 @@ from typing import Dict, List, Optional
 import urllib.request
 from urllib.error import HTTPError, URLError
 
+# -------------------------------------------------------------------------
+# Paths
+# -------------------------------------------------------------------------
+
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
+
+# -------------------------------------------------------------------------
+# Core row model (same shape as other tabs)
+# -------------------------------------------------------------------------
 
 
 @dataclass
 class PanelRow:
-    date: str          # YYYY-MM-DD (first of month)
+    date: str          # YYYY-MM-01
     region: str
     segment: str
     metric: str
@@ -27,97 +35,141 @@ class PanelRow:
     yoy_pct: Optional[float]
     ma3: Optional[float]
 
-# ---- StatCan configuration ----
+
+# -------------------------------------------------------------------------
+# StatCan WDS configuration (shared pattern with other tabs)
+# -------------------------------------------------------------------------
+
+STATCAN_WDS_URL = (
+    "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods"
+)
 
 # Real GDP at basic prices, chain-linked, monthly, Canada, all industries.
-# You've already set this to the correct vector ID.
 GDP_VECTOR_ID = "v65201210"
 
-# Money supply vectors from table 10-10-0116-01:
-#  - M2 (gross)
-#  - M2++ (gross)
-M2_VECTOR_ID = "v41552796"
-M2PP_VECTOR_ID = "v41552801"
+# Money supply vectors from table 10-10-0116-01 (monthly, millions of dollars)
+M2_VECTOR_ID = "v41552796"   # M2 (gross)
+M2PP_VECTOR_ID = "v41552801" # M2++ (gross)
 
 
-def _statcan_wds_url(vector_ids: List[str]) -> str:
+def _statcan_vector_id_to_int(vector_id: str) -> int:
     """
-    Build a StatCan Web Data Service URL for a list of vector IDs.
-
-    We use the JSON format and request all available data for each vector.
+    Convert a vector id like 'v41552796' or 'V41552796' to the integer 41552796.
     """
-    base = "https://www150.statcan.gc.ca/t1/wds/en/grp/wds/grp?"
-    # StatCan expects a JSON-like array string of vector IDs
-    vecs = ",".join(vector_ids)
-    return f"{base}vectorIds={vecs}"
+    v = vector_id.strip()
+    if v.lower().startswith("v"):
+        v = v[1:]
+    return int(v)
 
 
-def fetch_statcan_vectors(vector_ids: List[str]) -> Dict[str, Dict[str, float]]:
+def fetch_statcan_vectors(
+    vector_ids: List[str],
+    latest_n: int = 600,
+) -> Dict[str, Dict[str, float]]:
     """
-    Fetch one or more StatCan vectors via WDS.
+    Fetch one or more StatCan vectors via WDS getDataFromVectorsAndLatestNPeriods.
 
-    Returns:
+    Returns a mapping:
         {
           "v12345": {"YYYY-MM-01": value, ...},
           "v67890": {"YYYY-MM-01": value, ...},
         }
+
+    Values are *as returned by WDS*; you can apply your own scaling (e.g. millions → dollars)
+    in the caller.
     """
     if not vector_ids:
         return {}
 
-    url = _statcan_wds_url(vector_ids)
+    payload = [
+        {"vectorId": _statcan_vector_id_to_int(vec), "latestN": latest_n}
+        for vec in vector_ids
+    ]
+    data_bytes = json.dumps(payload).encode("utf-8")
 
-    req = urllib.request.Request(url, headers={"User-Agent": "housing-dashboard"})
+    req = urllib.request.Request(
+        STATCAN_WDS_URL,
+        data=data_bytes,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "housing-dashboard",
+        },
+    )
+
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode("utf-8")
     except (HTTPError, URLError) as e:
-        print(f"[Market] StatCan WDS fetch failed: {e}")
+        print(f"[Market] StatCan WDS request failed: {e}")
         return {}
 
     try:
-        payload = json.loads(raw)
+        items = json.loads(raw)
     except json.JSONDecodeError as e:
-        print(f"[Market] Failed to decode StatCan WDS response: {e}")
+        print(f"[Market] StatCan WDS JSON decode failed: {e}")
         return {}
 
     result: Dict[str, Dict[str, float]] = {}
-    # StatCan WDS returns a list of "object" items, each with a vectorId and points.
-    for obj in payload.get("object", []):
-        vec_id = obj.get("vectorId")
-        if vec_id is None:
+
+    # Expected shape (see WDS user guide):
+    # [
+    #   {
+    #     "status": "SUCCESS",
+    #     "object": {
+    #       "vectorId": 42076,
+    #       "vectorDataPoint": [
+    #         {"refPer": "2017-07-01", "value": "18381", ...},
+    #         ...
+    #       ]
+    #     }
+    #   },
+    #   ...
+    # ]
+    for item in items:
+        if item.get("status") != "SUCCESS":
             continue
-        vec_id_str = f"v{vec_id}"
+        obj = item.get("object") or {}
+        vec_id_int = obj.get("vectorId")
+        if vec_id_int is None:
+            continue
+        vec_id_str = f"v{vec_id_int}"
 
         series: Dict[str, float] = {}
-        for point in obj.get("points", []):
-            ref_per = point.get("refPer")  # e.g. "2024-09-01"
-            value_str = point.get("value")
-            if not ref_per or value_str in (None, "", "NaN", "nan"):
+        for dp in obj.get("vectorDataPoint", []):
+            ref_per = dp.get("refPer")
+            val = dp.get("value")
+            if ref_per in (None, "", "NaN", "nan") or val in (None, "", "NaN", "nan"):
                 continue
             try:
-                value = float(value_str)
-            except ValueError:
+                value = float(val)
+            except (TypeError, ValueError):
                 continue
+
             # Normalize to YYYY-MM-01
             try:
                 dt = datetime.strptime(ref_per, "%Y-%m-%d")
                 date_str = dt.strftime("%Y-%m-01")
             except ValueError:
-                # Fallback: raw string
                 date_str = ref_per
+
             series[date_str] = value
+
         result[vec_id_str] = series
 
     return result
 
 
+# -------------------------------------------------------------------------
+# Finnhub raw data readers (no API calls here)
+# -------------------------------------------------------------------------
+
+
 def _read_finnhub_candles(json_path: Path, label: str) -> Dict[str, float]:
     """
     Read Finnhub candles (t, c arrays) and return monthly close series:
-    { 'YYYY-MM-01': close_price, ... }
+        { "YYYY-MM-01": close_price, ... }
 
-    Expects raw JSON saved from stock/candle endpoint.
+    Expects raw JSON saved from stock/candle endpoint (scripts/update_market_prices_from_finnhub.py).
     """
     if not json_path.exists():
         print(f"[Market] Warning: missing Finnhub raw file for {label}: {json_path}")
@@ -151,6 +203,11 @@ def _read_finnhub_candles(json_path: Path, label: str) -> Dict[str, float]:
     return series
 
 
+# -------------------------------------------------------------------------
+# Shared helper to turn a date->value series into PanelRow list
+# -------------------------------------------------------------------------
+
+
 def _build_panel_rows_for_series(
     metric_id: str,
     unit: str,
@@ -158,12 +215,11 @@ def _build_panel_rows_for_series(
     series: Dict[str, float],
 ) -> List[PanelRow]:
     """
-    Turn a date->value series into PanelRow list with MoM, YoY, MA3.
+    Turn a date->value series into a list of PanelRow with MoM, YoY, and MA3.
     """
     if not series:
         return []
 
-    # Sorted by date ascending
     items = sorted(series.items(), key=lambda kv: kv[0])
     dates = [d for (d, _) in items]
     values = [v for (_, v) in items]
@@ -199,20 +255,27 @@ def _build_panel_rows_for_series(
     return rows
 
 
+# -------------------------------------------------------------------------
+# Metric-specific generators
+# -------------------------------------------------------------------------
+
+
 def _generate_gdp_rows() -> List[PanelRow]:
+    """
+    Canada real GDP, monthly, all industries, chained 2017 dollars.
+    """
     if GDP_VECTOR_ID.startswith("vX") or GDP_VECTOR_ID.startswith("vx"):
-        # Fail loudly so you remember to fill this.
         print(
-            "[Market] GDP_VECTOR_ID is still the placeholder 'vXXXXX'. "
-            "Choose the correct StatCan vector for Canada / All industries / "
-            "Real chained (2017) dollars in table 36-10-0434-01 and update "
-            "GDP_VECTOR_ID in Market.py."
+            "[Market] GDP_VECTOR_ID is still a placeholder. "
+            "Set it to the correct StatCan vector for Canada / all industries / "
+            "real chained (2017) dollars in table 36-10-0434-01."
         )
         return []
 
-    statcan_data = fetch_statcan_vectors([GDP_VECTOR_ID])
+    statcan_data = fetch_statcan_vectors([GDP_VECTOR_ID], latest_n=600)
     gdp_series = statcan_data.get(GDP_VECTOR_ID, {})
-    # Convert from millions of chained dollars to plain dollars (x 1,000,000).
+
+    # Convert from millions of chained dollars to plain dollars (x 1,000,000)
     gdp_dollars = {d: v * 1_000_000.0 for d, v in gdp_series.items()}
 
     return _build_panel_rows_for_series(
@@ -224,12 +287,17 @@ def _generate_gdp_rows() -> List[PanelRow]:
 
 
 def _generate_money_rows() -> List[PanelRow]:
-    statcan_data = fetch_statcan_vectors([M2_VECTOR_ID, M2PP_VECTOR_ID])
+    """
+    Money supply: M2 and M2++, monthly, millions of dollars → dollars.
+    """
+    statcan_data = fetch_statcan_vectors(
+        [M2_VECTOR_ID, M2PP_VECTOR_ID],
+        latest_n=600,
+    )
 
     m2_series = statcan_data.get(M2_VECTOR_ID, {})
     m2pp_series = statcan_data.get(M2PP_VECTOR_ID, {})
 
-    # Convert from millions of dollars to dollars (x 1,000,000).
     m2_dollars = {d: v * 1_000_000.0 for d, v in m2_series.items()}
     m2pp_dollars = {d: v * 1_000_000.0 for d, v in m2pp_series.items()}
 
@@ -254,6 +322,9 @@ def _generate_money_rows() -> List[PanelRow]:
 
 
 def _generate_tsx_rows() -> List[PanelRow]:
+    """
+    TSX Composite index, monthly closes from Finnhub candles.
+    """
     tsx_path = RAW_DATA_DIR / "tsx_finnhub.json"
     tsx_series = _read_finnhub_candles(tsx_path, "TSX Composite")
 
@@ -266,10 +337,13 @@ def _generate_tsx_rows() -> List[PanelRow]:
 
 
 def _generate_xre_rows() -> List[PanelRow]:
+    """
+    XRE ETF index, monthly closes from Finnhub candles,
+    normalized to 100 at the first available month.
+    """
     xre_path = RAW_DATA_DIR / "xre_finnhub.json"
     xre_series_raw = _read_finnhub_candles(xre_path, "XRE ETF")
 
-    # Normalize to an index (base = first close = 100.0)
     if not xre_series_raw:
         return []
 
@@ -293,14 +367,19 @@ def _generate_xre_rows() -> List[PanelRow]:
     )
 
 
+# -------------------------------------------------------------------------
+# Public entrypoint
+# -------------------------------------------------------------------------
+
+
 def generate_market() -> List[PanelRow]:
     """
     Main entry point: generate all PanelRow records for the Market tab.
 
     Metrics:
-      - ca_real_gdp         (StatCan 36-10-0434-01)
-      - tsx_composite_index (Finnhub)
-      - xre_price_index     (Finnhub, normalized to 100 at first obs)
+      - ca_real_gdp         (StatCan 36-10-0434-01 via WDS)
+      - tsx_composite_index (Finnhub raw JSON)
+      - xre_price_index     (Finnhub raw JSON, normalized to 100 at first obs)
       - ca_m2               (StatCan 10-10-0116-01, v41552796)
       - ca_m2pp             (StatCan 10-10-0116-01, v41552801)
     """
@@ -310,15 +389,14 @@ def generate_market() -> List[PanelRow]:
     rows.extend(_generate_xre_rows())
     rows.extend(_generate_money_rows())
 
-    # You don't *have* to write market.json here (generate_data.py will), but
-    # this makes the module testable standalone:
-    if rows:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        market_json_path = DATA_DIR / "market.json"
-        market_json_path.write_text(
-            json.dumps([asdict(r) for r in rows], indent=2),
-            encoding="utf-8",
-        )
-        print(f"[Market] Wrote {len(rows)} rows to {market_json_path}")
+    # This write is redundant with scripts/generate_data.py but makes
+    # the module testable standalone.
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    market_json_path = DATA_DIR / "market.json"
+    market_json_path.write_text(
+        json.dumps([asdict(r) for r in rows], indent=2),
+        encoding="utf-8",
+    )
+    print(f"[Market] Wrote {len(rows)} rows to {market_json_path}")
 
     return rows
