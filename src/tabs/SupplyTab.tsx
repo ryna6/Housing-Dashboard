@@ -62,7 +62,7 @@ function formatCompactNumber(value: number): string {
     return `${(value / 1_000_000).toFixed(1)}M`;
   }
   if (abs >= 1_000) {
-    return `${(value / 1_000).toFixed(0)}K`;
+    return `${(value / 1_000).toFixed(1)}K`;
   }
   return value.toFixed(0);
 }
