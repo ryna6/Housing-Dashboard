@@ -196,6 +196,7 @@ export const MarketTab: React.FC = () => {
               series={gdpSeries}
               valueKey="value"
               valueFormatter={formatCurrencyCompact}
+              tooltipValueFormatter={formatMoneyTooltip}
               clampYMinToZero
             />
             <ChartPanel
