@@ -81,7 +81,7 @@ export const MarketTab: React.FC = () => {
     return getLatestByMetric(data, REGION, HEADLINE_METRICS, SEGMENT);
   }, [data]);
 
-  // Money supply snapshot for M2 only
+  // M2 Money supply
   const m2Snapshot: MetricSnapshot | null = useMemo(() => {
     if (!data || !data.length) return null;
     const [snap] = getLatestByMetric(data, REGION, ["ca_m2"], SEGMENT);
@@ -150,8 +150,7 @@ export const MarketTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Market</h1>
         <p className="tab__subtitle">
-          Macro and market indicators for Canada (GDP, TSX, REITs, money
-          supply).
+          Canada GDP, S&P/TSX, Canadian REITs ETF, money supply (Statistics Canada)
         </p>
       </header>
 
@@ -178,26 +177,6 @@ export const MarketTab: React.FC = () => {
                 titleOverride={CARD_TITLES[snapshot.metric] ?? undefined}
               />
             ))}
-
-            {/* M2 money supply card */}
-            {m2Snapshot && (
-              <div className="metric-card">
-                <div className="metric-card__title">Money supply (M2)</div>
-                <div className="metric-card__value">
-                  {formatCurrencyCompact(m2Snapshot.latest.value)}
-                </div>
-                <div className="metric-card__delta-row">
-                  <span className="metric-card__delta-label">
-                    MoM: {formatPercent(m2Snapshot.latest.mom_pct)}
-                  </span>
-                </div>
-                <div className="metric-card__delta-row">
-                  <span className="metric-card__delta-label">
-                    YoY: {formatPercent(m2Snapshot.latest.yoy_pct)}
-                  </span>
-                </div>
-              </div>
-            )}
           </section>
 
           {/* Charts – all trimmed to last 10 years */}
