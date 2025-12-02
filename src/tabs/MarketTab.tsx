@@ -89,7 +89,7 @@ function formatMoneyTooltip(value: number): string {
 }
 
 function formatIndexTooltip(value: number): string {
-  return ${value.toFixed(1)}; 
+  return `${value.toFixed(1)}`; 
 }
 
 export const MarketTab: React.FC = () => {
