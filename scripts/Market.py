@@ -356,7 +356,7 @@ def _generate_tsx_rows() -> List[PanelRow]:
     """
     TSX Composite proxy (XIU ETF), monthly closes from Alpha Vantage candles.
     """
-    tsx_raw_path = RAW_DATA_DIR / "tsx_finnhub.json"  # written by Alpha Vantage updater
+    tsx_raw_path = RAW_DATA_DIR / "tsx_alphavantage.json"  # written by Alpha Vantage updater
     tsx_close_series = _read_alphavantage_candles(tsx_raw_path, label="TSX Composite")
     if not tsx_close_series:
         return []
@@ -376,7 +376,7 @@ def _generate_xre_rows() -> List[PanelRow]:
     XRE REIT ETF index, monthly closes from Alpha Vantage candles,
     normalized to 100 at the first available month.
     """
-    xre_raw_path = RAW_DATA_DIR / "xre_finnhub.json"  # written by Alpha Vantage updater
+    xre_raw_path = RAW_DATA_DIR / "xre_alphavantage.json"  # written by Alpha Vantage updater
     xre_close_series = _read_alphavantage_candles(xre_raw_path, label="XRE ETF")
     if not xre_close_series:
         return []
