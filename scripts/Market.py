@@ -10,21 +10,13 @@ from typing import Dict, List, Optional
 import urllib.request
 from urllib.error import HTTPError, URLError
 
-# -------------------------------------------------------------------------
-# Paths
-# -------------------------------------------------------------------------
-
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
-
-# -------------------------------------------------------------------------
-# Core row model (same shape as other tabs)
-# -------------------------------------------------------------------------
 
 
 @dataclass
 class PanelRow:
-    date: str          # YYYY-MM-01
+    date: str          # YYYY-MM-DD (first of month)
     region: str
     segment: str
     metric: str
@@ -36,26 +28,25 @@ class PanelRow:
     ma3: Optional[float]
 
 
-# -------------------------------------------------------------------------
-# StatCan WDS configuration (shared pattern with other tabs)
-# -------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# StatCan WDS helpers (same pattern as other tabs)
+# ---------------------------------------------------------------------------
 
 STATCAN_WDS_URL = (
     "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods"
 )
 
-# Real GDP at basic prices, chain-linked, monthly, Canada, all industries.
+# GDP: real, chained (2017) dollars, all industries, Canada, monthly
+# Table 36-10-0434-01; vector ID chosen for Canada / all industries / real chained.
 GDP_VECTOR_ID = "v65201210"
 
-# Money supply vectors from table 10-10-0116-01 (monthly, millions of dollars)
-M2_VECTOR_ID = "v41552796"   # M2 (gross)
-M2PP_VECTOR_ID = "v41552801" # M2++ (gross)
+# Money supply (table 10-10-0116-01), monthly, millions of dollars
+M2_VECTOR_ID = "v41552796"    # M2 (gross)
+M2PP_VECTOR_ID = "v41552801"  # M2++ (gross)
 
 
 def _statcan_vector_id_to_int(vector_id: str) -> int:
-    """
-    Convert a vector id like 'v41552796' or 'V41552796' to the integer 41552796.
-    """
+    """Convert 'v41552796' or 'V41552796' → 41552796."""
     v = vector_id.strip()
     if v.lower().startswith("v"):
         v = v[1:]
@@ -69,14 +60,13 @@ def fetch_statcan_vectors(
     """
     Fetch one or more StatCan vectors via WDS getDataFromVectorsAndLatestNPeriods.
 
-    Returns a mapping:
+    Returns:
         {
           "v12345": {"YYYY-MM-01": value, ...},
           "v67890": {"YYYY-MM-01": value, ...},
         }
 
-    Values are *as returned by WDS*; you can apply your own scaling (e.g. millions → dollars)
-    in the caller.
+    Values are as returned by WDS (e.g. millions of dollars); callers can rescale.
     """
     if not vector_ids:
         return {}
@@ -105,13 +95,13 @@ def fetch_statcan_vectors(
 
     try:
         items = json.loads(raw)
-    except json.JSONDecodeError as e:
-        print(f"[Market] StatCan WDS JSON decode failed: {e}")
+    except json.JSONDecodeError:
+        print("[Market] Failed to parse StatCan WDS JSON response")
         return {}
 
     result: Dict[str, Dict[str, float]] = {}
 
-    # Expected shape (see WDS user guide):
+    # Expected shape:
     # [
     #   {
     #     "status": "SUCCESS",
@@ -159,45 +149,48 @@ def fetch_statcan_vectors(
     return result
 
 
-# -------------------------------------------------------------------------
-# Twelve Data raw data readers (no API calls here)
-# -------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Alpha Vantage raw data reader (no API calls here)
+# ---------------------------------------------------------------------------
 
 
-def _read_twelvedata_candles(json_path: Path, label: str) -> Dict[str, float]:
+def _read_alphavantage_candles(json_path: Path, label: str) -> Dict[str, float]:
     """
-    Read market candles (t, c arrays) created by the Twelve Data updater script
-    and return a monthly close series:
-        { "YYYY-MM-01": close_price, ... }
+    Read Alpha Vantage-derived candles (t, c arrays) and return monthly close series:
+        { 'YYYY-MM-01': close_price, ... }
 
-    Expects raw JSON saved by scripts/update_market_prices_from_twelvedata.py
-    in a Finnhub-compatible "candles" shape (keys: t, c, ...).
+    Expects raw JSON saved by the Alpha Vantage updater script
+    (TIME_SERIES_MONTHLY → candles with keys 't' and 'c').
     """
     if not json_path.exists():
-        print(f"[Market] Warning: missing Twelve Data raw file for {label}: {json_path}")
+        print(f"[Market] Warning: missing Alpha Vantage raw file for {label}: {json_path}")
         return {}
 
     try:
         raw = json.loads(json_path.read_text())
-    except json.JSONDecodeError as e:
-        print(f"[Market] Failed to parse {label} Twelve Data JSON: {e}")
+    except json.JSONDecodeError:
+        print(f"[Market] Warning: invalid JSON in {json_path}")
         return {}
 
-    t = raw.get("t") or []
-    c = raw.get("c") or []
+    status = raw.get("s")
+    if status not in ("ok", "no_data"):
+        print(f"[Market] Warning: Alpha Vantage status for {label} is {status!r}")
+        return {}
 
-    if not isinstance(t, list) or not isinstance(c, list) or len(t) != len(c):
-        print(f"[Market] Unexpected Twelve Data structure in {json_path}")
+    t_list = raw.get("t") or []
+    c_list = raw.get("c") or []
+
+    if not isinstance(t_list, list) or not isinstance(c_list, list) or len(t_list) != len(c_list):
+        print(f"[Market] Warning: unexpected Alpha Vantage candles structure in {json_path}")
         return {}
 
     series: Dict[str, float] = {}
-    for ts, close in zip(t, c):
+    for ts, close in zip(t_list, c_list):
         try:
             ts_int = int(ts)
             close_val = float(close)
         except (TypeError, ValueError):
             continue
-
         dt = datetime.utcfromtimestamp(ts_int)
         date_str = dt.strftime("%Y-%m-01")
         series[date_str] = close_val
@@ -205,9 +198,9 @@ def _read_twelvedata_candles(json_path: Path, label: str) -> Dict[str, float]:
     return series
 
 
-# -------------------------------------------------------------------------
-# Shared helper to turn a date->value series into PanelRow list
-# -------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Shared helper: series → PanelRow list with MoM / YoY / MA3
+# ---------------------------------------------------------------------------
 
 
 def _build_panel_rows_for_series(
@@ -257,27 +250,44 @@ def _build_panel_rows_for_series(
     return rows
 
 
-# -------------------------------------------------------------------------
+def _normalize_to_index(series: Dict[str, float]) -> Dict[str, float]:
+    """
+    Normalize a date->value series to an index starting at 100 for the first
+    non-zero observation.
+    """
+    if not series:
+        return {}
+
+    items = sorted(series.items(), key=lambda kv: kv[0])
+    base_val = None
+    for _, v in items:
+        if v != 0:
+            base_val = v
+            break
+
+    if base_val is None:
+        return {}
+
+    index_series: Dict[str, float] = {}
+    for d, v in items:
+        index_series[d] = (v / base_val) * 100.0
+
+    return index_series
+
+
+# ---------------------------------------------------------------------------
 # Metric-specific generators
-# -------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 
 def _generate_gdp_rows() -> List[PanelRow]:
     """
     Canada real GDP, monthly, all industries, chained 2017 dollars.
     """
-    if GDP_VECTOR_ID.startswith("vX") or GDP_VECTOR_ID.startswith("vx"):
-        print(
-            "[Market] GDP_VECTOR_ID is still a placeholder. "
-            "Set it to the correct StatCan vector for Canada / all industries / "
-            "real chained (2017) dollars in table 36-10-0434-01."
-        )
-        return []
-
     statcan_data = fetch_statcan_vectors([GDP_VECTOR_ID], latest_n=600)
     gdp_series = statcan_data.get(GDP_VECTOR_ID, {})
 
-    # Convert from millions of chained dollars to plain dollars (x 1,000,000)
+    # Convert from millions of chained dollars to plain dollars (× 1,000,000)
     gdp_dollars = {d: v * 1_000_000.0 for d, v in gdp_series.items()}
 
     return _build_panel_rows_for_series(
@@ -325,53 +335,46 @@ def _generate_money_rows() -> List[PanelRow]:
 
 def _generate_tsx_rows() -> List[PanelRow]:
     """
-    TSX Composite index, monthly closes from Twelve Data candles.
+    TSX Composite proxy (XIU ETF), monthly closes from Alpha Vantage candles.
     """
-    tsx_path = RAW_DATA_DIR / "tsx_finnhub.json"  # written by Twelve Data updater
-    tsx_series = _read_twelvedata_candles(tsx_path, "TSX Composite")
+    tsx_raw_path = RAW_DATA_DIR / "tsx_finnhub.json"  # written by Alpha Vantage updater
+    tsx_close_series = _read_alphavantage_candles(tsx_raw_path, label="TSX Composite")
+    if not tsx_close_series:
+        return []
+
+    tsx_index_series = _normalize_to_index(tsx_close_series)
 
     return _build_panel_rows_for_series(
         metric_id="tsx_composite_index",
         unit="index",
-        source="twelvedata_tsx_composite",
-        series=tsx_series,
+        source="alphavantage_tsx_proxy",
+        series=tsx_index_series,
     )
 
 
 def _generate_xre_rows() -> List[PanelRow]:
     """
-    XRE ETF index, monthly closes from Twelve Data candles,
+    XRE REIT ETF index, monthly closes from Alpha Vantage candles,
     normalized to 100 at the first available month.
     """
-    xre_path = RAW_DATA_DIR / "xre_finnhub.json"  # written by Twelve Data updater
-    xre_series_raw = _read_twelvedata_candles(xre_path, "XRE ETF")
-
-    if not xre_series_raw:
+    xre_raw_path = RAW_DATA_DIR / "xre_finnhub.json"  # written by Alpha Vantage updater
+    xre_close_series = _read_alphavantage_candles(xre_raw_path, label="XRE ETF")
+    if not xre_close_series:
         return []
 
-    items = sorted(xre_series_raw.items(), key=lambda kv: kv[0])
-    if not items:
-        return []
-
-    base_close = items[0][1]
-    if base_close == 0:
-        return []
-
-    index_series: Dict[str, float] = {
-        d: (v / base_close) * 100.0 for (d, v) in items
-    }
+    xre_index_series = _normalize_to_index(xre_close_series)
 
     return _build_panel_rows_for_series(
         metric_id="xre_price_index",
         unit="index",
-        source="twelvedata_xre_etf",
-        series=index_series,
+        source="alphavantage_xre_etf",
+        series=xre_index_series,
     )
 
 
-# -------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Public entrypoint
-# -------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 
 def generate_market() -> List[PanelRow]:
@@ -380,8 +383,8 @@ def generate_market() -> List[PanelRow]:
 
     Metrics:
       - ca_real_gdp         (StatCan 36-10-0434-01 via WDS)
-      - tsx_composite_index (Twelve Data raw JSON → candles → monthly index)
-      - xre_price_index     (Twelve Data raw JSON → candles → index normalized to 100)
+      - tsx_composite_index (Alpha Vantage TSX proxy ETF → candles)
+      - xre_price_index     (Alpha Vantage XRE ETF → candles)
       - ca_m2               (StatCan 10-10-0116-01, v41552796)
       - ca_m2pp             (StatCan 10-10-0116-01, v41552801)
     """
@@ -391,14 +394,15 @@ def generate_market() -> List[PanelRow]:
     rows.extend(_generate_xre_rows())
     rows.extend(_generate_money_rows())
 
-    # This write is redundant with scripts/generate_data.py but makes
-    # the module testable standalone.
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    market_json_path = DATA_DIR / "market.json"
-    market_json_path.write_text(
-        json.dumps([asdict(r) for r in rows], indent=2),
-        encoding="utf-8",
-    )
-    print(f"[Market] Wrote {len(rows)} rows to {market_json_path}")
+    # You don't *have* to write market.json here (generate_data.py will), but
+    # this makes the module testable standalone:
+    if rows:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        market_json_path = DATA_DIR / "market.json"
+        market_json_path.write_text(
+            json.dumps([asdict(r) for r in rows], indent=2),
+            encoding="utf-8",
+        )
+        print(f"[Market] Wrote {len(rows)} rows to {market_json_path}")
 
     return rows
