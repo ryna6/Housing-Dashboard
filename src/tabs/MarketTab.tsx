@@ -22,8 +22,8 @@ const HEADLINE_METRICS: string[] = [
 const CARD_TITLES: Record<string, string> = {
   ca_real_gdp: "Real GDP",
   tsx_composite_index: "S&P/TSX Composite index",
-  xre_price_index: "REIT ETF index",
-  ca_m2: "M2 Money supply",
+  xre_price_index: "REIT index",
+  ca_m2: "M2 money supply",
 };
 
 // Trim a series down to the last N years
@@ -178,21 +178,21 @@ export const MarketTab: React.FC = () => {
               clampYMinToZero
             />
             <ChartPanel
-              title="S&P/TSX Composite Index"
+              title="S&P/TSX composite index"
               series={tsxSeries}
               valueKey="value"
               valueFormatter={formatIndex}
               clampYMinToZero
             />
             <ChartPanel
-              title="REIT Index ETF"
+              title="REIT index"
               series={xreSeries}
               valueKey="value"
               valueFormatter={formatIndex}
               clampYMinToZero
             />
             <ChartPanel
-              title="M2 Money Supply"
+              title="M2 money supply"
               series={m2Series}
               valueKey="value"
               valueFormatter={formatCurrencyCompact}
