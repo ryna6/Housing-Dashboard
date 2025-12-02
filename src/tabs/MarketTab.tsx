@@ -10,12 +10,21 @@ import { useTabData } from "./useTabData";
 const REGION: RegionCode = "canada";
 const SEGMENT = "market";
 
-// Headline metrics for standard snapshot cards
+// We now include M2 as a headline metric.
+// This gives us 4 cards: GDP, TSX, XRE, M2.
 const HEADLINE_METRICS: string[] = [
   "ca_real_gdp",
   "tsx_composite_index",
   "xre_price_index",
+  "ca_m2",
 ];
+
+const CARD_TITLES: Record<string, string> = {
+  ca_real_gdp: "Real GDP (Canada)",
+  tsx_composite_index: "S&P/TSX Composite index",
+  xre_price_index: "XRE real estate ETF index",
+  ca_m2: "Money supply (M2)",
+};
 
 // Trim a series down to the last N years
 function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
@@ -58,34 +67,14 @@ function formatIndex(value: number): string {
   return Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1);
 }
 
-function formatPercent(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "–";
-  const decimals = Math.abs(value) >= 10 ? 1 : 2;
-  return `${value.toFixed(decimals)}%`;
-}
-
-const CARD_TITLES: Record<string, string> = {
-  ca_real_gdp: "Real GDP (Canada)",
-  tsx_composite_index: "S&P/TSX Composite index",
-  xre_price_index: "XRE real estate ETF index",
-};
-
 export const MarketTab: React.FC = () => {
   const { data, loading, error } = useTabData("market");
-
   const hasData = !!data && data.length > 0;
 
-  // Standard headline snapshots (GDP, TSX, XRE)
+  // Standard headline snapshots (GDP, TSX, XRE, M2)
   const snapshots: MetricSnapshot[] = useMemo(() => {
     if (!data || !data.length) return [];
     return getLatestByMetric(data, REGION, HEADLINE_METRICS, SEGMENT);
-  }, [data]);
-
-  // M2 Money supply
-  const m2Snapshot: MetricSnapshot | null = useMemo(() => {
-    if (!data || !data.length) return null;
-    const [snap] = getLatestByMetric(data, REGION, ["ca_m2"], SEGMENT);
-    return snap ?? null;
   }, [data]);
 
   // Time series (trimmed to last 10 years)
@@ -150,7 +139,8 @@ export const MarketTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Market</h1>
         <p className="tab__subtitle">
-          Canada GDP, S&P/TSX, Canadian REITs ETF, money supply (Statistics Canada)
+          Macro and market indicators for Canada (GDP, TSX, REITs, money
+          supply).
         </p>
       </header>
 
