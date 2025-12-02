@@ -160,32 +160,34 @@ def fetch_statcan_vectors(
 
 
 # -------------------------------------------------------------------------
-# Finnhub raw data readers (no API calls here)
+# Twelve Data raw data readers (no API calls here)
 # -------------------------------------------------------------------------
 
 
-def _read_finnhub_candles(json_path: Path, label: str) -> Dict[str, float]:
+def _read_twelvedata_candles(json_path: Path, label: str) -> Dict[str, float]:
     """
-    Read Finnhub candles (t, c arrays) and return monthly close series:
+    Read market candles (t, c arrays) created by the Twelve Data updater script
+    and return a monthly close series:
         { "YYYY-MM-01": close_price, ... }
 
-    Expects raw JSON saved from stock/candle endpoint (scripts/update_market_prices_from_finnhub.py).
+    Expects raw JSON saved by scripts/update_market_prices_from_twelvedata.py
+    in a Finnhub-compatible "candles" shape (keys: t, c, ...).
     """
     if not json_path.exists():
-        print(f"[Market] Warning: missing Finnhub raw file for {label}: {json_path}")
+        print(f"[Market] Warning: missing Twelve Data raw file for {label}: {json_path}")
         return {}
 
     try:
         raw = json.loads(json_path.read_text())
     except json.JSONDecodeError as e:
-        print(f"[Market] Failed to parse {label} Finnhub JSON: {e}")
+        print(f"[Market] Failed to parse {label} Twelve Data JSON: {e}")
         return {}
 
     t = raw.get("t") or []
     c = raw.get("c") or []
 
     if not isinstance(t, list) or not isinstance(c, list) or len(t) != len(c):
-        print(f"[Market] Unexpected Finnhub structure in {json_path}")
+        print(f"[Market] Unexpected Twelve Data structure in {json_path}")
         return {}
 
     series: Dict[str, float] = {}
@@ -323,26 +325,26 @@ def _generate_money_rows() -> List[PanelRow]:
 
 def _generate_tsx_rows() -> List[PanelRow]:
     """
-    TSX Composite index, monthly closes from Finnhub candles.
+    TSX Composite index, monthly closes from Twelve Data candles.
     """
-    tsx_path = RAW_DATA_DIR / "tsx_finnhub.json"
-    tsx_series = _read_finnhub_candles(tsx_path, "TSX Composite")
+    tsx_path = RAW_DATA_DIR / "tsx_finnhub.json"  # written by Twelve Data updater
+    tsx_series = _read_twelvedata_candles(tsx_path, "TSX Composite")
 
     return _build_panel_rows_for_series(
         metric_id="tsx_composite_index",
         unit="index",
-        source="finnhub_tsx_composite",
+        source="twelvedata_tsx_composite",
         series=tsx_series,
     )
 
 
 def _generate_xre_rows() -> List[PanelRow]:
     """
-    XRE ETF index, monthly closes from Finnhub candles,
+    XRE ETF index, monthly closes from Twelve Data candles,
     normalized to 100 at the first available month.
     """
-    xre_path = RAW_DATA_DIR / "xre_finnhub.json"
-    xre_series_raw = _read_finnhub_candles(xre_path, "XRE ETF")
+    xre_path = RAW_DATA_DIR / "xre_finnhub.json"  # written by Twelve Data updater
+    xre_series_raw = _read_twelvedata_candles(xre_path, "XRE ETF")
 
     if not xre_series_raw:
         return []
@@ -362,7 +364,7 @@ def _generate_xre_rows() -> List[PanelRow]:
     return _build_panel_rows_for_series(
         metric_id="xre_price_index",
         unit="index",
-        source="finnhub_xre",
+        source="twelvedata_xre_etf",
         series=index_series,
     )
 
@@ -378,8 +380,8 @@ def generate_market() -> List[PanelRow]:
 
     Metrics:
       - ca_real_gdp         (StatCan 36-10-0434-01 via WDS)
-      - tsx_composite_index (Finnhub raw JSON)
-      - xre_price_index     (Finnhub raw JSON, normalized to 100 at first obs)
+      - tsx_composite_index (Twelve Data raw JSON → candles → monthly index)
+      - xre_price_index     (Twelve Data raw JSON → candles → index normalized to 100)
       - ca_m2               (StatCan 10-10-0116-01, v41552796)
       - ca_m2pp             (StatCan 10-10-0116-01, v41552801)
     """
