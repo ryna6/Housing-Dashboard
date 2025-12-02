@@ -400,8 +400,8 @@ body {
 .chart-panel__title {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #f9fafb;
-  margin-bottom: 6px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
 }
 
 .chart-panel--empty {
