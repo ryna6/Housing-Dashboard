@@ -35,7 +35,19 @@ function formatCompactCount(value: number): string {
 }
 
 function formatListingTooltip(value: number): string {
-  return `${value.toFixed(2)}`; 
+  if (!Number.isFinite(value)) return "–";
+
+  const abs = Math.abs(value);
+  let scaled = value;
+  let suffix = "";
+
+  if (abs >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (abs >= 1_000) {
+    return `$${(value / 1_000).toFixed(0)}K`;
+  }
+  return `$${scaled.toFixed(1)}${suffix}`;
 }
 
 function formatRateTooltip(value: number): string {
