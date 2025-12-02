@@ -67,6 +67,13 @@ function formatIndex(value: number): string {
   return Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1);
 }
 
+/**
+ * Tooltip formatter for GDP and money supply.
+ */
+function formatYearsTooltip(value: number): string {
+  return `${value.toFixed(3)} yrs`;
+}
+
 export const MarketTab: React.FC = () => {
   const { data, loading, error } = useTabData("market");
   const hasData = !!data && data.length > 0;
@@ -195,6 +202,8 @@ export const MarketTab: React.FC = () => {
               title="M2 money supply"
               series={m2Series}
               valueKey="value"
+              valueFormatter={formatCurrencyCompact}
+              tooltipValueFormatter={formatMoneyTooltip}
               clampYMinToZero
             />
           </section>
