@@ -89,9 +89,12 @@ function formatMoneyTooltip(value: number): string {
 }
 
 function formatIndexTooltip(value: number): string {
-  return `${value.toFixed(1)}`; 
-  // Adds more detailed numeric view for index price on the chart
-  return `${value.toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
+  if (!Number.isFinite(value)) return "–";
+
+  return value.toLocaleString("en-CA", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
 }
 
 // Adds more detailed numeric view for index price on the chart
