@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
+DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
 # We use the stock/candle endpoint with daily resolution ("D")
