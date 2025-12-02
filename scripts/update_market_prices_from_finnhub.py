@@ -12,7 +12,7 @@ from urllib.request import urlopen
 RAW_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
 # Correct candles endpoint
-FINNHUB_BASE_URL = "https://finnhub.io/api/v1/stock/candle"
+FINNHUB_BASE_URL = "https://finnhub.io/api/v1/quote"
 FINNHUB_RESOLUTION = "D"  # daily bars
 DEFAULT_YEARS = 12        # ~12 years of history is enough for 10y charts
 
