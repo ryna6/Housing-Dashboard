@@ -70,7 +70,7 @@ function formatIndex(value: number): string {
 /**
  * Tooltip formatter for GDP and money supply.
  */
-function formatYearsTooltip(value: number): string {
+function formatMoneyTooltip(value: number): string {
   return `${value.toFixed(3)} yrs`;
 }
 
