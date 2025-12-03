@@ -144,32 +144,7 @@ export const OverviewTab: React.FC = () => {
     <div className="tab overview">
       <header className="tab__header">
         <h1 className="tab__title">Overview</h1>
-        <p className="tab__subtitle">
-          A guided entry point for the dashboard. Use the selector to view one
-          factor at a time.
-        </p>
       </header>
-
-      <div className="tab__controls tab__controls--inline">
-        <div className="tab__segment tab__segment--left">
-          View
-          <select
-            className="tab__regions-select"
-            value={view}
-            onChange={handleSelect}
-            aria-label="Select overview view"
-          >
-            <option value="main">Main overview</option>
-            <optgroup label="Factors">
-              {sections.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-        </div>
-      </div>
 
       {view === "main" && (
         <div className="overview__main">
@@ -183,6 +158,27 @@ export const OverviewTab: React.FC = () => {
             </p>
           </section>
 
+      <div className="tab__controls tab__controls--inline">
+        <div className="tab__segment tab__segment--left">
+          View
+          <select
+            className="tab__regions-select"
+            value={view}
+            onChange={handleSelect}
+            aria-label="Select overview view"
+          >
+            <option value="main">Main Overview</option>
+            <optgroup label="Factors">
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
+      </div>
+          
           <section className="overview__tabgrid">
             <h3 className="overview__section-title">Tabs at a glance</h3>
             <div className="overview__tabgrid-inner">
@@ -204,8 +200,7 @@ export const OverviewTab: React.FC = () => {
             <h3 className="overview__section-title">Next step</h3>
             <p className="overview__hero-text">
               Choose a factor from the selector above to see: (1) what it is,
-              (2) how to interpret it, and (3) a chart placeholder (we’ll wire
-              real factor series next).
+              (2) how to interpret it, and (3) a chart placeholder.
             </p>
           </section>
         </div>
