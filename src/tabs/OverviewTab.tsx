@@ -154,6 +154,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
     <div className="tab overview">
       <header className="tab__header">
         <h1 className="tab__title">Overview</h1>
+        <p className="tab__subtitle">
+          A guided entry point for the dashboard. Use the selector to view one
+          factor at a time.
+        </p>
+      </header>
+    
+    <div className="tab overview">
+      <header className="tab__header">
+        <h1 className="tab__title">Overview</h1>
       </header>
 
       {/* Dropdown stays visible for both main and factor views */}
@@ -208,14 +217,6 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
                 </div>
               ))}
             </div>
-          </section>
-
-          <section className="overview__next">
-            <h3 className="overview__section-title">Next step</h3>
-            <p className="overview__hero-text">
-              Choose a factor from the selector above to see: (1) what it is,
-              (2) how to interpret it, and (3) a chart placeholder.
-            </p>
           </section>
         </div>
       )}
