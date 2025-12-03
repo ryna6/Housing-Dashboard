@@ -25,8 +25,6 @@ interface FactorSection {
 const EMPTY_SERIES: PanelPoint[] = [];
 
 const TAB_DESCRIPTIONS: Record<string, string> = {
-  overview:
-    "A guided entry point: what each factor means, how to interpret it, and a quick way to jump between the system drivers.",
   prices:
     "Home prices and valuation context (e.g., HPI, average price) to understand the direction and magnitude of price moves.",
   sales:
