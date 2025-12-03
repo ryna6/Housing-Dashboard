@@ -16,7 +16,7 @@ export interface TabMeta {
 }
 
 export const TABS: TabMeta[] = [
-  { key: "overview", label: "Overciew", icon: "◎" },
+  { key: "overview", label: "Overview", icon: "◎" },
   { key: "prices", label: "Prices", icon: "₱" },
   { key: "sales", label: "Sales", icon: "⧉" },
   { key: "supply", label: "Supply", icon: "🏗" },
