@@ -445,7 +445,7 @@ body {
 .overview__main {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 2px;
 }
 
 .overview__hero,
