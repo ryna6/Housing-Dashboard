@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import type { PanelPoint } from "../data/types";
 import { ChartPanel } from "../components/ChartPanel";
+import { TABS } from "./tabConfig";
 
 type FactorId =
   | "tightness"
@@ -11,6 +12,8 @@ type FactorId =
   | "rental_stress"
   | "macro";
 
+type OverviewView = "main" | FactorId;
+
 interface FactorSection {
   id: FactorId;
   title: string;
@@ -20,6 +23,27 @@ interface FactorSection {
 }
 
 const EMPTY_SERIES: PanelPoint[] = [];
+
+const TAB_DESCRIPTIONS: Record<string, string> = {
+  overview:
+    "A guided entry point: what each factor means, how to interpret it, and a quick way to jump between the system drivers.",
+  prices:
+    "Home prices and valuation context (e.g., HPI, average price) to understand the direction and magnitude of price moves.",
+  sales:
+    "Resale activity and market balance signals (e.g., sales, new listings, SNLR, MOI) that often lead price turning points.",
+  supply:
+    "Supply pipeline indicators (e.g., starts, completions, under construction) that arrive with long lags and shape future balance.",
+  rates:
+    "Borrowing cost and yield context (policy rate, GoC yields) that drives affordability and demand through the rate channel.",
+  inflation:
+    "Inflation and labour context (CPI, employment) for the broader macro environment affecting housing conditions.",
+  credit:
+    "Household and business credit aggregates that proxy demand fuel and funding conditions.",
+  market:
+    "Macro/liquidity context (e.g., GDP, money/liq proxies) to contextualize broader cycle conditions.",
+  rentals:
+    "Rental market conditions (e.g., vacancy, rents, affordability ratios) capturing household stress and substitution dynamics.",
+};
 
 export const OverviewTab: React.FC = () => {
   const sections = useMemo<FactorSection[]>(
@@ -50,10 +74,10 @@ export const OverviewTab: React.FC = () => {
         id: "household_credit",
         title: "Household credit & leverage",
         description:
-          "Captures the demand fuel side (mortgage growth, consumer leverage) that can amplify housing cycles.",
+          "Captures the demand-fuel side (mortgage growth, consumer leverage) that can amplify housing cycles.",
         howToRead: [
-          "If household credit growth accelerates while rates are steady/easing, demand conditions are strengthening.",
-          "If credit growth cools as rates rise, demand typically weakens before supply fully adjusts.",
+          "If household credit accelerates while rates are steady/easing, demand conditions are strengthening.",
+          "If credit cools while rates rise, demand typically weakens before supply fully adjusts.",
         ],
         chartTitle: "Factor: Household credit & leverage (placeholder)",
       },
@@ -63,7 +87,7 @@ export const OverviewTab: React.FC = () => {
         description:
           "Captures funding conditions for builders and the supply pipeline (developer financing can stay elevated even as demand slows).",
         howToRead: [
-          "If business credit remains strong while household credit cools, supply overshoot risk can increase.",
+          "If business credit stays strong while household credit cools, supply overshoot risk can increase.",
           "If business credit tightens alongside demand, pipeline growth may slow with a lag.",
         ],
         chartTitle: "Factor: Business / developer credit (placeholder)",
@@ -74,8 +98,8 @@ export const OverviewTab: React.FC = () => {
         description:
           "Tracks supply arriving with long lags (starts/permits lead; completions/inventory follow).",
         howToRead: [
-          "If starts/permits rise while resale tightness is already loosening, oversupply risk increases (with a lag).",
-          "If completions remain elevated while absorption weakens, inventory pressure typically builds.",
+          "If the pipeline rises while resale tightness is already loosening, oversupply risk increases (with a lag).",
+          "If completions stay elevated while absorption weakens, inventory pressure typically builds.",
         ],
         chartTitle: "Factor: Construction pipeline & inventory (placeholder)",
       },
@@ -96,8 +120,8 @@ export const OverviewTab: React.FC = () => {
         description:
           "Provides context from growth, liquidity, and risk appetite (typically secondary to rates/credit for housing timing).",
         howToRead: [
-          "If growth/liquidity indicators improve alongside easing rates, housing conditions usually firm up.",
-          "If risk assets roll over and growth slows, housing activity often weakens with a lag.",
+          "If growth/liquidity improves alongside easing rates, housing conditions often firm up.",
+          "If risk appetite rolls over and growth slows, housing activity often weakens with a lag.",
         ],
         chartTitle: "Factor: Macro backdrop (placeholder)",
       },
@@ -105,15 +129,15 @@ export const OverviewTab: React.FC = () => {
     []
   );
 
-  const [jumpTo, setJumpTo] = useState<FactorId | "">("");
+  const [view, setView] = useState<OverviewView>("main");
 
-  const handleJump = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const id = event.target.value as FactorId | "";
-    setJumpTo(id);
-    if (!id) return;
+  const selectedFactor = useMemo(() => {
+    if (view === "main") return null;
+    return sections.find((s) => s.id === view) ?? null;
+  }, [sections, view]);
 
-    const el = document.getElementById(`factor-${id}`);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  const handleSelect = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setView(event.target.value as OverviewView);
   };
 
   return (
@@ -121,60 +145,100 @@ export const OverviewTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Overview</h1>
         <p className="tab__subtitle">
-          A factor-based navigation view. Each section provides a short definition,
-          a quick reading guide, and a placeholder chart slot.
+          A guided entry point for the dashboard. Use the selector to view one
+          factor at a time.
         </p>
       </header>
 
       <div className="tab__controls tab__controls--inline">
         <div className="tab__segment tab__segment--left">
-          Jump to
+          View
           <select
             className="tab__regions-select"
-            value={jumpTo}
-            onChange={handleJump}
-            aria-label="Jump to factor"
+            value={view}
+            onChange={handleSelect}
+            aria-label="Select overview view"
           >
-            <option value="">Select a factor…</option>
-            {sections.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.title}
-              </option>
-            ))}
+            <option value="main">Main overview</option>
+            <optgroup label="Factors">
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
       </div>
 
-      <div className="overview__sections">
-        {sections.map((section) => (
-          <section
-            key={section.id}
-            id={`factor-${section.id}`}
-            className="overview__section"
-          >
+      {view === "main" && (
+        <div className="overview__main">
+          <section className="overview__hero">
+            <h2 className="overview__hero-title">What this dashboard does</h2>
+            <p className="overview__hero-text">
+              This site organizes Canadian housing drivers into a set of tabs and
+              a factor framework. Use the tabs for raw indicators, and use the
+              factor selector above to view a single “driver” with interpretation
+              guidance.
+            </p>
+          </section>
+
+          <section className="overview__tabgrid">
+            <h3 className="overview__section-title">Tabs at a glance</h3>
+            <div className="overview__tabgrid-inner">
+              {TABS.map((t) => (
+                <div key={t.key} className="overview__tabcard">
+                  <div className="overview__tabcard-top">
+                    <div className="overview__tabicon">{t.icon}</div>
+                    <div className="overview__tabname">{t.label}</div>
+                  </div>
+                  <div className="overview__tabdesc">
+                    {TAB_DESCRIPTIONS[t.key] ?? "Description coming soon."}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="overview__next">
+            <h3 className="overview__section-title">Next step</h3>
+            <p className="overview__hero-text">
+              Choose a factor from the selector above to see: (1) what it is,
+              (2) how to interpret it, and (3) a chart placeholder (we’ll wire
+              real factor series next).
+            </p>
+          </section>
+        </div>
+      )}
+
+      {selectedFactor && (
+        <div className="overview__single">
+          <section className="overview__section">
             <div className="overview__section-header">
-              <h2 className="overview__section-title">{section.title}</h2>
+              <h2 className="overview__section-title">{selectedFactor.title}</h2>
             </div>
 
-            <p className="overview__section-description">{section.description}</p>
+            <p className="overview__section-description">
+              {selectedFactor.description}
+            </p>
 
             <div className="overview__howto">
               <div className="overview__howto-title">How to read</div>
               <ul className="overview__howto-list">
-                {section.howToRead.map((line, idx) => (
+                {selectedFactor.howToRead.map((line, idx) => (
                   <li key={idx}>{line}</li>
                 ))}
               </ul>
             </div>
 
             <ChartPanel
-              title={section.chartTitle}
+              title={selectedFactor.chartTitle}
               series={EMPTY_SERIES}
               valueKey="value"
             />
           </section>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
