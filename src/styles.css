@@ -469,14 +469,14 @@ body {
 }
 
 .overview__tabgrid {
-  padding: 2px;
+  padding: 12px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   background: rgba(15, 23, 42, 0.7);
 }
 
 .overview__tabgrid-inner {
-  margin-top: 10px;
+  margin-top: 6px;
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
