@@ -159,11 +159,6 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
           factor at a time.
         </p>
       </header>
-    
-    <div className="tab overview">
-      <header className="tab__header">
-        <h1 className="tab__title">Overview</h1>
-      </header>
 
       {/* Dropdown stays visible for both main and factor views */}
       <div className="tab__controls tab__controls--inline">
@@ -243,12 +238,3 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
 
             <ChartPanel
               title={selectedFactor.chartTitle}
-              series={EMPTY_SERIES}
-              valueKey="value"
-            />
-          </section>
-        </div>
-      )}
-    </div>
-  );
-};
