@@ -435,6 +435,66 @@ body {
   opacity: 0.85;
 }
 
+/* Overview tab */
+
+.overview__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.overview__section {
+  padding: 12px 12px 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.7);
+}
+
+.overview__section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.overview__section-title {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.overview__section-description {
+  margin: 8px 0 10px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.overview__howto {
+  padding: 10px 10px 8px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(56, 189, 248, 0.16);
+  margin-bottom: 10px;
+}
+
+.overview__howto-title {
+  font-size: 0.75rem;
+  color: var(--text);
+  opacity: 0.9;
+  margin-bottom: 6px;
+}
+
+.overview__howto-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  opacity: 0.85;
+  font-size: 0.8rem;
+}
+
+.overview__howto-list li {
+  margin: 4px 0;
+}
+
 /* Green for positive, red for negative deltas */
 .metric-card__delta--up,
 .metric-card__secondary--up {
