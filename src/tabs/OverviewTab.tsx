@@ -54,18 +54,18 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
     () => [
       {
         id: "tightness",
-        title: "Resale tightness",
+        title: "Resale Tightness",
         description:
           "Measures how balanced the resale market is (demand versus available supply).",
         howToRead: [
           "If SNLR rises and MOI falls, the market is tightening (typically supportive for price growth).",
           "If active listings rise while sales/new listings weaken, tightness is easing (downside risk grows).",
         ],
-        chartTitle: "Factor: Resale tightness (placeholder)",
+        chartTitle: "Factor: Resale Tightness (placeholder)",
       },
       {
         id: "rates",
-        title: "Rates & debt-service conditions",
+        title: "Rates & Debt-Service Conditions",
         description:
           "Captures borrowing costs and the payment burden channel (rates are the main transmission mechanism in Canada).",
         howToRead: [
@@ -76,7 +76,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
       },
       {
         id: "household_credit",
-        title: "Household credit & leverage",
+        title: "Household Credit & Leverage",
         description:
           "Captures the demand-fuel side (mortgage growth, consumer leverage) that can amplify housing cycles.",
         howToRead: [
@@ -87,18 +87,18 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
       },
       {
         id: "business_credit",
-        title: "Business / developer credit",
+        title: "Business & Corporate Credit",
         description:
           "Captures funding conditions for builders and the supply pipeline (developer financing can stay elevated even as demand slows).",
         howToRead: [
           "If business credit stays strong while household credit cools, supply overshoot risk can increase.",
           "If business credit tightens alongside demand, pipeline growth may slow with a lag.",
         ],
-        chartTitle: "Factor: Business / developer credit (placeholder)",
+        chartTitle: "Factor: Business / corporate credit (placeholder)",
       },
       {
         id: "construction",
-        title: "Construction pipeline & inventory",
+        title: "Supply Pipeline & Inventory",
         description:
           "Tracks supply arriving with long lags (starts/permits lead; completions/inventory follow).",
         howToRead: [
@@ -109,7 +109,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
       },
       {
         id: "rental_stress",
-        title: "Rental stress & affordability constraints",
+        title: "Rental Stress & Affordability",
         description:
           "Tracks when rents, vacancy, and affordability levels signal household stress or a constrained ownership/rental market.",
         howToRead: [
@@ -120,7 +120,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
       },
       {
         id: "macro",
-        title: "Macro backdrop",
+        title: "Macro Backdrop",
         description:
           "Provides context from growth, liquidity, and risk appetite (typically secondary to rates/credit for housing timing).",
         howToRead: [
