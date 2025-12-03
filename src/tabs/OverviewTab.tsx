@@ -238,3 +238,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
 
             <ChartPanel
               title={selectedFactor.chartTitle}
+              series={EMPTY_SERIES}
+              valueKey="value"
+            />
+          </section>
+        </div>
+      )}
+    </div>
+  );
+};
