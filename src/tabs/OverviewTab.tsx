@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import type { PanelPoint } from "../data/types";
 import { ChartPanel } from "../components/ChartPanel";
-import { TABS } from "./tabConfig";
+import { TABS, TabKey } from "./tabConfig";
 
 type FactorId =
   | "tightness"
@@ -22,9 +22,15 @@ interface FactorSection {
   chartTitle: string;
 }
 
+interface OverviewTabProps {
+  onNavigateTab?: (tab: TabKey) => void;
+}
+
 const EMPTY_SERIES: PanelPoint[] = [];
 
-const TAB_DESCRIPTIONS: Record<string, string> = {
+const TAB_DESCRIPTIONS: Record<TabKey, string> = {
+  overview:
+    "A guided entry point: what each factor means, how to interpret it, and a quick way to jump between the system drivers.",
   prices:
     "Home prices and valuation context (e.g., HPI, average price) to understand the direction and magnitude of price moves.",
   sales:
@@ -43,7 +49,7 @@ const TAB_DESCRIPTIONS: Record<string, string> = {
     "Rental market conditions (e.g., rent costs, affordability ratios, vacancy) capturing renter stress and substitution dynamics.",
 };
 
-export const OverviewTab: React.FC = () => {
+export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
   const sections = useMemo<FactorSection[]>(
     () => [
       {
@@ -138,11 +144,43 @@ export const OverviewTab: React.FC = () => {
     setView(event.target.value as OverviewView);
   };
 
+  const handleTabCardClick = (key: TabKey) => {
+    if (onNavigateTab) {
+      onNavigateTab(key);
+    }
+  };
+
   return (
     <div className="tab overview">
       <header className="tab__header">
         <h1 className="tab__title">Overview</h1>
+        <p className="tab__subtitle">
+          A guided entry point for the dashboard. Use the selector to view one
+          factor at a time.
+        </p>
       </header>
+
+      {/* Dropdown stays visible for both main and factor views */}
+      <div className="tab__controls tab__controls--inline">
+        <div className="tab__segment tab__segment--left">
+          View
+          <select
+            className="tab__regions-select"
+            value={view}
+            onChange={handleSelect}
+            aria-label="Select overview view"
+          >
+            <option value="main">Main overview</option>
+            <optgroup label="Factors">
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
+      </div>
 
       {view === "main" && (
         <div className="overview__main">
@@ -156,32 +194,24 @@ export const OverviewTab: React.FC = () => {
             </p>
           </section>
 
-      <div className="tab__controls tab__controls--inline">
-        <div className="tab__segment tab__segment--left">
-          View
-          <select
-            className="tab__regions-select"
-            value={view}
-            onChange={handleSelect}
-            aria-label="Select overview view"
-          >
-            <option value="main">Main Overview</option>
-            <optgroup label="Factors">
-              {sections.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-        </div>
-      </div>
-          
           <section className="overview__tabgrid">
             <h3 className="overview__section-title">Tabs at a glance</h3>
             <div className="overview__tabgrid-inner">
-              {TABS.map((t) => (
-                <div key={t.key} className="overview__tabcard">
+              {TABS.filter((t) => t.key !== "overview").map((t) => (
+                <div
+                  key={t.key}
+                  className="overview__tabcard"
+                  role={onNavigateTab ? "button" : undefined}
+                  tabIndex={onNavigateTab ? 0 : -1}
+                  onClick={() => handleTabCardClick(t.key)}
+                  onKeyDown={(e) => {
+                    if (!onNavigateTab) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleTabCardClick(t.key);
+                    }
+                  }}
+                >
                   <div className="overview__tabcard-top">
                     <div className="overview__tabicon">{t.icon}</div>
                     <div className="overview__tabname">{t.label}</div>
@@ -198,7 +228,8 @@ export const OverviewTab: React.FC = () => {
             <h3 className="overview__section-title">Next step</h3>
             <p className="overview__hero-text">
               Choose a factor from the selector above to see: (1) what it is,
-              (2) how to interpret it, and (3) a chart placeholder.
+              (2) how to interpret it, and (3) a chart placeholder (we’ll wire
+              real factor series next).
             </p>
           </section>
         </div>
