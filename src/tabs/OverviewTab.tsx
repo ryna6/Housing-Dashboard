@@ -50,7 +50,7 @@ const TAB_DESCRIPTIONS: Record<TabKey, string> = {
 };
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
-  const sections = useMemo<FactorSection[]>(
+    const sections = useMemo<FactorSection[]>(
     () => [
       {
         id: "tightness",
@@ -58,8 +58,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
         description:
           "Measures how balanced the resale market is (demand versus available supply).",
         howToRead: [
-          "If SNLR rises and MOI falls, the market is tightening (typically supportive for price growth).",
-          "If active listings rise while sales/new listings weaken, tightness is easing (downside risk grows).",
+          "SNLR ↑ and MOI ↓ = resale market tightening (usually supports price growth).",
+          "Active listings ↑ while sales / new listings ↓ = tightness easing and downside risk ↑.",
         ],
         chartTitle: "Factor: Resale Tightness (placeholder)",
       },
@@ -69,8 +69,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
         description:
           "Captures borrowing costs and the payment burden channel (rates are the main transmission mechanism in Canada).",
         howToRead: [
-          "If yields/mortgage rates rise, affordability tightens and housing price growth usually slows with a lag.",
-          "If rates fall while tightness is stable/improving, price momentum can re-accelerate.",
+          "Yields / mortgage rates ↑ = affordability ↓ and HPI growth tends to slow (with a lag).",
+          "Rates ↓ while resale tightness is stable or ↑ = price momentum can re-accelerate.",
         ],
         chartTitle: "Factor: Rates & debt-service (placeholder)",
       },
@@ -80,8 +80,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
         description:
           "Captures the demand-fuel side (mortgage growth, consumer leverage) that can amplify housing cycles.",
         howToRead: [
-          "If household credit accelerates while rates are steady/easing, demand conditions are strengthening.",
-          "If credit cools while rates rise, demand typically weakens before supply fully adjusts.",
+          "Household credit growth ↑ with flat or ↓ rates = demand conditions strengthening.",
+          "Household credit growth ↓ while rates ↑ = demand typically weakens before supply adjusts.",
         ],
         chartTitle: "Factor: Household credit & leverage (placeholder)",
       },
@@ -91,8 +91,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
         description:
           "Captures funding conditions for builders and the supply pipeline (developer financing can stay elevated even as demand slows).",
         howToRead: [
-          "If business credit stays strong while household credit cools, supply overshoot risk can increase.",
-          "If business credit tightens alongside demand, pipeline growth may slow with a lag.",
+          "Business / developer credit ↑ while household credit ↓ = supply overshoot risk ↑.",
+          "Business / developer credit ↓ alongside demand ↓ = pipeline growth likely slows.",
         ],
         chartTitle: "Factor: Business / corporate credit (placeholder)",
       },
@@ -102,8 +102,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
         description:
           "Tracks supply arriving with long lags (starts/permits lead; completions/inventory follow).",
         howToRead: [
-          "If the pipeline rises while resale tightness is already loosening, oversupply risk increases (with a lag).",
-          "If completions stay elevated while absorption weakens, inventory pressure typically builds.",
+          "Starts / permits ↑ while resale tightness ↓ = future oversupply risk ↑.",
+          "Completions ↑ and absorption ↓ = inventory pressure ↑.",
         ],
         chartTitle: "Factor: Construction pipeline & inventory (placeholder)",
       },
@@ -113,8 +113,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
         description:
           "Tracks when rents, vacancy, and affordability levels signal household stress or a constrained ownership/rental market.",
         howToRead: [
-          "If vacancy falls and rents rise, rental stress is increasing.",
-          "If rental stress is high and rates are also high, it can indicate broad affordability strain.",
+          "Vacancy ↓ and rents ↑ → rental stress ↑.",
+          "Rental stress ↑ while r=tes ↑ and ownership affordability ↓ = broad affordability strain ↑.",
         ],
         chartTitle: "Factor: Rental stress & affordability (placeholder)",
       },
@@ -124,8 +124,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
         description:
           "Provides context from growth, liquidity, and risk appetite (typically secondary to rates/credit for housing timing).",
         howToRead: [
-          "If growth/liquidity improves alongside easing rates, housing conditions often firm up.",
-          "If risk appetite rolls over and growth slows, housing activity often weakens with a lag.",
+          "Growth / liquidity ↑ and rates ↓ = housing conditions often firm up.",
+          "Risk appetite ↓ and growth ↓ = housing activity often weakens (with a lag).",
         ],
         chartTitle: "Factor: Macro backdrop (placeholder)",
       },
