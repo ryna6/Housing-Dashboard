@@ -445,7 +445,7 @@ body {
 .overview__main {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 12px;
 }
 
 .overview__hero,
@@ -469,7 +469,7 @@ body {
 }
 
 .overview__tabgrid {
-  padding: 12px;
+  padding: 2px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   background: rgba(15, 23, 42, 0.7);
