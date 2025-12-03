@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, List
 
 # Import the tab-specific generators
+from Overview import generate_overview
 from Prices import generate_prices
 from SalesListings import generate_sales
 from Rentals import generate_rentals
@@ -35,6 +36,7 @@ def main() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     # Call each tab’s generator
+    overview = generate_overview()
     prices = generate_prices()
     sales = generate_sales()
     rates = generate_rates()
@@ -44,8 +46,9 @@ def main() -> None:
     supply = generate_supply()
     rentals = generate_rentals(prices, inflation)
 
-    panel = prices + sales + rentals + rates + inflation + credit + market + supply
+    panel = overview + prices + sales + rentals + rates + inflation + credit + market + supply
 
+    write_json(DATA_DIR / "overview.json", overview)
     write_json(DATA_DIR / "panel.json", panel)
     write_json(DATA_DIR / "prices.json", prices)
     write_json(DATA_DIR / "sales_listings.json", sales)
