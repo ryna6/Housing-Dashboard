@@ -166,7 +166,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
             onChange={handleSelect}
             aria-label="Select overview view"
           >
-            <option value="main">Main overview</option>
+            <option value="main">Main Overview</option>
             <optgroup label="Factors">
               {sections.map((s) => (
                 <option key={s.id} value={s.id}>
