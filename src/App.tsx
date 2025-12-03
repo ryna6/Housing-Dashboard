@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { OverviewTab } from "./tabs/OverviewTab";
 import { PricesTab } from "./tabs/PricesTab";
 import { SalesListingsTab } from "./tabs/SalesListingsTab";
 import { SupplyTab } from "./tabs/SupplyTab";
@@ -14,6 +15,7 @@ import { BottomTabNav } from "./components/BottomTabNav";
  * We define this locally instead of importing a type.
  */
 type TabId =
+  | "overview"
   | "prices"
   | "sales"
   | "supply"
@@ -45,13 +47,15 @@ const App: React.FC = () => {
 
   const renderTab = () => {
     switch (activeTab) {
+      case "overview":
+        return <OverviewTab />;
+      
       case "prices":
         return <PricesTab />;
       case "sales":
         return <SalesListingsTab />;
       case "supply":
         return <SupplyTab />;
-
       case "rates":
         return <RatesBondsTab />;
       case "inflation":
@@ -63,7 +67,7 @@ const App: React.FC = () => {
       case "rentals":
         return <RentalsTab />;
       default:
-        return <PricesTab />;
+        return <OverviewTab />;
     }
   };
 
