@@ -43,7 +43,7 @@ const PlaceholderTab: React.FC<{ title: string; subtitle?: string }> = ({
 };
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabId>("prices");
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
 
   const renderTab = () => {
     switch (activeTab) {
