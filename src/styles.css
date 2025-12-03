@@ -435,64 +435,94 @@ body {
   opacity: 0.85;
 }
 
-/* Overview tab */
+/* Overview tab: main screen */
 
-.overview__sections {
+.overview__main {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.overview__section {
-  padding: 12px 12px 10px;
+.overview__hero,
+.overview__next {
+  padding: 12px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
   background: rgba(15, 23, 42, 0.7);
 }
 
-.overview__section-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+.overview__hero-title {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.overview__hero-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.overview__tabgrid {
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.7);
+}
+
+.overview__tabgrid-inner {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
-.overview__section-title {
-  font-size: 1rem;
-  margin: 0;
+@media (min-width: 720px) {
+  .overview__tabgrid-inner {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
-.overview__section-description {
-  margin: 8px 0 10px;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.overview__howto {
-  padding: 10px 10px 8px;
+.overview__tabcard {
+  padding: 10px 10px 9px;
   border-radius: 14px;
-  background: var(--accent-soft);
-  border: 1px solid rgba(56, 189, 248, 0.16);
-  margin-bottom: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(2, 6, 23, 0.35);
 }
 
-.overview__howto-title {
-  font-size: 0.75rem;
-  color: var(--text);
-  opacity: 0.9;
+.overview__tabcard-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 6px;
 }
 
-.overview__howto-list {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--text);
-  opacity: 0.85;
-  font-size: 0.8rem;
+.overview__tabicon {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(56, 189, 248, 0.16);
 }
 
-.overview__howto-list li {
-  margin: 4px 0;
+.overview__tabname {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.overview__tabdesc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* Overview tab: single factor view */
+.overview__single {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 /* Green for positive, red for negative deltas */
