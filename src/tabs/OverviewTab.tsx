@@ -228,8 +228,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ onNavigateTab }) => {
             <h3 className="overview__section-title">Next step</h3>
             <p className="overview__hero-text">
               Choose a factor from the selector above to see: (1) what it is,
-              (2) how to interpret it, and (3) a chart placeholder (we’ll wire
-              real factor series next).
+              (2) how to interpret it, and (3) a chart placeholder.
             </p>
           </section>
         </div>
