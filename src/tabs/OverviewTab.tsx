@@ -32,15 +32,15 @@ const TAB_DESCRIPTIONS: Record<string, string> = {
   supply:
     "Supply pipeline indicators (e.g., starts, completions, under construction) that arrive with long lags and shape future balance.",
   rates:
-    "Borrowing cost and yield context (policy rate, GoC yields) that drives affordability and demand through the rate channel.",
+    "Borrowing cost and yield context (policy rate, mortgage rate, GoC yields) that drives affordability and demand through the rate channel.",
   inflation:
     "Inflation and labour context (CPI, employment) for the broader macro environment affecting housing conditions.",
   credit:
     "Household and business credit aggregates that proxy demand fuel and funding conditions.",
   market:
-    "Macro/liquidity context (e.g., GDP, money/liq proxies) to contextualize broader cycle conditions.",
+    "Macro/liquidity context (e.g., GDP, money/liquidity proxies) to contextualize broader cycle conditions.",
   rentals:
-    "Rental market conditions (e.g., vacancy, rents, affordability ratios) capturing household stress and substitution dynamics.",
+    "Rental market conditions (e.g., rent costs, affordability ratios, vacancy) capturing renter stress and substitution dynamics.",
 };
 
 export const OverviewTab: React.FC = () => {
