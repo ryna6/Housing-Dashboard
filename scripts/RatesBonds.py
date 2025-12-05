@@ -132,7 +132,7 @@ def generate_rates_from_boc() -> List[PanelRow]:
     series_by_metric: Dict[str, Tuple[str, str]] = {
         "policy_rate": ("V39079", "pct"),
         "gov_2y_yield": ("V122538", "pct"),
-        "repo_rate": ("V181385", "pct"),
+        "repo_rate": ("V39050", "pct"),
         "gov_10y_yield": ("V122487", "pct"),
         "mortgage_5y": ("V80691311", "pct"),
     }
@@ -165,33 +165,6 @@ def generate_rates_from_boc() -> List[PanelRow]:
                     value=round(val, 3),
                     unit=unit,
                     source="boc_valet",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-
-    # Derive mortgage_5y_spread where both mortgage_5y and gov_5y_yield are available
-    mort_by_date = {r.date: r for r in rows if r.metric == "mortgage_5y"}
-    g5_by_date = {r.date: r for r in rows if r.metric == "gov_5y_yield"}
-
-    common_dates = sorted(set(mort_by_date.keys()) & set(g5_by_date.keys()))
-    if common_dates:
-        spread_vals: List[float] = [
-            mort_by_date[d].value - g5_by_date[d].value for d in common_dates
-        ]
-        mom, yoy, ma3 = compute_changes(spread_vals)
-
-        for dt_str, val, m, y, ma in zip(common_dates, spread_vals, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt_str,
-                    region=region,
-                    segment="all",
-                    metric="mortgage_5y_spread",
-                    value=round(val, 3),
-                    unit="pct",
-                    source="boc_valet_derived",
                     mom_pct=round(m, 3) if m is not None else None,
                     yoy_pct=round(y, 3) if y is not None else None,
                     ma3=round(ma, 3),
