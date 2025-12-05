@@ -188,7 +188,7 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
                     metric="repo_rate",
                     value=corra,
                     unit="pct",
-                    source="BoC CORRA (AVG.INTWO) via Valet API",
+                    source=source_boc,
                 )
             )
 
