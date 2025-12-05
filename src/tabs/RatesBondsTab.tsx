@@ -134,7 +134,6 @@ export const RatesBondsTab: React.FC = () => {
           series={repoSeries}
           valueKey="value"
           treatAsPercentScale
-          unit="Billions $"
           clampYMinToZero
         />
         <ChartPanel
