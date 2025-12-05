@@ -63,38 +63,36 @@ def fetch_boc_series_monthly_last(
     end: Optional[str] = None,
 ) -> Dict[str, Dict[str, float]]:
     """
-    Fetch one or more Bank of Canada Valet series and aggregate to monthly levels.
+    Fetch one or more Bank of Canada Valet series *individually* and aggregate
+    to monthly levels.
 
-    For each calendar month we keep the *last* available daily observation.
+    For each calendar month we keep the *last* available observation
+    (daily or weekly).
 
     Returns:
         Dict[month_key, Dict[series_id, value]]
         where month_key is YYYY-MM-01.
     """
     base = "https://www.bankofcanada.ca/valet/observations"
-    ids_param = ",".join(series_ids)
 
     params = [f"start_date={start}"]
     if end is not None:
         params.append(f"end_date={end}")
     query = "&".join(params)
 
-    # Valet supports multiple series in the path, e.g.:
-    # /valet/observations/CL.CDN.MOST.1DL,AVG.INTWO/...  (see CORRA/OMMFR docs)
-    url = f"{base}/{ids_param}/json?{query}"
-
-    payload = _http_get_json(url)
-    observations = payload.get("observations", [])
-
     monthly_last: Dict[str, Dict[str, float]] = defaultdict(dict)
 
-    for obs in observations:
-        d = obs.get("d")
-        if not d:
-            continue
-        month_key = _month_key_from_iso(d)
+    for sid in series_ids:
+        url = f"{base}/{sid}/json?{query}"
+        payload = _http_get_json(url)
+        observations = payload.get("observations", [])
 
-        for sid in series_ids:
+        for obs in observations:
+            d = obs.get("d")
+            if not d:
+                continue
+            month_key = _month_key_from_iso(d)
+
             entry = obs.get(sid)
             if not isinstance(entry, dict):
                 continue
@@ -102,10 +100,13 @@ def fetch_boc_series_monthly_last(
             if v in (None, "", "."):
                 continue
             try:
-                monthly_last[month_key][sid] = float(v)
+                value = float(v)
             except ValueError:
-                # Skip malformed values
                 continue
+
+            # Observations are in chronological order; later (within-month)
+            # values overwrite earlier ones, so we keep the last obs of month.
+            monthly_last[month_key][sid] = value
 
     return monthly_last
 
@@ -127,29 +128,25 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
     Generate the rates & bonds panel data as a flat list of dicts suitable
     for JSON export.
 
-    Metrics → BoC Valet series:
-      - policy_rate       -> V39079          (Target for the overnight rate, %)
-      - gov_2y_yield      -> V122538         (2-year GoC benchmark bond yield, %)
-      - gov_5y_yield      -> V122540         (5-year GoC benchmark bond yield, %)
-      - gov_10y_yield     -> V122487         (Long-term GoC bond yield >10y, %)
-      - mortgage_5y       -> V80691311       (Prime rate, %, used as proxy)
-      - repo_rate (CORRA) -> AVG.INTWO       (Canadian Overnight Repo Rate Average, %)
-      - repo_fallback     -> CL.CDN.MOST.1DL (Overnight money market financing rate, CANSIM V39050, %)
+    Metrics → BoC Valet series (daily / weekly, aggregated to monthly):
+      - policy_rate       -> V39079    (Target for the overnight rate, %)
+      - gov_2y_yield      -> V122538   (2-year GoC benchmark bond yield, %)
+      - gov_5y_yield      -> V122540   (5-year GoC benchmark bond yield, %)
+      - gov_10y_yield     -> V122487   (Long-term GoC bond yield >10y, %)
+      - mortgage_5y       -> V80691311 (Prime rate – proxy for variable mortgage channel, %)
+      - repo_rate (CORRA) -> AVG.INTWO (Canadian Overnight Repo Rate Average, %)
 
-    Repo rate construction:
-      For each month, prefer AVG.INTWO (CORRA). If it is missing for that month,
-      fall back to CL.CDN.MOST.1DL.
+    We only use Bank of Canada Valet data; no StatCan fallback.
     """
     region = "canada"
 
     series_ids = [
-        "V39079",          # policy_rate
-        "V122538",         # gov_2y_yield
-        "V122540",         # gov_5y_yield
-        "V122487",         # gov_10y_yield
-        "V80691311",       # prime rate (proxy for mortgage_5y in this dashboard)
-        "AVG.INTWO",       # CORRA
-        "CL.CDN.MOST.1DL", # Overnight money market financing rate (OMMFR), CANSIM V39050
+        "V39079",    # policy_rate
+        "V122538",   # gov_2y_yield
+        "V122540",   # gov_5y_yield
+        "V122487",   # gov_10y_yield
+        "V80691311", # prime rate (proxy for mortgage_5y)
+        "AVG.INTWO", # CORRA (overnight repo rate)
     ]
 
     start = _compute_start_for_years_back(years_back)
@@ -165,10 +162,7 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
         gov_5y = values.get("V122540")
         gov_10y = values.get("V122487")
         mort_5y = values.get("V80691311")
-
         corra = values.get("AVG.INTWO")
-        ommfr = values.get("CL.CDN.MOST.1DL")
-        repo = corra if corra is not None else ommfr
 
         source_boc = "Bank of Canada – Valet API"
 
@@ -185,20 +179,16 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
                 )
             )
 
-        if repo is not None:
+        if corra is not None:
             rows.append(
                 PanelRow(
                     date=month_key,
                     region=region,
                     segment="all",
                     metric="repo_rate",
-                    value=repo,
+                    value=corra,
                     unit="pct",
-                    source=(
-                        "BoC CORRA (AVG.INTWO) where available, "
-                        "otherwise overnight money market financing rate "
-                        "(CL.CDN.MOST.1DL, CANSIM V39050)"
-                    ),
+                    source="BoC CORRA (AVG.INTWO) via Valet API",
                 )
             )
 
@@ -253,7 +243,7 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
                     value=spread,
                     unit="pct",
                     source=(
-                        "Derived: mortgage_5y (V80691311) - "
+                        "Derived: mortgage_5y (V80691311 proxy) - "
                         "5y GoC benchmark bond yield (V122540)"
                     ),
                 )
