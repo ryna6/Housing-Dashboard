@@ -8,7 +8,6 @@ import { useTabData } from "./useTabData";
 const RATE_METRICS = [
   "policy_rate",
   "mortgage_5y",
-  "repo_volume",
   "gov_2y_yield",
   "gov_10y_yield",
 ];
@@ -58,16 +57,6 @@ export const RatesBondsTab: React.FC = () => {
     [data]
   );
 
-  const repoSeries: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter(
-          (p: PanelPoint) => p.metric === "repo_volume" && p.region === REGION),
-        10
-      ),
-    [data]
-  );
-    
   const gov2Series: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
@@ -91,7 +80,7 @@ export const RatesBondsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Rates</h1>
         <p className="tab__subtitle">
-          Bank of Canada policy rate, 5-year mortgage rate, overnight repo rate and Government of
+          Bank of Canada policy rate, 5-year mortgage rate and Government of
           Canada bond yields (Bank of Canada)
         </p>
       </header>
@@ -130,21 +119,14 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="Overnight repo volume"
-          series={repoSeries}
-          valueKey="value"
-          treatAsPercentScale
-          clampYMinToZero
-        />
-        <ChartPanel
-          title="2-year bond yield"
+          title="2-year Government bond yield"
           series={gov2Series}
           valueKey="value"
           treatAsPercentScale
           clampYMinToZero
         />
         <ChartPanel
-          title="10-year bond yield"
+          title="10-year Government bond yield"
           series={gov10Series}
           valueKey="value"
           treatAsPercentScale
