@@ -5,33 +5,39 @@ import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
 
-const RATE_METRICS = [
+// Keep this as a plain string[] so it matches getLatestByMetric(types)
+const RATE_METRICS: string[] = [
   "policy_rate",
-  "repo_rate",
+  "repo_rate",          // new: OMMFR / repo proxy
   "mortgage_5y",
   "gov_2y_yield",
   "gov_10y_yield",
   "mortgage_5y_spread",
-] as const;
+];
 
 const REGION: RegionCode = "canada";
 
-type RateMetricKey = (typeof RATE_METRICS)[number];
+/**
+ * Trim a series down to the last N years based on the latest observation date.
+ */
+function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
+  if (series.length <= 1) return series;
 
-function trimLastYears(points: PanelPoint[], years: number): PanelPoint[] {
-  if (!points.length) return points;
-
-  const lastDate = new Date(points[points.length - 1].date);
-  const cutoff = new Date(lastDate);
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const last = new Date(sorted[sorted.length - 1].date);
+  const cutoff = new Date(last);
   cutoff.setFullYear(cutoff.getFullYear() - years);
 
-  return points.filter((p) => new Date(p.date) >= cutoff);
+  return sorted.filter((p) => {
+    const d = new Date(p.date);
+    return d >= cutoff;
+  });
 }
 
 export const RatesBondsTab: React.FC = () => {
-  const { data, isLoading, error } = useTabData("rates_bonds");
+  const { data, loading, error } = useTabData("rates_bonds");
 
-  const latestByMetric = useMemo(
+  const snapshots = useMemo(
     () => getLatestByMetric(data, REGION, RATE_METRICS),
     [data]
   );
@@ -39,10 +45,7 @@ export const RatesBondsTab: React.FC = () => {
   const policySeries: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
-        data.filter(
-          (p: PanelPoint) =>
-            p.region === REGION && p.metric === "policy_rate"
-        ),
+        data.filter((p) => p.metric === "policy_rate" && p.region === REGION),
         10
       ),
     [data]
@@ -51,9 +54,7 @@ export const RatesBondsTab: React.FC = () => {
   const repoSeries: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
-        data.filter(
-          (p: PanelPoint) => p.region === REGION && p.metric === "repo_rate"
-        ),
+        data.filter((p) => p.metric === "repo_rate" && p.region === REGION),
         10
       ),
     [data]
@@ -62,9 +63,7 @@ export const RatesBondsTab: React.FC = () => {
   const mortgageSeries: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
-        data.filter(
-          (p: PanelPoint) => p.region === REGION && p.metric === "mortgage_5y"
-        ),
+        data.filter((p) => p.metric === "mortgage_5y" && p.region === REGION),
         10
       ),
     [data]
@@ -73,9 +72,7 @@ export const RatesBondsTab: React.FC = () => {
   const gov2Series: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
-        data.filter(
-          (p: PanelPoint) => p.region === REGION && p.metric === "gov_2y_yield"
-        ),
+        data.filter((p) => p.metric === "gov_2y_yield" && p.region === REGION),
         10
       ),
     [data]
@@ -84,61 +81,37 @@ export const RatesBondsTab: React.FC = () => {
   const gov10Series: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
-        data.filter(
-          (p: PanelPoint) => p.region === REGION && p.metric === "gov_10y_yield"
-        ),
+        data.filter((p) => p.metric === "gov_10y_yield" && p.region === REGION),
         10
       ),
     [data]
   );
-
-  const spreadSeries: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter(
-          (p: PanelPoint) =>
-            p.region === REGION && p.metric === "mortgage_5y_spread"
-        ),
-        10
-      ),
-    [data]
-  );
-
-  if (error) {
-    return (
-      <div className="tab tab--rates">
-        <p className="tab__error">Error loading data: {String(error)}</p>
-      </div>
-    );
-  }
 
   return (
-    <div className="tab tab--rates">
+    <div className="tab">
       <header className="tab__header">
-        <h1 className="tab__title">Interest rates &amp; bond yields</h1>
+        <h1 className="tab__title">Rates</h1>
         <p className="tab__subtitle">
-          Bank of Canada policy rate, overnight repo rate,
-          5-year mortgage rate and Government of Canada bond yields (Statistics Canada)
+          Bank of Canada policy rate, overnight money market financing rate
+          (OMMFR), 5-year mortgage / prime rate and Government of Canada bond
+          yields (StatCan / BoC)
         </p>
       </header>
 
-      <section className="tab__cards">
-        {RATE_METRICS.map((metric: RateMetricKey) => {
-          const latest = latestByMetric[metric];
+      {loading && <div className="tab__status">Loading rates…</div>}
+      {error && (
+        <div className="tab__status tab__status--error">
+          Failed to load rates: {error}
+        </div>
+      )}
 
-          if (!latest) return null;
-
-          return (
-            <MetricSnapshotCard
-              key={metric}
-              // If your MetricSnapshotCard uses different prop names,
-              // just adjust these three props.
-              metricId={metric as string}
-              latest={latest}
-              isLoading={isLoading}
-            />
-          );
-        })}
+      <section className="tab__metrics">
+        {!loading && !snapshots.length && !error && (
+          <div className="tab__status">No rate data yet.</div>
+        )}
+        {snapshots.map((s) => (
+          <MetricSnapshotCard key={s.metric} snapshot={s} />
+        ))}
       </section>
 
       <section className="tab__charts">
@@ -151,7 +124,7 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="Overnight repo rate"
+          title="Overnight money market financing rate (OMMFR)"
           series={repoSeries}
           valueKey="value"
           treatAsPercentScale
@@ -159,7 +132,7 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="5-year mortgage rate"
+          title="5-year mortgage / prime rate"
           series={mortgageSeries}
           valueKey="value"
           treatAsPercentScale
@@ -176,13 +149,6 @@ export const RatesBondsTab: React.FC = () => {
         <ChartPanel
           title="10-year Government bond yield"
           series={gov10Series}
-          valueKey="value"
-          treatAsPercentScale
-          clampYMinToZero
-        />
-        <ChartPanel
-          title="5-year mortgage spread over 5-year GoC yield"
-          series={spreadSeries}
           valueKey="value"
           treatAsPercentScale
           clampYMinToZero
