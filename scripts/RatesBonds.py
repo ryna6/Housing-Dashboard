@@ -132,7 +132,7 @@ def generate_rates_from_boc() -> List[PanelRow]:
     series_by_metric: Dict[str, Tuple[str, str]] = {
         "policy_rate": ("V39079", "pct"),
         "gov_2y_yield": ("V122538", "pct"),
-        "repo_volume": ("V44201362", "Billions"),
+        "repo_volume": ("V44201362", "pct"),
         "gov_10y_yield": ("V122487", "pct"),
         "mortgage_5y": ("V80691311", "pct"),
     }
