@@ -5,13 +5,13 @@ import { ChartPanel } from "../components/ChartPanel";
 import { getLatestByMetric } from "../data/dataClient";
 import { useTabData } from "./useTabData";
 
-// Keep this as a plain string[] so it matches getLatestByMetric(types)
-const RATE_METRICS: string[] = [
+const RATE_METRICS = [
   "policy_rate",
-  "repo_rate",
   "mortgage_5y",
+  "repo_rate".
   "gov_2y_yield",
   "gov_10y_yield",
+  "mortgage_5y_spread",
 ];
 
 const REGION: RegionCode = "canada";
@@ -50,15 +50,6 @@ export const RatesBondsTab: React.FC = () => {
     [data]
   );
 
-  const repoSeries: PanelPoint[] = useMemo(
-    () =>
-      trimLastYears(
-        data.filter((p) => p.metric === "repo_rate" && p.region === REGION),
-        10
-      ),
-    [data]
-  );
-
   const mortgageSeries: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
@@ -68,6 +59,16 @@ export const RatesBondsTab: React.FC = () => {
     [data]
   );
 
+  const repoSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter(
+          (p: PanelPoint) => p.metric === "repo_rate" && p.region === REGION),
+        10
+      ),
+    [data]
+  );
+    
   const gov2Series: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
@@ -91,7 +92,8 @@ export const RatesBondsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Rates</h1>
         <p className="tab__subtitle">
-          Policy rate, overnight repo rate, 5-year mortgage rate and Government of Canada bond yields (Bank of Canada & Statistics Canada)
+          Bank of Canada policy rate, 5-year mortgage rate, overnight repo rate and Government of
+          Canada bond yields (Bank of Canada & Statistics Canada)
         </p>
       </header>
 
@@ -121,20 +123,19 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="Overnight repo rate"
-          series={repoSeries}
-          valueKey="value"
-          treatAsPercentScale
-          clampYMinToZero
-          step
-        />
-        <ChartPanel
           title="5-year mortgage rate"
           series={mortgageSeries}
           valueKey="value"
           treatAsPercentScale
           clampYMinToZero
           step
+        />
+        <ChartPanel
+          title="Overnight repo rate"
+          series={repoSeries}
+          valueKey="value"
+          treatAsPercentScale
+          clampYMinToZero
         />
         <ChartPanel
           title="2-year Government bond yield"
