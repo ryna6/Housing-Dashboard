@@ -8,7 +8,7 @@ import { useTabData } from "./useTabData";
 const RATE_METRICS = [
   "policy_rate",
   "mortgage_5y",
-  "repo_rate".
+  "repo_rate",
   "gov_2y_yield",
   "gov_10y_yield",
 ];
