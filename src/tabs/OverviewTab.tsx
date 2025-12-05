@@ -36,15 +36,15 @@ const TAB_DESCRIPTIONS: Record<TabKey, string> = {
   sales:
     "Resale activity and market balance signals (e.g., sales, new listings, SNLR, MOI) that often lead price turning points.",
   supply:
-    "Supply pipeline indicators (e.g., starts, completions, under construction) that arrive with long lags and shape future balance.",
+    "Supply pipeline indicators (e.g., starts, completions, under construction, construction investment) that arrive with long lags and shape future balance.",
   rates:
     "Borrowing cost and yield context (policy rate, mortgage rate, GoC yields) that drives affordability and demand through the rate channel.",
   inflation:
-    "Inflation and labour context (CPI, employment) for the broader macro environment affecting housing conditions.",
+    "Inflation and labour context (CPI, wage, employment) for the broader macro environment affecting housing conditions.",
   credit:
     "Household and business credit aggregates that proxy demand fuel and funding conditions.",
   market:
-    "Macro/liquidity context (e.g., GDP, money/liquidity proxies) to contextualize broader cycle conditions.",
+    "Macro/liquidity context (e.g., GDP, stock market, money supply) to contextualize broader cycle conditions.",
   rentals:
     "Rental market conditions (e.g., rent costs, affordability ratios, vacancy) capturing renter stress and substitution dynamics.",
 };
