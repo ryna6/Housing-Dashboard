@@ -157,7 +157,7 @@ def generate_rates_from_boc() -> List[PanelRow]:
 
         # Convert repo volume from millions → billions
         value = r.value
-        if metric == "repo_rate":
+        if metric == "repo_volume":
             value = value / 1000.0  # millions → billions
         
         for dt_str, val, m, y, ma in zip(month_keys, vals, mom, yoy, ma3):
