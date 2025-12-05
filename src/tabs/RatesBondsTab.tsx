@@ -8,7 +8,7 @@ import { useTabData } from "./useTabData";
 const RATE_METRICS = [
   "policy_rate",
   "mortgage_5y",
-  "repo_rate",
+  "repo_volume",
   "gov_2y_yield",
   "gov_10y_yield",
 ];
@@ -62,7 +62,7 @@ export const RatesBondsTab: React.FC = () => {
     () =>
       trimLastYears(
         data.filter(
-          (p: PanelPoint) => p.metric === "repo_rate" && p.region === REGION),
+          (p: PanelPoint) => p.metric === "repo_volume" && p.region === REGION),
         10
       ),
     [data]
@@ -130,10 +130,11 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="Overnight repo rate"
+          title="Overnight repo volume"
           series={repoSeries}
           valueKey="value"
           treatAsPercentScale
+          unit="Billions $"
           clampYMinToZero
         />
         <ChartPanel
