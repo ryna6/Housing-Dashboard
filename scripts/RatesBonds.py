@@ -13,6 +13,20 @@ from typing import Dict, List, Optional
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "data" / "processed"
 
+# Statistics Canada Web Data Service endpoint
+STATCAN_WDS_URL = (
+    "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods"
+)
+
+# === StatCan vector IDs (numeric, corresponding to vXXXXX codes) ===
+# These are the same CANSIM-style vectors used by BoC but accessed via StatCan WDS.
+V_POLICY_RATE = 39079          # Target for the overnight rate (v39079)
+V_OMMFR = 39050                # Overnight money market financing rate (v39050)
+V_GOV_2Y_YIELD = 122538        # GoC benchmark bond yield - 2 year (v122538)
+V_GOV_5Y_YIELD = 122540        # GoC benchmark bond yield - 5 year (v122540)
+V_GOV_10Y_YIELD = 122543       # GoC benchmark bond yield - 10 year (v122543)
+V_PRIME_RATE = 80691311        # Chartered bank prime rate (v80691311) – proxy for mortgage_5y
+
 
 @dataclass
 class PanelRow:
@@ -41,130 +55,191 @@ class PanelRow:
     ma3: Optional[float] = None
 
 
-def _http_get_json(url: str) -> Dict:
-    try:
-        with urllib.request.urlopen(url) as resp:
-            data = resp.read()
-        return json.loads(data.decode("utf-8"))
-    except (HTTPError, URLError) as exc:
-        raise RuntimeError(f"Error fetching {url}: {exc}") from exc
-
-
-def _month_key_from_iso(date_str: str) -> str:
-    """Return YYYY-MM-01 from a YYYY-MM-DD string."""
-    dt = datetime.strptime(date_str, "%Y-%m-%d").date()
-    month_start = dt.replace(day=1)
-    return month_start.isoformat()
-
-
-def fetch_boc_series_monthly_last(
-    series_ids: List[str],
-    start: str,
-    end: Optional[str] = None,
-) -> Dict[str, Dict[str, float]]:
+def _http_post_json(url: str, payload: object) -> object:
     """
-    Fetch one or more Bank of Canada Valet series *individually* and aggregate
-    to monthly levels.
+    Helper to POST JSON to a URL and parse the JSON response.
+    """
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            body = resp.read()
+        return json.loads(body.decode("utf-8"))
+    except (HTTPError, URLError) as exc:
+        raise RuntimeError(f"Error POSTing to {url}: {exc}") from exc
 
-    For each calendar month we keep the *last* available observation
-    (daily or weekly).
+
+def _parse_ref_per_to_date(ref_per: str) -> Optional[date]:
+    """
+    Parse a StatCan refPer string into a date.
+    Handles:
+      - 'YYYY-MM-DD'
+      - 'YYYY-MM'
+    Returns None if the format is unexpected.
+    """
+    if not ref_per:
+        return None
+    try:
+        if len(ref_per) == 10:
+            # e.g. '2025-11-26'
+            return datetime.strptime(ref_per, "%Y-%m-%d").date()
+        if len(ref_per) == 7:
+            # e.g. '2025-11' -> assume first day of month
+            return datetime.strptime(ref_per + "-01", "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    return None
+
+
+def _month_start(d: date) -> date:
+    """Return the first day of the month for a given date."""
+    return d.replace(day=1)
+
+
+def fetch_statcan_vectors_monthly_last(
+    vector_ids: List[int],
+    years_back: int,
+    latest_n: int = 5000,
+) -> Dict[int, Dict[str, float]]:
+    """
+    Fetch StatCan vectors via WDS and aggregate to monthly frequency using
+    the *last available* observation in each calendar month.
+
+    Uses getDataFromVectorsAndLatestNPeriods with a large latestN, then
+    filters to the last `years_back` years and collapses to one observation
+    per month.
 
     Returns:
-        Dict[month_key, Dict[series_id, value]]
-        where month_key is YYYY-MM-01.
+        Dict[vectorId, Dict[month_key, value]]
+        where month_key is 'YYYY-MM-01'.
     """
-    base = "https://www.bankofcanada.ca/valet/observations"
+    # Build payload for WDS
+    payload = [
+        {"vectorId": vid, "latestN": latest_n}
+        for vid in vector_ids
+    ]
 
-    params = [f"start_date={start}"]
-    if end is not None:
-        params.append(f"end_date={end}")
-    query = "&".join(params)
+    response = _http_post_json(STATCAN_WDS_URL, payload)
+    if not isinstance(response, list):
+        raise RuntimeError(f"Unexpected StatCan WDS response: {response!r}")
 
-    monthly_last: Dict[str, Dict[str, float]] = defaultdict(dict)
+    # Cutoff date for last `years_back` years, aligned to month start
+    today = date.today()
+    cutoff = date(today.year - years_back, today.month, 1)
 
-    for sid in series_ids:
-        url = f"{base}/{sid}/json?{query}"
-        payload = _http_get_json(url)
-        observations = payload.get("observations", [])
+    # For each vector, we keep month_key -> (latest_date_in_month, value)
+    by_vector: Dict[int, Dict[str, float]] = {}
+    for item in response:
+        if not isinstance(item, dict):
+            continue
+        if item.get("status") != "SUCCESS":
+            continue
 
-        for obs in observations:
-            d = obs.get("d")
-            if not d:
+        obj = item.get("object") or {}
+        vid = obj.get("vectorId")
+        if vid is None:
+            continue
+
+        month_map: Dict[str, tuple[date, float]] = {}
+        for dp in obj.get("vectorDataPoint", []):
+            ref_per = dp.get("refPer")
+            d = _parse_ref_per_to_date(ref_per)
+            if d is None:
                 continue
-            month_key = _month_key_from_iso(d)
+            if d < cutoff:
+                continue
 
-            entry = obs.get(sid)
-            if not isinstance(entry, dict):
+            value_str = dp.get("value")
+            if value_str in (None, "", "."):
                 continue
-            v = entry.get("v")
-            if v in (None, "", "."):
-                continue
+
             try:
-                value = float(v)
-            except ValueError:
+                value = float(value_str)
+            except (TypeError, ValueError):
                 continue
 
-            # Observations are in chronological order; later (within-month)
-            # values overwrite earlier ones, so we keep the last obs of month.
-            monthly_last[month_key][sid] = value
+            m_start = _month_start(d)
+            month_key = m_start.isoformat()
 
-    return monthly_last
+            # Keep the last observation within the month
+            existing = month_map.get(month_key)
+            if existing is None or d > existing[0]:
+                month_map[month_key] = (d, value)
+
+        # Flatten month_map to month_key -> value
+        by_vector[int(vid)] = {m: v for m, (_d, v) in month_map.items()}
+
+    return by_vector
 
 
-def _compute_start_for_years_back(years_back: int = 10) -> str:
+def _compute_month_cutoff_key(years_back: int = 10) -> str:
     """
-    Compute an ISO start date roughly `years_back` years before today,
-    aligned to the first of the month.
+    Return the month key (YYYY-MM-01) corresponding to roughly `years_back`
+    years before today.
     """
     today = date.today()
-    start_year = today.year - years_back
-    start_month = today.month
-    start = date(start_year, start_month, 1)
-    return start.isoformat()
+    cutoff = date(today.year - years_back, today.month, 1)
+    return cutoff.isoformat()
 
 
 def generate_rates(years_back: int = 10) -> List[Dict]:
     """
     Generate the rates & bonds panel data as a flat list of dicts suitable
-    for JSON export.
+    for JSON export, using ONLY Statistics Canada WDS vectors.
 
-    Metrics → BoC Valet series (daily / weekly, aggregated to monthly):
-      - policy_rate       -> V39079    (Target for the overnight rate, %)
-      - gov_2y_yield      -> V122538   (2-year GoC benchmark bond yield, %)
-      - gov_5y_yield      -> V122540   (5-year GoC benchmark bond yield, %)
-      - gov_10y_yield     -> V122487   (Long-term GoC bond yield >10y, %)
-      - mortgage_5y       -> V80691311 (Prime rate – proxy for variable mortgage channel, %)
-      - repo_rate (CORRA) -> AVG.INTWO (Canadian Overnight Repo Rate Average, %)
+    Metrics and their StatCan (CANSIM-style) vectors:
 
-    We only use Bank of Canada Valet data; no StatCan fallback.
+      - policy_rate  -> v39079    (Target for the overnight rate, %)
+      - repo_rate    -> v39050    (Overnight money market financing rate, %)
+      - gov_2y_yield -> v122538   (2-year GoC benchmark bond yield, %)
+      - gov_5y_yield -> v122540   (5-year GoC benchmark bond yield, %)
+      - gov_10y_yield-> v122543   (10-year GoC benchmark bond yield, %)
+      - mortgage_5y  -> v80691311 (Prime rate, %, used as a mortgage proxy)
+
+    All are aggregated to monthly by taking the last observation in each
+    month, and we keep only the last `years_back` years.
     """
     region = "canada"
 
-    series_ids = [
-        "V39079",    # policy_rate
-        "V122538",   # gov_2y_yield
-        "V122540",   # gov_5y_yield
-        "V122487",   # gov_10y_yield
-        "V80691311", # prime rate (proxy for mortgage_5y)
-        "AVG.INTWO", # CORRA (overnight repo rate)
+    vector_ids = [
+        V_POLICY_RATE,
+        V_OMMFR,
+        V_GOV_2Y_YIELD,
+        V_GOV_5Y_YIELD,
+        V_GOV_10Y_YIELD,
+        V_PRIME_RATE,
     ]
 
-    start = _compute_start_for_years_back(years_back)
-    monthly = fetch_boc_series_monthly_last(series_ids, start=start)
+    monthly_by_vector = fetch_statcan_vectors_monthly_last(
+        vector_ids=vector_ids,
+        years_back=years_back,
+        latest_n=5000,
+    )
+
+    # Build sorted list of all month keys across all series
+    all_months = sorted(
+        {m for series in monthly_by_vector.values() for m in series.keys()}
+    )
+
+    # Ensure we still trim to the last `years_back` years by month key
+    cutoff_key = _compute_month_cutoff_key(years_back)
+    all_months = [m for m in all_months if m >= cutoff_key]
 
     rows: List[PanelRow] = []
+    source_statcan = "Statistics Canada – Web Data Service (BoC interest rate vectors)"
 
-    for month_key in sorted(monthly.keys()):
-        values = monthly[month_key]
-
-        policy = values.get("V39079")
-        gov_2y = values.get("V122538")
-        gov_5y = values.get("V122540")
-        gov_10y = values.get("V122487")
-        mort_5y = values.get("V80691311")
-        corra = values.get("AVG.INTWO")
-
-        source_boc = "Bank of Canada – Valet API"
+    for month_key in all_months:
+        policy = monthly_by_vector.get(V_POLICY_RATE, {}).get(month_key)
+        ommfr = monthly_by_vector.get(V_OMMFR, {}).get(month_key)
+        gov_2y = monthly_by_vector.get(V_GOV_2Y_YIELD, {}).get(month_key)
+        gov_5y = monthly_by_vector.get(V_GOV_5Y_YIELD, {}).get(month_key)
+        gov_10y = monthly_by_vector.get(V_GOV_10Y_YIELD, {}).get(month_key)
+        prime = monthly_by_vector.get(V_PRIME_RATE, {}).get(month_key)
 
         if policy is not None:
             rows.append(
@@ -175,33 +250,38 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
                     metric="policy_rate",
                     value=policy,
                     unit="pct",
-                    source=source_boc,
+                    source=source_statcan,
                 )
             )
 
-        if corra is not None:
+        # Use OMMFR as repo_rate proxy
+        if ommfr is not None:
             rows.append(
                 PanelRow(
                     date=month_key,
                     region=region,
                     segment="all",
                     metric="repo_rate",
-                    value=corra,
+                    value=ommfr,
                     unit="pct",
-                    source=source_boc,
+                    source=(
+                        f"{source_statcan} – Overnight Money Market Financing Rate (v39050)"
+                    ),
                 )
             )
 
-        if mort_5y is not None:
+        if prime is not None:
             rows.append(
                 PanelRow(
                     date=month_key,
                     region=region,
                     segment="all",
                     metric="mortgage_5y",
-                    value=mort_5y,
+                    value=prime,
                     unit="pct",
-                    source=source_boc,
+                    source=(
+                        f"{source_statcan} – Prime rate (v80691311) as mortgage proxy"
+                    ),
                 )
             )
 
@@ -214,7 +294,7 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
                     metric="gov_2y_yield",
                     value=gov_2y,
                     unit="pct",
-                    source=source_boc,
+                    source=source_statcan,
                 )
             )
 
@@ -227,13 +307,13 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
                     metric="gov_10y_yield",
                     value=gov_10y,
                     unit="pct",
-                    source=source_boc,
+                    source=source_statcan,
                 )
             )
 
         # Derived: mortgage_5y_spread = mortgage_5y - gov_5y_yield
-        if mort_5y is not None and gov_5y is not None:
-            spread = mort_5y - gov_5y
+        if prime is not None and gov_5y is not None:
+            spread = prime - gov_5y
             rows.append(
                 PanelRow(
                     date=month_key,
@@ -243,8 +323,8 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
                     value=spread,
                     unit="pct",
                     source=(
-                        "Derived: mortgage_5y (V80691311 proxy) - "
-                        "5y GoC benchmark bond yield (V122540)"
+                        f"Derived from StatCan WDS: prime (v80691311) - "
+                        f"5y GoC yield (v122540)"
                     ),
                 )
             )
