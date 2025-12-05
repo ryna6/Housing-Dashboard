@@ -8,11 +8,10 @@ import { useTabData } from "./useTabData";
 // Keep this as a plain string[] so it matches getLatestByMetric(types)
 const RATE_METRICS: string[] = [
   "policy_rate",
-  "repo_rate",          // new: OMMFR / repo proxy
+  "repo_rate",
   "mortgage_5y",
   "gov_2y_yield",
   "gov_10y_yield",
-  "mortgage_5y_spread",
 ];
 
 const REGION: RegionCode = "canada";
@@ -92,9 +91,7 @@ export const RatesBondsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Rates</h1>
         <p className="tab__subtitle">
-          Bank of Canada policy rate, overnight money market financing rate
-          (OMMFR), 5-year mortgage / prime rate and Government of Canada bond
-          yields (StatCan / BoC)
+          Policy rate, overnight repo rate, 5-year mortgage rate and Government of Canada bond yields (Bank of Canada & Statistics Canada)
         </p>
       </header>
 
@@ -124,7 +121,7 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="Overnight money market financing rate (OMMFR)"
+          title="Overnight repo rate"
           series={repoSeries}
           valueKey="value"
           treatAsPercentScale
@@ -132,7 +129,7 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="5-year mortgage / prime rate"
+          title="5-year mortgage rate"
           series={mortgageSeries}
           valueKey="value"
           treatAsPercentScale
