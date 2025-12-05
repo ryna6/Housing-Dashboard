@@ -137,14 +137,14 @@ export const RatesBondsTab: React.FC = () => {
           clampYMinToZero
         />
         <ChartPanel
-          title="2-year Government bond yield"
+          title="2-year bond yield"
           series={gov2Series}
           valueKey="value"
           treatAsPercentScale
           clampYMinToZero
         />
         <ChartPanel
-          title="10-year Government bond yield"
+          title="10-year bond yield"
           series={gov10Series}
           valueKey="value"
           treatAsPercentScale
