@@ -11,7 +11,6 @@ const RATE_METRICS = [
   "repo_rate".
   "gov_2y_yield",
   "gov_10y_yield",
-  "mortgage_5y_spread",
 ];
 
 const REGION: RegionCode = "canada";
@@ -93,7 +92,7 @@ export const RatesBondsTab: React.FC = () => {
         <h1 className="tab__title">Rates</h1>
         <p className="tab__subtitle">
           Bank of Canada policy rate, 5-year mortgage rate, overnight repo rate and Government of
-          Canada bond yields (Bank of Canada & Statistics Canada)
+          Canada bond yields (Bank of Canada)
         </p>
       </header>
 
