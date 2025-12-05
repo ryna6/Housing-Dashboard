@@ -117,9 +117,8 @@ export const RatesBondsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Interest rates &amp; bond yields</h1>
         <p className="tab__subtitle">
-          Bank of Canada policy rate, overnight repo rate (CORRA / OMMFR),
-          5-year mortgage rate and Government of Canada bond yields. Monthly
-          data, latest 10 years.
+          Bank of Canada policy rate, overnight repo rate,
+          5-year mortgage rate and Government of Canada bond yields (Statistics Canada)
         </p>
       </header>
 
@@ -144,7 +143,7 @@ export const RatesBondsTab: React.FC = () => {
 
       <section className="tab__charts">
         <ChartPanel
-          title="BoC policy rate (target overnight rate)"
+          title="BoC policy rate"
           series={policySeries}
           valueKey="value"
           treatAsPercentScale
@@ -152,7 +151,7 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="Overnight repo rate (CORRA / OMMFR proxy)"
+          title="Overnight repo rate"
           series={repoSeries}
           valueKey="value"
           treatAsPercentScale
