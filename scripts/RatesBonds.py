@@ -21,7 +21,6 @@ STATCAN_WDS_URL = (
 V_POLICY_RATE = 39079     # v39079 - Target for the overnight rate (%)
 V_OMMFR = 39050           # v39050 - Overnight money market financing rate (%)
 V_GOV_2Y_YIELD = 122538   # v122538 - 2-year GoC benchmark yield (%)
-V_GOV_5Y_YIELD = 122540   # v122540 - 5-year GoC benchmark yield (%)
 V_GOV_10Y_YIELD = 122543  # v122543 - 10-year GoC benchmark yield (%)
 V_PRIME_RATE = 80691311   # v80691311 - Chartered bank prime rate (%), mortgage proxy
 
@@ -188,7 +187,6 @@ def generate_rates(years_back: int = 10) -> List[PanelRow]:
       - policy_rate   -> v39079    (Target for the overnight rate, %)
       - repo_rate     -> v39050    (Overnight money market financing rate, %)
       - gov_2y_yield  -> v122538   (2-year GoC benchmark bond yield, %)
-      - gov_5y_yield  -> v122540   (5-year GoC benchmark bond yield, %)
       - gov_10y_yield -> v122543   (10-year GoC benchmark bond yield, %)
       - mortgage_5y   -> v80691311 (Prime rate, %, used as mortgage proxy)
 
@@ -201,7 +199,6 @@ def generate_rates(years_back: int = 10) -> List[PanelRow]:
         V_POLICY_RATE,
         V_OMMFR,
         V_GOV_2Y_YIELD,
-        V_GOV_5Y_YIELD,
         V_GOV_10Y_YIELD,
         V_PRIME_RATE,
     ]
@@ -226,7 +223,6 @@ def generate_rates(years_back: int = 10) -> List[PanelRow]:
         policy = monthly_by_vector.get(V_POLICY_RATE, {}).get(month_key)
         ommfr = monthly_by_vector.get(V_OMMFR, {}).get(month_key)
         gov_2y = monthly_by_vector.get(V_GOV_2Y_YIELD, {}).get(month_key)
-        gov_5y = monthly_by_vector.get(V_GOV_5Y_YIELD, {}).get(month_key)
         gov_10y = monthly_by_vector.get(V_GOV_10Y_YIELD, {}).get(month_key)
         prime = monthly_by_vector.get(V_PRIME_RATE, {}).get(month_key)
 
@@ -292,23 +288,6 @@ def generate_rates(years_back: int = 10) -> List[PanelRow]:
                     value=gov_10y,
                     unit="pct",
                     source=source,
-                )
-            )
-
-        if prime is not None and gov_5y is not None:
-            spread = prime - gov_5y
-            rows.append(
-                PanelRow(
-                    date=month_key,
-                    region=region,
-                    segment="all",
-                    metric="mortgage_5y_spread",
-                    value=spread,
-                    unit="pct",
-                    source=(
-                        f"Derived from StatCan WDS: prime (v80691311) - "
-                        f"5y GoC yield (v122540)"
-                    ),
                 )
             )
 
