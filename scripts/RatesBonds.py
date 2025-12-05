@@ -122,7 +122,7 @@ def generate_rates_from_boc() -> List[PanelRow]:
     Metrics → BoC series:
       - policy_rate      -> V39079    (Target for the overnight rate, %)
       - gov_2y_yield     -> V122538   (2-year GoC benchmark bond yield, %)
-      - repo_rate        -> V39050    (overnight repo rate, %)
+      - repo_volume      -> V44201362 (overnight repo volume, Billions)
       - gov_10y_yield    -> V122487   (Long-term GoC bond yield >10y, %)
       - mortgage_5y      -> V80691311 (Prime rate, %)
     """
@@ -132,7 +132,7 @@ def generate_rates_from_boc() -> List[PanelRow]:
     series_by_metric: Dict[str, Tuple[str, str]] = {
         "policy_rate": ("V39079", "pct"),
         "gov_2y_yield": ("V122538", "pct"),
-        "repo_rate": ("V39050", "pct"),
+        "repo_volume": ("V44201362", "Billions"),
         "gov_10y_yield": ("V122487", "pct"),
         "mortgage_5y": ("V80691311", "pct"),
     }
