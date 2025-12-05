@@ -79,6 +79,8 @@ def fetch_boc_series_monthly_last(
         params.append(f"end_date={end}")
     query = "&".join(params)
 
+    # Valet supports multiple series in the path, e.g.:
+    # /valet/observations/CL.CDN.MOST.1DL,AVG.INTWO/...  (see CORRA/OMMFR docs)
     url = f"{base}/{ids_param}/json?{query}"
 
     payload = _http_get_json(url)
@@ -115,7 +117,6 @@ def _compute_start_for_years_back(years_back: int = 10) -> str:
     """
     today = date.today()
     start_year = today.year - years_back
-    # Keep the same month to get a rolling 10-year window
     start_month = today.month
     start = date(start_year, start_month, 1)
     return start.isoformat()
@@ -127,29 +128,28 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
     for JSON export.
 
     Metrics → BoC Valet series:
-      - policy_rate       -> V39079    (Target for the overnight rate, %)
-      - gov_2y_yield      -> V122538   (2-year GoC benchmark bond yield, %)
-      - gov_5y_yield      -> V122540   (5-year GoC benchmark bond yield, %)
-      - gov_10y_yield     -> V122487   (Long-term GoC bond yield >10y, %)
-      - mortgage_5y       -> V80691311 (Conventional 5-year mortgage rate, %)
-      - repo_rate (CORRA) -> AVG.INTWO (Canadian Overnight Repo Rate Average, %)
-      - repo_fallback     -> V39050    (Overnight money market financing rate, %)
+      - policy_rate       -> V39079          (Target for the overnight rate, %)
+      - gov_2y_yield      -> V122538         (2-year GoC benchmark bond yield, %)
+      - gov_5y_yield      -> V122540         (5-year GoC benchmark bond yield, %)
+      - gov_10y_yield     -> V122487         (Long-term GoC bond yield >10y, %)
+      - mortgage_5y       -> V80691311       (Prime rate, %, used as proxy)
+      - repo_rate (CORRA) -> AVG.INTWO       (Canadian Overnight Repo Rate Average, %)
+      - repo_fallback     -> CL.CDN.MOST.1DL (Overnight money market financing rate, CANSIM V39050, %)
 
     Repo rate construction:
       For each month, prefer AVG.INTWO (CORRA). If it is missing for that month,
-      fall back to V39050.
+      fall back to CL.CDN.MOST.1DL.
     """
     region = "canada"
 
-    # All series we want to pull in one Valet call
     series_ids = [
-        "V39079",    # policy_rate
-        "V122538",   # gov_2y_yield
-        "V122540",   # gov_5y_yield
-        "V122487",   # gov_10y_yield
-        "V80691311", # mortgage_5y
-        "AVG.INTWO", # CORRA
-        "V39050",    # Overnight money market financing rate
+        "V39079",          # policy_rate
+        "V122538",         # gov_2y_yield
+        "V122540",         # gov_5y_yield
+        "V122487",         # gov_10y_yield
+        "V80691311",       # prime rate (proxy for mortgage_5y in this dashboard)
+        "AVG.INTWO",       # CORRA
+        "CL.CDN.MOST.1DL", # Overnight money market financing rate (OMMFR), CANSIM V39050
     ]
 
     start = _compute_start_for_years_back(years_back)
@@ -167,7 +167,7 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
         mort_5y = values.get("V80691311")
 
         corra = values.get("AVG.INTWO")
-        ommfr = values.get("V39050")
+        ommfr = values.get("CL.CDN.MOST.1DL")
         repo = corra if corra is not None else ommfr
 
         source_boc = "Bank of Canada – Valet API"
@@ -196,7 +196,8 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
                     unit="pct",
                     source=(
                         "BoC CORRA (AVG.INTWO) where available, "
-                        "otherwise Overnight money market financing rate (V39050)"
+                        "otherwise overnight money market financing rate "
+                        "(CL.CDN.MOST.1DL, CANSIM V39050)"
                     ),
                 )
             )
@@ -251,11 +252,13 @@ def generate_rates(years_back: int = 10) -> List[Dict]:
                     metric="mortgage_5y_spread",
                     value=spread,
                     unit="pct",
-                    source="Derived: mortgage_5y (V80691311) - 5y GoC yield (V122540)",
+                    source=(
+                        "Derived: mortgage_5y (V80691311) - "
+                        "5y GoC benchmark bond yield (V122540)"
+                    ),
                 )
             )
 
-    # Convert to plain dicts for JSON serialization
     return [asdict(r) for r in rows]
 
 
