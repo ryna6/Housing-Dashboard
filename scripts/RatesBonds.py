@@ -209,6 +209,10 @@ def generate_rates(years_back: int = 10) -> List[PanelRow]:
         latest_n=5000,
     )
 
+    # If StatCan returned 409 and we handled it as "no data", just return
+    if not monthly_by_vector:
+        return []    
+    
     all_months = sorted(
         {m for series in monthly_by_vector.values() for m in series.keys()}
     )
