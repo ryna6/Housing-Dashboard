@@ -136,7 +136,9 @@ function labelForMetric(metric: string): string {
     case "policy_rate":
       return "BoC policy rate";
     case "mortgage_5y":
-      return "5y mortgage prime rate";
+      return "5y mortgage rate";
+    case "repo_volume":
+      return "Overnight repo volume";
 
     case "gov_2y_yield":
       return "2y GoC yield";
@@ -144,8 +146,6 @@ function labelForMetric(metric: string): string {
       return "5y GoC yield";
     case "gov_10y_yield":
       return "10y GoC yield";
-    case "mortgage_5y_spread":
-      return "5y mortgage spread";
 
     case "avg_rent":
       return "Average rent";
