@@ -32,6 +32,14 @@ function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
   });
 }
 
+function formatCurrencyBillions(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) {
+    return `$${(value / 1_000_000_000).toFixed(2)}B`;
+  }
+  return `$${value.toFixed(0)}`;
+}
+
 export const RatesBondsTab: React.FC = () => {
   const { data, loading, error } = useTabData("rates_bonds");
 
@@ -129,9 +137,10 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="Overnight repo volume (billions)"
+          title="Overnight repo volume"
           series={repoSeries}
           valueKey="value"
+          valueFormatter={formatCurrencyBillions}
           clampYMinToZero
         />
         <ChartPanel
