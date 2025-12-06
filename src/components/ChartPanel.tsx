@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React from "react";
 import ReactECharts from "echarts-for-react";
 import type { PanelPoint } from "../data/types";
 
@@ -47,22 +47,35 @@ function niceStep(rawStep: number): number {
   return niceBase * Math.pow(10, exp);
 }
 
-function clamp(n: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, n));
+// Helper to format the change value for our Google Finance–style range selection.
+// Reuses existing formatters where possible.
+function formatRangeDelta(
+  value: number,
+  isPercentScale: boolean,
+  tooltipValueFormatter?: (value: number) => string,
+  valueFormatter?: (value: number) => string
+): string {
+  if (!Number.isFinite(value)) return "–";
+  const abs = Math.abs(value);
+
+  // If the chart is on a percent scale already (e.g. MoM / YoY),
+  // treat this as percentage points.
+  if (isPercentScale) {
+    return `${abs.toFixed(2)}%`;
+  }
+
+  // Prefer tooltip formatter (usually richest formatting)
+  if (typeof tooltipValueFormatter === "function") {
+    return tooltipValueFormatter(abs);
+  }
+
+  // Fallback to axis formatter
+  if (typeof valueFormatter === "function") {
+    return valueFormatter(abs);
+  }
+
+  return abs.toFixed(2);
 }
-
-type RangeSelection = { start: number; end: number };
-
-type RangeSummary = {
-  startIdx: number;
-  endIdx: number;
-  startLabel: string;
-  endLabel: string;
-  startVal: number;
-  endVal: number;
-  delta: number;
-  pctChange: number | null;
-};
 
 export const ChartPanel: React.FC<Props> = ({
   title,
@@ -75,23 +88,12 @@ export const ChartPanel: React.FC<Props> = ({
   treatAsPercentScale,
   clampYMinToZero = false,
 }) => {
-  const chartRef = useRef<any>(null);
-
-  // Keep the latest data available to the drag handlers without re-binding events.
-  const xRef = useRef<string[]>([]);
-
-  const [range, setRange] = useState<RangeSelection | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [chartReady, setChartReady] = useState(false);
-
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
   const x = sorted.map((p) => p.date.slice(0, 7)); // YYYY-MM
   const y = sorted.map((p) => {
     const v = p[valueKey] as number | null;
     return v == null ? NaN : v;
   });
-
-  xRef.current = x;
 
   const numeric = y.filter(
     (v) => typeof v === "number" && !Number.isNaN(v)
@@ -103,6 +105,218 @@ export const ChartPanel: React.FC<Props> = ({
     treatAsPercentScale ??
     (valueKey === "mom_pct" || valueKey === "yoy_pct");
 
+  // --- Google Finance–style click-and-drag range selection ---
+
+  const [chartInstance, setChartInstance] = React.useState<any | null>(null);
+
+  const handleChartReady = React.useCallback((instance: any) => {
+    setChartInstance(instance);
+  }, []);
+
+  const [dragState, setDragState] = React.useState<{
+    startIndex: number | null;
+    currentIndex: number | null;
+    isDragging: boolean;
+  }>({
+    startIndex: null,
+    currentIndex: null,
+    isDragging: false,
+  });
+
+  // Reset selection when the underlying series / metric changes
+  React.useEffect(() => {
+    setDragState({
+      startIndex: null,
+      currentIndex: null,
+      isDragging: false,
+    });
+  }, [series, valueKey]);
+
+  // Normalize selection to [startIndex, endIndex] with start <= end
+  const rangeSelection = React.useMemo(() => {
+    if (
+      dragState.startIndex == null ||
+      dragState.currentIndex == null ||
+      dragState.startIndex === dragState.currentIndex
+    ) {
+      return null;
+    }
+
+    const start = Math.min(dragState.startIndex, dragState.currentIndex);
+    const end = Math.max(dragState.startIndex, dragState.currentIndex);
+
+    if (start < 0 || end >= y.length) return null;
+    return { startIndex: start, endIndex: end };
+  }, [dragState, y.length]);
+
+  // Compute change over the selected range (absolute + %).
+  // If either endpoint is NaN, we snap inward to the nearest numeric value.
+  const rangeStats = React.useMemo(() => {
+    if (!rangeSelection) return null;
+
+    const { startIndex, endIndex } = rangeSelection;
+
+    const findForward = (from: number, to: number) => {
+      for (let i = from; i <= to; i += 1) {
+        const v = y[i];
+        if (typeof v === "number" && Number.isFinite(v) && !Number.isNaN(v)) {
+          return { index: i, value: v };
+        }
+      }
+      return null;
+    };
+
+    const findBackward = (from: number, to: number) => {
+      for (let i = from; i >= to; i -= 1) {
+        const v = y[i];
+        if (typeof v === "number" && Number.isFinite(v) && !Number.isNaN(v)) {
+          return { index: i, value: v };
+        }
+      }
+      return null;
+    };
+
+    const startPoint = findForward(startIndex, endIndex);
+    const endPoint = findBackward(endIndex, startIndex);
+    if (!startPoint || !endPoint) return null;
+
+    const absChange = endPoint.value - startPoint.value;
+    const pctChange =
+      startPoint.value !== 0
+        ? (absChange / Math.abs(startPoint.value)) * 100
+        : null;
+
+    return {
+      absChange,
+      pctChange,
+      startLabel: x[startPoint.index],
+      endLabel: x[endPoint.index],
+    };
+  }, [rangeSelection, x, y]);
+
+  // Attach ZRender (canvas) events so dragging works anywhere on the plot area,
+  // not just directly over the line.
+  const xKey = x.join("|");
+  React.useEffect(() => {
+    const inst = chartInstance;
+    if (!inst || !hasData || x.length === 0) return;
+
+    const zr = inst.getZr();
+
+    const getIndexFromEvent = (e: any): number | null => {
+      const ox = e?.offsetX;
+      const oy = e?.offsetY;
+      if (typeof ox !== "number" || typeof oy !== "number") return null;
+
+      // Only react to drags inside the main grid plot area
+      if (!inst.containPixel({ gridIndex: 0 }, [ox, oy])) return null;
+
+      const converted = inst.convertFromPixel({ gridIndex: 0 }, [ox, oy]);
+      const xVal = Array.isArray(converted) ? converted[0] : converted;
+
+      let idx: number | null = null;
+      if (typeof xVal === "number" && Number.isFinite(xVal)) {
+        idx = Math.round(xVal);
+      } else if (typeof xVal === "string") {
+        const found = x.indexOf(xVal);
+        if (found >= 0) idx = found;
+      }
+
+      if (idx == null) return null;
+      idx = Math.max(0, Math.min(x.length - 1, idx));
+      return idx;
+    };
+
+    const onMouseDown = (e: any) => {
+      const idx = getIndexFromEvent(e);
+      if (idx == null) return;
+
+      setDragState({
+        startIndex: idx,
+        currentIndex: idx,
+        isDragging: true,
+      });
+    };
+
+    const onMouseMove = (e: any) => {
+      const idx = getIndexFromEvent(e);
+      if (idx == null) return;
+
+      setDragState((prev) => {
+        if (!prev.isDragging || prev.startIndex == null) return prev;
+        if (idx === prev.currentIndex) return prev;
+        return { ...prev, currentIndex: idx };
+      });
+    };
+
+    const onMouseUp = () => {
+      setDragState((prev) => {
+        if (!prev.isDragging) return prev;
+        return { ...prev, isDragging: false };
+      });
+    };
+
+    zr.on("mousedown", onMouseDown);
+    zr.on("mousemove", onMouseMove);
+    zr.on("mouseup", onMouseUp);
+    zr.on("globalout", onMouseUp);
+
+    return () => {
+      zr.off("mousedown", onMouseDown);
+      zr.off("mousemove", onMouseMove);
+      zr.off("mouseup", onMouseUp);
+      zr.off("globalout", onMouseUp);
+    };
+  }, [chartInstance, hasData, xKey]);
+
+  // Build the chip row under the chart title (reuses MoM/YoY card styles)
+  let rangeSummaryNode: React.ReactNode = null;
+  if (rangeStats && hasData) {
+    const { absChange, pctChange, startLabel, endLabel } = rangeStats;
+
+    const chipClass =
+      "metric-card__delta-chip" +
+      (absChange > 0
+        ? " metric-card__delta-chip--up"
+        : absChange < 0
+        ? " metric-card__delta-chip--down"
+        : "");
+
+    const sign = absChange > 0 ? "+" : absChange < 0 ? "-" : "";
+    const deltaStr = formatRangeDelta(
+      Math.abs(absChange),
+      isPercentScale,
+      tooltipValueFormatter,
+      valueFormatter
+    );
+
+    let pctStr: string | null = null;
+    if (pctChange != null && Number.isFinite(pctChange)) {
+      const pctSign = pctChange > 0 ? "+" : pctChange < 0 ? "-" : "";
+      pctStr = `${pctSign}${Math.abs(pctChange).toFixed(1)}%`;
+    }
+
+    rangeSummaryNode = (
+      <div className="metric-card__delta-row">
+        <span className={chipClass}>
+          {sign}
+          {deltaStr}
+          {pctStr && (
+            <>
+              {" ("}
+              {pctStr}
+              {")"}
+            </>
+          )}
+          <span className="metric-card__delta-label">
+            {" "}
+            {startLabel} → {endLabel}
+          </span>
+        </span>
+      </div>
+    );
+  }
+
   if (!hasData) {
     return (
       <div className="chart-panel chart-panel--empty">
@@ -113,203 +327,6 @@ export const ChartPanel: React.FC<Props> = ({
       </div>
     );
   }
-
-  // Format numeric values consistently with the existing tooltip/axis behavior.
-  const formatValueForDisplay = (val: number): string => {
-    if (Number.isNaN(val)) return "–";
-
-    if (isPercentScale) {
-      return `${val.toFixed(2)}%`;
-    }
-
-    if (typeof tooltipValueFormatter === "function") {
-      return tooltipValueFormatter(val);
-    }
-
-    if (typeof valueFormatter === "function") {
-      return valueFormatter(val);
-    }
-
-    return val.toFixed(2);
-  };
-
-  const rangeSummary: RangeSummary | null = useMemo(() => {
-    if (!range) return null;
-    if (x.length === 0) return null;
-
-    const maxIdx = x.length - 1;
-    const s = clamp(range.start, 0, maxIdx);
-    const e = clamp(range.end, 0, maxIdx);
-    const i0 = Math.min(s, e);
-    const i1 = Math.max(s, e);
-
-    // Ignore degenerate selections (single point); only show when a real range exists.
-    if (i0 === i1) return null;
-
-    // Find the first/last finite values inside the selected span (handles missing data).
-    let startIdx: number | null = null;
-    for (let i = i0; i <= i1; i++) {
-      const v = y[i];
-      if (typeof v === "number" && Number.isFinite(v)) {
-        startIdx = i;
-        break;
-      }
-    }
-
-    let endIdx: number | null = null;
-    for (let i = i1; i >= i0; i--) {
-      const v = y[i];
-      if (typeof v === "number" && Number.isFinite(v)) {
-        endIdx = i;
-        break;
-      }
-    }
-
-    if (startIdx == null || endIdx == null) return null;
-    if (startIdx === endIdx) return null;
-
-    const startVal = y[startIdx];
-    const endVal = y[endIdx];
-    if (!Number.isFinite(startVal) || !Number.isFinite(endVal)) return null;
-
-    const delta = (endVal as number) - (startVal as number);
-    const pctChange =
-      startVal !== 0
-        ? (delta / Math.abs(startVal as number)) * 100
-        : null;
-
-    return {
-      startIdx,
-      endIdx,
-      startLabel: x[startIdx],
-      endLabel: x[endIdx],
-      startVal: startVal as number,
-      endVal: endVal as number,
-      delta,
-      pctChange,
-    };
-  }, [range, x, y]);
-
-  // Click/hold/drag (Google Finance-style): show Δ and %Δ over an arbitrary range.
-  useEffect(() => {
-    if (!chartReady || !hasData) return;
-
-    const ec = chartRef.current?.getEchartsInstance?.();
-    if (!ec) return;
-
-    const zr = ec.getZr();
-    let pointerDown = false;
-
-    const getIndexFromPointerEvent = (e: any): number | null => {
-      const xNow = xRef.current;
-      if (!xNow || xNow.length === 0) return null;
-
-      const ox =
-        typeof e?.offsetX === "number"
-          ? e.offsetX
-          : typeof e?.zrX === "number"
-          ? e.zrX
-          : typeof e?.x === "number"
-          ? e.x
-          : null;
-
-      const oy =
-        typeof e?.offsetY === "number"
-          ? e.offsetY
-          : typeof e?.zrY === "number"
-          ? e.zrY
-          : typeof e?.y === "number"
-          ? e.y
-          : null;
-
-      if (typeof ox !== "number" || typeof oy !== "number") return null;
-
-      const point: [number, number] = [ox, oy];
-      const inGrid = ec.containPixel({ gridIndex: 0 }, point);
-      if (!inGrid) return null;
-
-      let coord: any = null;
-      try {
-        coord = ec.convertFromPixel({ seriesIndex: 0 }, point);
-      } catch {
-        // ignore
-      }
-
-      const xCoord = Array.isArray(coord) ? coord[0] : coord;
-
-      if (typeof xCoord === "string") {
-        const idx = xNow.indexOf(xCoord);
-        return idx >= 0 ? idx : null;
-      }
-
-      if (typeof xCoord === "number" && Number.isFinite(xCoord)) {
-        return clamp(Math.round(xCoord), 0, Math.max(0, xNow.length - 1));
-      }
-
-      // Fallback: convert against the xAxis if series conversion didn't resolve.
-      try {
-        const axisCoord: any = ec.convertFromPixel({ xAxisIndex: 0 }, point);
-        const v = Array.isArray(axisCoord) ? axisCoord[0] : axisCoord;
-
-        if (typeof v === "string") {
-          const idx = xNow.indexOf(v);
-          return idx >= 0 ? idx : null;
-        }
-        if (typeof v === "number" && Number.isFinite(v)) {
-          return clamp(Math.round(v), 0, Math.max(0, xNow.length - 1));
-        }
-      } catch {
-        // ignore
-      }
-
-      return null;
-    };
-
-    const onDown = (e: any) => {
-      const idx = getIndexFromPointerEvent(e);
-      if (idx == null) return;
-      pointerDown = true;
-      setIsDragging(true);
-      setRange({ start: idx, end: idx });
-    };
-
-    const onMove = (e: any) => {
-      if (!pointerDown) return;
-      const idx = getIndexFromPointerEvent(e);
-      if (idx == null) return;
-      setRange((prev) => {
-        if (!prev) return { start: idx, end: idx };
-        if (prev.end === idx) return prev;
-        return { ...prev, end: idx };
-      });
-    };
-
-    const onUp = () => {
-      if (!pointerDown) return;
-      pointerDown = false;
-      setIsDragging(false);
-    };
-
-    zr.on("mousedown", onDown);
-    zr.on("mousemove", onMove);
-    zr.on("mouseup", onUp);
-    zr.on("globalout", onUp);
-
-    zr.on("touchstart", onDown);
-    zr.on("touchmove", onMove);
-    zr.on("touchend", onUp);
-
-    return () => {
-      zr.off("mousedown", onDown);
-      zr.off("mousemove", onMove);
-      zr.off("mouseup", onUp);
-      zr.off("globalout", onUp);
-
-      zr.off("touchstart", onDown);
-      zr.off("touchmove", onMove);
-      zr.off("touchend", onUp);
-    };
-  }, [chartReady, hasData]);
 
   // ----- Y-axis bounds with "±1 step" logic -----
   let yMin: number | undefined;
@@ -424,68 +441,15 @@ export const ChartPanel: React.FC<Props> = ({
     ],
   };
 
-  const rangeChip = (() => {
-    if (!rangeSummary) return null;
-
-    const { delta, pctChange, startLabel, endLabel } = rangeSummary;
-
-    const chipClass =
-      "metric-card__delta-chip" +
-      (delta > 0
-        ? " metric-card__delta-chip--up"
-        : delta < 0
-        ? " metric-card__delta-chip--down"
-        : "");
-
-    const amountText = `${delta > 0 ? "+" : ""}${formatValueForDisplay(delta)}`;
-    const pctText =
-      pctChange != null && Number.isFinite(pctChange)
-        ? `${pctChange > 0 ? "+" : ""}${pctChange.toFixed(1)}%`
-        : null;
-
-    return (
-      <span
-        className={chipClass}
-        style={{
-          whiteSpace: "nowrap",
-          marginLeft: 8,
-          alignSelf: "flex-start",
-          opacity: isDragging ? 1 : 0.95,
-        }}
-      >
-        {amountText}
-        {pctText ? ` (${pctText})` : ""}
-        <span className="metric-card__delta-label"> {startLabel} → {endLabel}</span>
-      </span>
-    );
-  })();
-
   return (
     <div className="chart-panel">
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 8,
-          marginBottom: 10,
-        }}
-      >
-        <div
-          className="chart-panel__title"
-          style={{ marginBottom: 0, flex: "1 1 auto" }}
-        >
-          {title}
-        </div>
-        {rangeChip}
-      </div>
-
+      <div className="chart-panel__title">{title}</div>
+      {rangeSummaryNode}
       <ReactECharts
-        ref={chartRef}
-        onChartReady={() => setChartReady(true)}
         option={option}
         notMerge
         lazyUpdate
+        onChartReady={handleChartReady}
         style={{ width: "100%", height: 190 }}
       />
     </div>
