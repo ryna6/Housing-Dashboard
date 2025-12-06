@@ -18,7 +18,7 @@ interface Props {
 function niceStep(rawStep: number): number {
   if (!Number.isFinite(rawStep) || rawStep <= 0) return 1;
   const exp = Math.floor(Math.log10(rawStep));
-  const base = rawStep / Math.pow(10, exp); // between 1 and 10
+  const base = rawStep / Math.pow(10, exp);
   let niceBase: number;
 
   if (base < 1.5) niceBase = 1;
@@ -29,7 +29,6 @@ function niceStep(rawStep: number): number {
   return niceBase * Math.pow(10, exp);
 }
 
-// Format absolute delta value using existing formatters where possible.
 function formatRangeDelta(
   absValue: number,
   isPercentScale: boolean,
@@ -37,21 +36,14 @@ function formatRangeDelta(
   valueFormatter?: (value: number) => string
 ): string {
   if (!Number.isFinite(absValue)) return "–";
-
-  if (isPercentScale) {
-    return `${absValue.toFixed(2)}%`;
-  }
-
+  if (isPercentScale) return `${absValue.toFixed(2)}%`;
   if (typeof tooltipValueFormatter === "function") return tooltipValueFormatter(absValue);
   if (typeof valueFormatter === "function") return valueFormatter(absValue);
-
   return absValue.toFixed(2);
 }
 
 function parseRgbLike(color: string): { r: number; g: number; b: number } | null {
   const c = color.trim();
-
-  // rgb()/rgba()
   const rgbMatch = c.match(
     /^rgba?\(\s*([0-9]{1,3})\s*[, ]\s*([0-9]{1,3})\s*[, ]\s*([0-9]{1,3})(?:\s*[,/]\s*([0-9.]+))?\s*\)$/
   );
@@ -62,20 +54,21 @@ function parseRgbLike(color: string): { r: number; g: number; b: number } | null
     return { r, g, b };
   }
 
-  // #RGB or #RRGGBB
   const hexMatch = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (hexMatch) {
     const hex = hexMatch[1];
     if (hex.length === 3) {
-      const r = parseInt(hex[0] + hex[0], 16);
-      const g = parseInt(hex[1] + hex[1], 16);
-      const b = parseInt(hex[2] + hex[2], 16);
-      return { r, g, b };
+      return {
+        r: parseInt(hex[0] + hex[0], 16),
+        g: parseInt(hex[1] + hex[1], 16),
+        b: parseInt(hex[2] + hex[2], 16),
+      };
     }
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    return { r, g, b };
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+    };
   }
 
   return null;
@@ -92,24 +85,29 @@ export const ChartPanel: React.FC<Props> = ({
   treatAsPercentScale,
   clampYMinToZero = false,
 }) => {
-  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
-  const x = sorted.map((p) => p.date.slice(0, 7)); // YYYY-MM
-  const y = sorted.map((p) => {
-    const v = p[valueKey] as number | null;
-    return v == null ? NaN : v;
-  });
+  const sorted = React.useMemo(
+    () => [...series].sort((a, b) => a.date.localeCompare(b.date)),
+    [series]
+  );
 
-  const numeric = y.filter(
-    (v) => typeof v === "number" && !Number.isNaN(v)
-  ) as number[];
+  const x = React.useMemo(() => sorted.map((p) => p.date.slice(0, 7)), [sorted]);
+  const y = React.useMemo(() => {
+    return sorted.map((p) => {
+      const v = p[valueKey] as number | null;
+      return v == null ? NaN : v;
+    });
+  }, [sorted, valueKey]);
+
+  const numeric = React.useMemo(() => {
+    return y.filter((v) => typeof v === "number" && !Number.isNaN(v)) as number[];
+  }, [y]);
 
   const hasData = sorted.length > 0 && numeric.length > 0;
 
   const isPercentScale =
-    treatAsPercentScale ??
-    (valueKey === "mom_pct" || valueKey === "yoy_pct");
+    treatAsPercentScale ?? (valueKey === "mom_pct" || valueKey === "yoy_pct");
 
-  // Theme-aware tooltip styling (uses CSS vars if present; falls back gracefully)
+  // Theme-aware tooltip colors (uses CSS vars, falls back gracefully)
   const theme = React.useMemo(() => {
     const fallback = {
       surface: "rgba(255,255,255,0.92)",
@@ -135,41 +133,75 @@ export const ChartPanel: React.FC<Props> = ({
     };
   }, []);
 
-  const highlightFill = React.useMemo(() => {
-    // Subtle overlay that works on both light/dark; infer theme from text luminance.
+  // Under-curve selection overlay gradient (darker near line, fades to transparent at bottom)
+  const selectionAreaGradient = React.useMemo(() => {
     const rgb = parseRgbLike(theme.text);
-    if (!rgb) {
-      return "rgba(0,0,0,0.04)";
+    let darkTheme = false;
+    if (rgb) {
+      const lum = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+      darkTheme = lum > 0.6; // light text => dark UI
     }
-    const lum = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
-    // If text is light => background likely dark => use a light overlay.
-    return lum > 0.6 ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)";
+    const top = darkTheme ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)";
+    const mid = darkTheme ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)";
+    const bottom = "rgba(0,0,0,0.0)";
+
+    return {
+      type: "linear",
+      x: 0,
+      y: 0,
+      x2: 0,
+      y2: 1,
+      colorStops: [
+        { offset: 0, color: top },
+        { offset: 0.55, color: mid },
+        { offset: 1, color: bottom },
+      ],
+    };
   }, [theme.text]);
 
-  // --- Click/hold/drag anchor state ---
+  // Chart instance
   const [chartInstance, setChartInstance] = React.useState<any | null>(null);
   const handleChartReady = React.useCallback((instance: any) => {
     setChartInstance(instance);
   }, []);
 
-  // NOTE: no React updates on mousemove (prevents flicker)
-  const [dragState, setDragState] = React.useState<{
-    startIndex: number | null;
-    isDragging: boolean;
-  }>({ startIndex: null, isDragging: false });
+  // Drag state held in a ref (NO React re-renders while dragging => no flicker)
+  const dragRef = React.useRef<{ isDragging: boolean; startIndex: number | null }>({
+    isDragging: false,
+    startIndex: null,
+  });
 
-  const dragRef = React.useRef(dragState);
+  const overlayEmpty = React.useMemo(() => new Array(y.length).fill(null), [y.length]);
+
+  // Reset any active drag/overlays when data changes
   React.useEffect(() => {
-    dragRef.current = dragState;
-  }, [dragState]);
+    dragRef.current = { isDragging: false, startIndex: null };
+    if (!chartInstance) return;
 
-  // Reset on data/metric change
-  React.useEffect(() => {
-    setDragState({ startIndex: null, isDragging: false });
-  }, [series, valueKey]);
+    try {
+      chartInstance.dispatchAction({ type: "hideTip" });
+    } catch {
+      // no-op
+    }
 
-  const xKey = x.join("|");
+    // Clear start line + overlay instantly
+    try {
+      chartInstance.setOption(
+        {
+          series: [
+            { markLine: { data: [] } },
+            { data: overlayEmpty },
+          ],
+          tooltip: { axisPointer: { label: { show: false } } },
+        },
+        { notMerge: false, lazyUpdate: true }
+      );
+    } catch {
+      // no-op
+    }
+  }, [chartInstance, overlayEmpty, series, valueKey]);
 
+  // Attach ZRender events
   React.useEffect(() => {
     const inst = chartInstance;
     if (!inst || !hasData || x.length === 0) return;
@@ -198,7 +230,6 @@ export const ChartPanel: React.FC<Props> = ({
       const ox = e?.offsetX;
       const oy = e?.offsetY;
       if (typeof ox !== "number" || typeof oy !== "number") return null;
-
       if (!inst.containPixel({ gridIndex: 0 }, [ox, oy])) return null;
 
       const converted = inst.convertFromPixel({ gridIndex: 0 }, [ox, oy]);
@@ -210,34 +241,22 @@ export const ChartPanel: React.FC<Props> = ({
         const found = x.indexOf(xVal);
         if (found >= 0) idx = found;
       }
-
       if (idx == null) return null;
       return clampIndex(idx);
     };
 
-    const hideTip = () => {
-      try {
-        inst.dispatchAction({ type: "hideTip" });
-      } catch {
-        // no-op
-      }
-    };
-
-    // Throttle showTip + highlight to 1 per animation frame (prevents flicker)
+    // rAF throttle for showTip + overlay updates
     const lastTipIndexRef = { current: -1 as number };
     const pendingTipIndexRef = { current: null as null | number };
     const tipRafRef = { current: null as null | number };
 
-    const lastHighlightKeyRef = { current: "" as string };
-    const pendingHighlightRef = {
-      current: null as null | { a: number; b: number; startLabel: string; endLabel: string },
-    };
-    const highlightRafRef = { current: null as null | number };
+    const lastOverlayKeyRef = { current: "" };
+    const pendingOverlayRef = { current: null as null | { a: number; b: number } };
+    const overlayRafRef = { current: null as null | number };
 
     const requestShowTip = (idx: number) => {
       if (idx === lastTipIndexRef.current) return;
       pendingTipIndexRef.current = idx;
-
       if (tipRafRef.current != null) return;
 
       tipRafRef.current = window.requestAnimationFrame(() => {
@@ -254,25 +273,19 @@ export const ChartPanel: React.FC<Props> = ({
       });
     };
 
-    const applyHighlight = (a: number, b: number) => {
-      const startLabel = x[a];
-      const endLabel = x[b];
-
-      // Shade between start and end (full height)
+    const applyStartLineInstant = (label: string) => {
+      // MarkLine appears instantly (no animation)
       inst.setOption(
         {
           series: [
             {
-              // merge into series[0]
-              markArea: {
+              markLine: {
                 silent: true,
-                itemStyle: { color: highlightFill },
-                data: [
-                  [
-                    { xAxis: startLabel, yAxis: "min" },
-                    { xAxis: endLabel, yAxis: "max" },
-                  ],
-                ],
+                symbol: "none",
+                label: { show: false },
+                animation: false,
+                lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
+                data: [{ xAxis: label }],
               },
             },
           ],
@@ -281,47 +294,83 @@ export const ChartPanel: React.FC<Props> = ({
       );
     };
 
-    const clearHighlight = () => {
+    const clearStartLineInstant = () => {
       inst.setOption(
-        {
-          series: [
-            {
-              markArea: { data: [] },
-            },
-          ],
-        },
+        { series: [{ markLine: { data: [] } }] },
         { notMerge: false, lazyUpdate: true }
       );
-      lastHighlightKeyRef.current = "";
-      pendingHighlightRef.current = null;
     };
 
-    const requestHighlight = (startIdx: number, curIdx: number) => {
+    const applyUnderCurveOverlay = (a: number, b: number) => {
+      const overlay = new Array(y.length).fill(null);
+      for (let i = a; i <= b; i += 1) {
+        const v = y[i];
+        overlay[i] = Number.isFinite(v) && !Number.isNaN(v) ? v : null;
+      }
+
+      inst.setOption(
+        { series: [{}, { data: overlay }] },
+        { notMerge: false, lazyUpdate: true }
+      );
+    };
+
+    const clearOverlay = () => {
+      inst.setOption(
+        { series: [{}, { data: overlayEmpty }] },
+        { notMerge: false, lazyUpdate: true }
+      );
+      lastOverlayKeyRef.current = "";
+      pendingOverlayRef.current = null;
+    };
+
+    const requestOverlay = (startIdx: number, curIdx: number) => {
       const a = Math.min(startIdx, curIdx);
       const b = Math.max(startIdx, curIdx);
+
       if (a === b) {
-        // no region to highlight
-        clearHighlight();
+        clearOverlay();
         return;
       }
 
       const key = `${a}-${b}`;
-      if (key === lastHighlightKeyRef.current) return;
+      if (key === lastOverlayKeyRef.current) return;
 
-      pendingHighlightRef.current = { a, b, startLabel: x[a], endLabel: x[b] };
-      if (highlightRafRef.current != null) return;
+      pendingOverlayRef.current = { a, b };
+      if (overlayRafRef.current != null) return;
 
-      highlightRafRef.current = window.requestAnimationFrame(() => {
-        highlightRafRef.current = null;
-        const pending = pendingHighlightRef.current;
+      overlayRafRef.current = window.requestAnimationFrame(() => {
+        overlayRafRef.current = null;
+        const pending = pendingOverlayRef.current;
         if (!pending) return;
 
         const k = `${pending.a}-${pending.b}`;
-        if (k === lastHighlightKeyRef.current) return;
+        if (k === lastOverlayKeyRef.current) return;
 
-        lastHighlightKeyRef.current = k;
-        applyHighlight(pending.a, pending.b);
+        lastOverlayKeyRef.current = k;
+        applyUnderCurveOverlay(pending.a, pending.b);
       });
+    };
+
+    const showAxisPointerLabel = (show: boolean) => {
+      inst.setOption(
+        {
+          tooltip: {
+            axisPointer: {
+              label: {
+                show,
+                formatter: (p: any) => (p?.value != null ? String(p.value) : ""),
+                backgroundColor: theme.surface,
+                borderColor: theme.border,
+                borderWidth: 1,
+                color: theme.text,
+                padding: [6, 8],
+                borderRadius: 10,
+              },
+            },
+          },
+        },
+        { notMerge: false, lazyUpdate: true }
+      );
     };
 
     const onMouseDown = (e: any) => {
@@ -331,9 +380,13 @@ export const ChartPanel: React.FC<Props> = ({
       const snapIdx = closestNumericIndex(rawIdx);
       if (snapIdx == null) return;
 
-      setDragState({ startIndex: snapIdx, isDragging: true });
+      dragRef.current = { isDragging: true, startIndex: snapIdx };
+
+      // instantly show start line + date label + tip
+      applyStartLineInstant(x[snapIdx]);
+      showAxisPointerLabel(true);
       requestShowTip(snapIdx);
-      clearHighlight(); // will be set as soon as we move to a second point
+      clearOverlay();
     };
 
     const onMouseMove = (e: any) => {
@@ -347,13 +400,21 @@ export const ChartPanel: React.FC<Props> = ({
       if (snapIdx == null) return;
 
       requestShowTip(snapIdx);
-      requestHighlight(ds.startIndex, snapIdx);
+      requestOverlay(ds.startIndex, snapIdx);
     };
 
     const resetDrag = () => {
-      setDragState({ startIndex: null, isDragging: false });
-      hideTip();
-      clearHighlight();
+      dragRef.current = { isDragging: false, startIndex: null };
+
+      try {
+        inst.dispatchAction({ type: "hideTip" });
+      } catch {
+        // no-op
+      }
+
+      showAxisPointerLabel(false);
+      clearStartLineInstant();
+      clearOverlay();
 
       lastTipIndexRef.current = -1;
       pendingTipIndexRef.current = null;
@@ -362,9 +423,9 @@ export const ChartPanel: React.FC<Props> = ({
         window.cancelAnimationFrame(tipRafRef.current);
         tipRafRef.current = null;
       }
-      if (highlightRafRef.current != null) {
-        window.cancelAnimationFrame(highlightRafRef.current);
-        highlightRafRef.current = null;
+      if (overlayRafRef.current != null) {
+        window.cancelAnimationFrame(overlayRafRef.current);
+        overlayRafRef.current = null;
       }
     };
 
@@ -378,11 +439,10 @@ export const ChartPanel: React.FC<Props> = ({
       zr.off("mousemove", onMouseMove);
       zr.off("mouseup", resetDrag);
       zr.off("globalout", resetDrag);
-
       if (tipRafRef.current != null) window.cancelAnimationFrame(tipRafRef.current);
-      if (highlightRafRef.current != null) window.cancelAnimationFrame(highlightRafRef.current);
+      if (overlayRafRef.current != null) window.cancelAnimationFrame(overlayRafRef.current);
     };
-  }, [chartInstance, hasData, xKey, highlightFill]);
+  }, [chartInstance, hasData, x, y, overlayEmpty, theme, selectionAreaGradient]);
 
   if (!hasData) {
     return (
@@ -440,183 +500,193 @@ export const ChartPanel: React.FC<Props> = ({
     return val.toFixed(2);
   };
 
-  // Persistent start dotted line while dragging
-  const startLabel =
-    dragState.isDragging && dragState.startIndex != null ? x[dragState.startIndex] : null;
+  // Memoize the option so parent re-renders don't rebuild the chart
+  const option: any = React.useMemo(() => {
+    return {
+      // Key: eliminate “smooth draw” + reduce tab flicker
+      animation: false,
+      animationDuration: 0,
+      animationDurationUpdate: 0,
 
-  const option: any = {
-    grid: { left: 40, right: 16, top: 8, bottom: 28 },
+      grid: { left: 40, right: 16, top: 8, bottom: 28 },
 
-    tooltip: {
-      trigger: "axis",
-      triggerOn: "mousemove",
-      showDelay: 0,
-      hideDelay: 0,
-      transitionDuration: 0,
-      confine: true,
-      appendToBody: true,
-      renderMode: "html",
+      tooltip: {
+        trigger: "axis",
+        triggerOn: "mousemove",
+        showDelay: 0,
+        hideDelay: 0,
+        transitionDuration: 0,
+        confine: true,
+        appendToBody: true,
+        renderMode: "html",
 
-      backgroundColor: theme.surface,
-      borderColor: theme.border,
-      borderWidth: 1,
-      textStyle: { color: theme.text, fontSize: 12 },
-      padding: [10, 12],
-      extraCssText: `border-radius: 14px; box-shadow: ${theme.shadow}; backdrop-filter: blur(8px);`,
+        backgroundColor: theme.surface,
+        borderColor: theme.border,
+        borderWidth: 1,
+        textStyle: { color: theme.text, fontSize: 12 },
+        padding: [10, 12],
+        extraCssText: `border-radius: 14px; box-shadow: ${theme.shadow}; backdrop-filter: blur(8px);`,
 
-      // Vertical dotted cursor line.
-      // Label is only shown during drag (so no empty box on normal hover).
-      axisPointer: {
-        type: "line",
-        animation: false,
-        lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
-        label: dragState.isDragging
-          ? {
-              show: true,
-              formatter: (p: any) => (p?.value != null ? String(p.value) : ""),
-              backgroundColor: theme.surface,
-              borderColor: theme.border,
-              borderWidth: 1,
-              color: theme.text,
-              padding: [6, 8],
-              borderRadius: 10,
-            }
-          : { show: false },
-      },
+        axisPointer: {
+          type: "line",
+          animation: false,
+          lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
+          label: { show: false }, // shown/hidden imperatively during drag
+        },
 
-      formatter: (params: any) => {
-        const p = Array.isArray(params) ? params[0] : params;
-        const axisValue = p && p.axisValue ? String(p.axisValue) : "";
-        const idx: number | null =
-          p && typeof p.dataIndex === "number" ? (p.dataIndex as number) : null;
+        formatter: (params: any) => {
+          const p = Array.isArray(params) ? params[0] : params;
+          const axisValue = p && p.axisValue ? String(p.axisValue) : "";
+          const idx: number | null =
+            p && typeof p.dataIndex === "number" ? (p.dataIndex as number) : null;
 
-        const val = p && typeof p.data === "number" ? (p.data as number) : NaN;
-        if (!Number.isFinite(val) || Number.isNaN(val)) return axisValue;
+          const val = p && typeof p.data === "number" ? (p.data as number) : NaN;
+          if (!Number.isFinite(val) || Number.isNaN(val)) return axisValue;
 
-        const dragging = dragState.isDragging && dragState.startIndex != null && idx != null;
+          const ds = dragRef.current;
+          const dragging = ds.isDragging && ds.startIndex != null && idx != null;
 
-        // While dragging: don't repeat the date header line (date is shown via axisPointer label)
-        const header = dragging ? "" : `${axisValue}<br/>`;
+          // When dragging, don't repeat current date header (date shows via axisPointer label)
+          const header = dragging ? "" : `${axisValue}<br/>`;
+          const valueLine = `<div style="font-weight: 600;">${formatValue(val)}</div>`;
 
-        const valueLine = `<div style="font-weight: 600;">${formatValue(val)}</div>`;
+          if (!dragging) return `${header}${valueLine}`;
 
-        if (!dragging) {
-          return `${header}${valueLine}`;
-        }
+          const startIdx = ds.startIndex as number;
+          const curIdx = idx as number;
 
-        const startIdx = dragState.startIndex as number;
-        const curIdx = idx as number;
+          const startVal = y[startIdx];
+          const curVal = y[curIdx];
 
-        const startVal = y[startIdx];
-        const curVal = y[curIdx];
+          if (
+            typeof startVal !== "number" ||
+            typeof curVal !== "number" ||
+            !Number.isFinite(startVal) ||
+            !Number.isFinite(curVal) ||
+            Number.isNaN(startVal) ||
+            Number.isNaN(curVal)
+          ) {
+            return `${valueLine}`;
+          }
 
-        if (
-          typeof startVal !== "number" ||
-          typeof curVal !== "number" ||
-          !Number.isFinite(startVal) ||
-          !Number.isFinite(curVal) ||
-          Number.isNaN(startVal) ||
-          Number.isNaN(curVal)
-        ) {
-          return `${valueLine}`;
-        }
+          const change = curVal - startVal;
+          const pctChange = startVal !== 0 ? (change / Math.abs(startVal)) * 100 : null;
 
-        // Directionally correct change: current - start
-        const change = curVal - startVal;
-        const pctChange = startVal !== 0 ? (change / Math.abs(startVal)) * 100 : null;
+          const sign = change > 0 ? "+" : change < 0 ? "-" : "";
+          const deltaStr = formatRangeDelta(
+            Math.abs(change),
+            isPercentScale,
+            tooltipValueFormatter,
+            valueFormatter
+          );
 
-        const sign = change > 0 ? "+" : change < 0 ? "-" : "";
-        const deltaStr = formatRangeDelta(
-          Math.abs(change),
-          isPercentScale,
-          tooltipValueFormatter,
-          valueFormatter
-        );
+          let pctStr = "";
+          if (pctChange != null && Number.isFinite(pctChange)) {
+            const pctSign = pctChange > 0 ? "+" : pctChange < 0 ? "-" : "";
+            pctStr = ` (${pctSign}${Math.abs(pctChange).toFixed(1)}%)`;
+          }
 
-        let pctStr = "";
-        if (pctChange != null && Number.isFinite(pctChange)) {
-          const pctSign = pctChange > 0 ? "+" : pctChange < 0 ? "-" : "";
-          pctStr = ` (${pctSign}${Math.abs(pctChange).toFixed(1)}%)`;
-        }
+          const color = change > 0 ? theme.success : change < 0 ? theme.danger : theme.text;
 
-        const color = change > 0 ? theme.success : change < 0 ? theme.danger : theme.text;
+          const deltaLine = `
+            <div style="margin-top: 6px; font-weight: 700; color: ${color};">
+              ${sign}${deltaStr}${pctStr}
+            </div>
+          `;
+          const rangeLine = `
+            <div style="margin-top: 4px; opacity: 0.75; font-size: 11px;">
+              ${x[startIdx]} → ${x[curIdx]}
+            </div>
+          `;
 
-        const deltaLine = `
-          <div style="margin-top: 6px; font-weight: 700; color: ${color};">
-            ${sign}${deltaStr}${pctStr}
-          </div>
-        `;
-
-        // Dates under delta (narrower tooltip)
-        const rangeLine = `
-          <div style="margin-top: 4px; opacity: 0.75; font-size: 11px;">
-            ${x[startIdx]} → ${x[curIdx]}
-          </div>
-        `;
-
-        return `${valueLine}${deltaLine}${rangeLine}`;
-      },
-    },
-
-    xAxis: {
-      type: "category",
-      data: x,
-      axisLine: { lineStyle: { opacity: 0.4 } },
-      axisLabel: { fontSize: 10 },
-    },
-
-    yAxis: {
-      type: "value",
-      name: valueAxisLabel ?? "",
-      min: yMin,
-      max: yMax,
-      interval,
-      axisLine: { lineStyle: { opacity: 0.4 } },
-      splitLine: { lineStyle: { opacity: 0.2 } },
-      axisLabel: {
-        fontSize: 10,
-        formatter: (val: number) => {
-          if (Number.isNaN(val)) return "";
-          if (isPercentScale) return `${val.toFixed(0)}%`;
-          if (typeof valueFormatter === "function") return valueFormatter(val);
-          return val.toFixed(0);
+          return `${valueLine}${deltaLine}${rangeLine}`;
         },
       },
-    },
 
-    series: [
-      {
-        type: "line",
-        data: y,
-        showSymbol: false,
-        connectNulls: true,
-        smooth: !step,
-        step: step ? "end" : undefined,
-
-        // Persistent start vertical dotted line while dragging
-        markLine: startLabel
-          ? {
-              silent: true,
-              symbol: "none",
-              label: { show: false },
-              lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
-              data: [{ xAxis: startLabel }],
-            }
-          : undefined,
-
-        // markArea exists so our setOption updates are clean (data is driven imperatively in the effect)
-        markArea: { silent: true, data: [] },
+      xAxis: {
+        type: "category",
+        data: x,
+        axisLine: { lineStyle: { opacity: 0.4 } },
+        axisLabel: { fontSize: 10 },
       },
-    ],
-  };
+
+      yAxis: {
+        type: "value",
+        name: valueAxisLabel ?? "",
+        min: yMin,
+        max: yMax,
+        interval,
+        axisLine: { lineStyle: { opacity: 0.4 } },
+        splitLine: { lineStyle: { opacity: 0.2 } },
+        axisLabel: {
+          fontSize: 10,
+          formatter: (val: number) => {
+            if (Number.isNaN(val)) return "";
+            if (isPercentScale) return `${val.toFixed(0)}%`;
+            if (typeof valueFormatter === "function") return valueFormatter(val);
+            return val.toFixed(0);
+          },
+        },
+      },
+
+      series: [
+        // Main line
+        {
+          type: "line",
+          data: y,
+          showSymbol: false,
+          connectNulls: true,
+          smooth: !step,
+          step: step ? "end" : undefined,
+          z: 3,
+        },
+
+        // Under-curve selection overlay (data injected imperatively during drag)
+        {
+          type: "line",
+          data: overlayEmpty,
+          showSymbol: false,
+          connectNulls: false,
+          smooth: !step,
+          step: step ? "end" : undefined,
+          silent: true,
+          z: 2,
+
+          lineStyle: { opacity: 0 },
+          emphasis: { disabled: true },
+          tooltip: { show: false },
+          areaStyle: {
+            opacity: 1,
+            origin: "start",
+            color: selectionAreaGradient,
+          },
+        },
+      ],
+    };
+  }, [
+    x,
+    y,
+    overlayEmpty,
+    step,
+    isPercentScale,
+    valueAxisLabel,
+    valueFormatter,
+    tooltipValueFormatter,
+    theme,
+    selectionAreaGradient,
+    yMin,
+    yMax,
+    interval,
+  ]);
 
   return (
     <div className="chart-panel">
       <div className="chart-panel__title">{title}</div>
       <ReactECharts
         option={option}
-        notMerge
-        lazyUpdate
+        // IMPORTANT: avoid full option replacement (reduces flicker)
+        notMerge={false}
+        lazyUpdate={true}
         onChartReady={handleChartReady}
         style={{ width: "100%", height: 190 }}
       />
