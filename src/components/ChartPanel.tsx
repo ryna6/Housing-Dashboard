@@ -48,6 +48,39 @@ function formatRangeDelta(
   return absValue.toFixed(2);
 }
 
+function parseRgbLike(color: string): { r: number; g: number; b: number } | null {
+  const c = color.trim();
+
+  // rgb()/rgba()
+  const rgbMatch = c.match(
+    /^rgba?\(\s*([0-9]{1,3})\s*[, ]\s*([0-9]{1,3})\s*[, ]\s*([0-9]{1,3})(?:\s*[,/]\s*([0-9.]+))?\s*\)$/
+  );
+  if (rgbMatch) {
+    const r = Math.max(0, Math.min(255, parseInt(rgbMatch[1], 10)));
+    const g = Math.max(0, Math.min(255, parseInt(rgbMatch[2], 10)));
+    const b = Math.max(0, Math.min(255, parseInt(rgbMatch[3], 10)));
+    return { r, g, b };
+  }
+
+  // #RGB or #RRGGBB
+  const hexMatch = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    if (hex.length === 3) {
+      const r = parseInt(hex[0] + hex[0], 16);
+      const g = parseInt(hex[1] + hex[1], 16);
+      const b = parseInt(hex[2] + hex[2], 16);
+      return { r, g, b };
+    }
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return { r, g, b };
+  }
+
+  return null;
+}
+
 export const ChartPanel: React.FC<Props> = ({
   title,
   series,
@@ -102,13 +135,24 @@ export const ChartPanel: React.FC<Props> = ({
     };
   }, []);
 
-  // --- Google Finance-ish click/hold/drag anchor state ---
+  const highlightFill = React.useMemo(() => {
+    // Subtle overlay that works on both light/dark; infer theme from text luminance.
+    const rgb = parseRgbLike(theme.text);
+    if (!rgb) {
+      return "rgba(0,0,0,0.04)";
+    }
+    const lum = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+    // If text is light => background likely dark => use a light overlay.
+    return lum > 0.6 ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)";
+  }, [theme.text]);
+
+  // --- Click/hold/drag anchor state ---
   const [chartInstance, setChartInstance] = React.useState<any | null>(null);
   const handleChartReady = React.useCallback((instance: any) => {
     setChartInstance(instance);
   }, []);
 
-  // IMPORTANT: we do NOT update this on mousemove (prevents flicker).
+  // NOTE: no React updates on mousemove (prevents flicker)
   const [dragState, setDragState] = React.useState<{
     startIndex: number | null;
     isDragging: boolean;
@@ -119,7 +163,7 @@ export const ChartPanel: React.FC<Props> = ({
     dragRef.current = dragState;
   }, [dragState]);
 
-  // Reset drag when series/metric changes
+  // Reset on data/metric change
   React.useEffect(() => {
     setDragState({ startIndex: null, isDragging: false });
   }, [series, valueKey]);
@@ -179,19 +223,25 @@ export const ChartPanel: React.FC<Props> = ({
       }
     };
 
-    // Throttle showTip to 1 per animation frame (prevents flicker)
+    // Throttle showTip + highlight to 1 per animation frame (prevents flicker)
     const lastTipIndexRef = { current: -1 as number };
     const pendingTipIndexRef = { current: null as null | number };
-    const rafRef = { current: null as null | number };
+    const tipRafRef = { current: null as null | number };
+
+    const lastHighlightKeyRef = { current: "" as string };
+    const pendingHighlightRef = {
+      current: null as null | { a: number; b: number; startLabel: string; endLabel: string },
+    };
+    const highlightRafRef = { current: null as null | number };
 
     const requestShowTip = (idx: number) => {
       if (idx === lastTipIndexRef.current) return;
       pendingTipIndexRef.current = idx;
 
-      if (rafRef.current != null) return;
+      if (tipRafRef.current != null) return;
 
-      rafRef.current = window.requestAnimationFrame(() => {
-        rafRef.current = null;
+      tipRafRef.current = window.requestAnimationFrame(() => {
+        tipRafRef.current = null;
         const next = pendingTipIndexRef.current;
         if (next == null) return;
 
@@ -204,6 +254,76 @@ export const ChartPanel: React.FC<Props> = ({
       });
     };
 
+    const applyHighlight = (a: number, b: number) => {
+      const startLabel = x[a];
+      const endLabel = x[b];
+
+      // Shade between start and end (full height)
+      inst.setOption(
+        {
+          series: [
+            {
+              // merge into series[0]
+              markArea: {
+                silent: true,
+                itemStyle: { color: highlightFill },
+                data: [
+                  [
+                    { xAxis: startLabel, yAxis: "min" },
+                    { xAxis: endLabel, yAxis: "max" },
+                  ],
+                ],
+              },
+            },
+          ],
+        },
+        { notMerge: false, lazyUpdate: true }
+      );
+    };
+
+    const clearHighlight = () => {
+      inst.setOption(
+        {
+          series: [
+            {
+              markArea: { data: [] },
+            },
+          ],
+        },
+        { notMerge: false, lazyUpdate: true }
+      );
+      lastHighlightKeyRef.current = "";
+      pendingHighlightRef.current = null;
+    };
+
+    const requestHighlight = (startIdx: number, curIdx: number) => {
+      const a = Math.min(startIdx, curIdx);
+      const b = Math.max(startIdx, curIdx);
+      if (a === b) {
+        // no region to highlight
+        clearHighlight();
+        return;
+      }
+
+      const key = `${a}-${b}`;
+      if (key === lastHighlightKeyRef.current) return;
+
+      pendingHighlightRef.current = { a, b, startLabel: x[a], endLabel: x[b] };
+      if (highlightRafRef.current != null) return;
+
+      highlightRafRef.current = window.requestAnimationFrame(() => {
+        highlightRafRef.current = null;
+        const pending = pendingHighlightRef.current;
+        if (!pending) return;
+
+        const k = `${pending.a}-${pending.b}`;
+        if (k === lastHighlightKeyRef.current) return;
+
+        lastHighlightKeyRef.current = k;
+        applyHighlight(pending.a, pending.b);
+      });
+    };
+
     const onMouseDown = (e: any) => {
       const rawIdx = getIndexFromEvent(e);
       if (rawIdx == null) return;
@@ -212,7 +332,8 @@ export const ChartPanel: React.FC<Props> = ({
       if (snapIdx == null) return;
 
       setDragState({ startIndex: snapIdx, isDragging: true });
-      requestShowTip(snapIdx); // ensure the active cursor line appears immediately
+      requestShowTip(snapIdx);
+      clearHighlight(); // will be set as soon as we move to a second point
     };
 
     const onMouseMove = (e: any) => {
@@ -226,16 +347,24 @@ export const ChartPanel: React.FC<Props> = ({
       if (snapIdx == null) return;
 
       requestShowTip(snapIdx);
+      requestHighlight(ds.startIndex, snapIdx);
     };
 
     const resetDrag = () => {
       setDragState({ startIndex: null, isDragging: false });
       hideTip();
+      clearHighlight();
+
       lastTipIndexRef.current = -1;
       pendingTipIndexRef.current = null;
-      if (rafRef.current != null) {
-        window.cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+
+      if (tipRafRef.current != null) {
+        window.cancelAnimationFrame(tipRafRef.current);
+        tipRafRef.current = null;
+      }
+      if (highlightRafRef.current != null) {
+        window.cancelAnimationFrame(highlightRafRef.current);
+        highlightRafRef.current = null;
       }
     };
 
@@ -249,11 +378,11 @@ export const ChartPanel: React.FC<Props> = ({
       zr.off("mousemove", onMouseMove);
       zr.off("mouseup", resetDrag);
       zr.off("globalout", resetDrag);
-      if (rafRef.current != null) {
-        window.cancelAnimationFrame(rafRef.current);
-      }
+
+      if (tipRafRef.current != null) window.cancelAnimationFrame(tipRafRef.current);
+      if (highlightRafRef.current != null) window.cancelAnimationFrame(highlightRafRef.current);
     };
-  }, [chartInstance, hasData, xKey]);
+  }, [chartInstance, hasData, xKey, highlightFill]);
 
   if (!hasData) {
     return (
@@ -311,7 +440,7 @@ export const ChartPanel: React.FC<Props> = ({
     return val.toFixed(2);
   };
 
-  // Persistent "start" dotted line while dragging
+  // Persistent start dotted line while dragging
   const startLabel =
     dragState.isDragging && dragState.startIndex != null ? x[dragState.startIndex] : null;
 
@@ -328,7 +457,6 @@ export const ChartPanel: React.FC<Props> = ({
       appendToBody: true,
       renderMode: "html",
 
-      // Theme-matching tooltip styling
       backgroundColor: theme.surface,
       borderColor: theme.border,
       borderWidth: 1,
@@ -336,12 +464,24 @@ export const ChartPanel: React.FC<Props> = ({
       padding: [10, 12],
       extraCssText: `border-radius: 14px; box-shadow: ${theme.shadow}; backdrop-filter: blur(8px);`,
 
-      // Vertical dotted cursor line (no label => removes the empty bottom box)
+      // Vertical dotted cursor line.
+      // Label is only shown during drag (so no empty box on normal hover).
       axisPointer: {
         type: "line",
         animation: false,
         lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
-        label: { show: false },
+        label: dragState.isDragging
+          ? {
+              show: true,
+              formatter: (p: any) => (p?.value != null ? String(p.value) : ""),
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              borderWidth: 1,
+              color: theme.text,
+              padding: [6, 8],
+              borderRadius: 10,
+            }
+          : { show: false },
       },
 
       formatter: (params: any) => {
@@ -355,7 +495,7 @@ export const ChartPanel: React.FC<Props> = ({
 
         const dragging = dragState.isDragging && dragState.startIndex != null && idx != null;
 
-        // While dragging: do NOT show the "current date" header line
+        // While dragging: don't repeat the date header line (date is shown via axisPointer label)
         const header = dragging ? "" : `${axisValue}<br/>`;
 
         const valueLine = `<div style="font-weight: 600;">${formatValue(val)}</div>`;
@@ -381,7 +521,7 @@ export const ChartPanel: React.FC<Props> = ({
           return `${valueLine}`;
         }
 
-        // Directionally correct change: current - start (so dragging backwards can be negative)
+        // Directionally correct change: current - start
         const change = curVal - startVal;
         const pctChange = startVal !== 0 ? (change / Math.abs(startVal)) * 100 : null;
 
@@ -399,11 +539,10 @@ export const ChartPanel: React.FC<Props> = ({
           pctStr = ` (${pctSign}${Math.abs(pctChange).toFixed(1)}%)`;
         }
 
-        // Only color the delta text (no pill)
         const color = change > 0 ? theme.success : change < 0 ? theme.danger : theme.text;
 
         const deltaLine = `
-          <div style="margin-top: 6px; font-weight: 600; color: ${color};">
+          <div style="margin-top: 6px; font-weight: 700; color: ${color};">
             ${sign}${deltaStr}${pctStr}
           </div>
         `;
@@ -464,6 +603,9 @@ export const ChartPanel: React.FC<Props> = ({
               data: [{ xAxis: startLabel }],
             }
           : undefined,
+
+        // markArea exists so our setOption updates are clean (data is driven imperatively in the effect)
+        markArea: { silent: true, data: [] },
       },
     ],
   };
