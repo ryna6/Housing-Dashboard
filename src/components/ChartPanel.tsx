@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import type { PanelPoint } from "../data/types";
 
@@ -75,6 +75,12 @@ export const ChartPanel: React.FC<Props> = ({
     treatAsPercentScale ??
     (valueKey === "mom_pct" || valueKey === "yoy_pct");
 
+  // --- state for drag-to-measure range selection ---
+  const chartRef = useRef<any>(null);
+  const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
+  const [dragEndIndex, setDragEndIndex] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
   if (!hasData) {
     return (
       <div className="chart-panel chart-panel--empty">
@@ -129,6 +135,161 @@ export const ChartPanel: React.FC<Props> = ({
 
     yMin = min;
     yMax = max;
+  }
+
+  // ----- helpers for selection / formatting -----
+  const formatSingleValue = (val: number): string => {
+    if (isPercentScale) {
+      return `${val.toFixed(2)}%`;
+    }
+    if (typeof tooltipValueFormatter === "function") {
+      return tooltipValueFormatter(val);
+    }
+    if (typeof valueFormatter === "function") {
+      return valueFormatter(val);
+    }
+    return val.toFixed(2);
+  };
+
+  const formatChangeValue = (delta: number): string => {
+    const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
+    const abs = Math.abs(delta);
+    if (isPercentScale) {
+      return `${sign}${abs.toFixed(2)}%`;
+    }
+    if (typeof tooltipValueFormatter === "function") {
+      // assume formatter works for absolute values; we prepend sign
+      return `${sign}${tooltipValueFormatter(abs)}`;
+    }
+    if (typeof valueFormatter === "function") {
+      return `${sign}${valueFormatter(abs)}`;
+    }
+    return `${sign}${abs.toFixed(2)}`;
+  };
+
+  const getIndexFromEvent = (params: any): number | null => {
+    if (!chartRef.current) return null;
+    const ev = params?.event;
+    if (!ev || typeof ev.offsetX !== "number" || typeof ev.offsetY !== "number") {
+      return null;
+    }
+
+    // Convert pixel position to x-axis coordinate
+    const pointInGrid = chartRef.current.convertFromPixel(
+      { xAxisIndex: 0 },
+      [ev.offsetX, ev.offsetY]
+    );
+
+    if (!pointInGrid || !Array.isArray(pointInGrid) || pointInGrid.length === 0) {
+      return null;
+    }
+
+    const axisValue = pointInGrid[0];
+    let idx: number;
+
+    if (typeof axisValue === "number") {
+      idx = Math.round(axisValue);
+    } else {
+      idx = x.indexOf(String(axisValue));
+    }
+
+    if (idx < 0 || idx >= x.length) {
+      return null;
+    }
+
+    return idx;
+  };
+
+  const handleMouseDown = (params: any) => {
+    // left-click only
+    const native = params?.event?.event;
+    if (native && "button" in native && native.button !== 0) return;
+
+    const idx = getIndexFromEvent(params);
+    if (idx == null) return;
+    setDragStartIndex(idx);
+    setDragEndIndex(idx);
+    setIsDragging(true);
+  };
+
+  const handleMouseMove = (params: any) => {
+    if (!isDragging || dragStartIndex == null) return;
+    const idx = getIndexFromEvent(params);
+    if (idx == null) return;
+    if (idx !== dragEndIndex) {
+      setDragEndIndex(idx);
+    }
+  };
+
+  const finishDrag = (params?: any) => {
+    if (!isDragging) return;
+
+    const idx = params ? getIndexFromEvent(params) : null;
+    if (idx != null && dragStartIndex != null) {
+      if (idx === dragStartIndex) {
+        // Click without drag: clear selection
+        setDragStartIndex(null);
+        setDragEndIndex(null);
+      } else {
+        setDragEndIndex(idx);
+      }
+    }
+    setIsDragging(false);
+  };
+
+  const handleMouseUp = (params: any) => {
+    finishDrag(params);
+  };
+
+  const handleGlobalOut = () => {
+    // If mouse leaves chart while dragging, just end the drag
+    if (isDragging) {
+      setIsDragging(false);
+    }
+  };
+
+  const onEvents: Record<string, (params: any) => void> = {
+    mousedown: handleMouseDown,
+    mousemove: handleMouseMove,
+    mouseup: handleMouseUp,
+    globalout: handleGlobalOut,
+  };
+
+  // Compute current selection summary (if any)
+  let selectionText: string | null = null;
+  let selectionColor: string | undefined;
+
+  if (
+    dragStartIndex != null &&
+    dragEndIndex != null &&
+    dragStartIndex !== dragEndIndex
+  ) {
+    const startIdx = Math.min(dragStartIndex, dragEndIndex);
+    const endIdx = Math.max(dragStartIndex, dragEndIndex);
+
+    const startVal = y[startIdx];
+    const endVal = y[endIdx];
+
+    if (
+      typeof startVal === "number" &&
+      !Number.isNaN(startVal) &&
+      typeof endVal === "number" &&
+      !Number.isNaN(endVal)
+    ) {
+      const delta = endVal - startVal;
+      const pct =
+        startVal === 0 ? null : (delta / Math.abs(startVal)) * 100;
+
+      const arrow = delta > 0 ? "▲" : delta < 0 ? "▼" : "";
+      selectionColor =
+        delta > 0 ? "#16a34a" : delta < 0 ? "#dc2626" : undefined; // green / red
+
+      const absText = formatChangeValue(delta);
+      const pctText =
+        pct == null ? "" : ` (${pct > 0 ? "+" : ""}${pct.toFixed(2)}%)`;
+
+      selectionText = `${x[startIdx]} → ${x[endIdx]}: ${arrow} ${absText}${pctText}`;
+    }
   }
 
   const option: any = {
@@ -201,12 +362,36 @@ export const ChartPanel: React.FC<Props> = ({
 
   return (
     <div className="chart-panel">
-      <div className="chart-panel__title">{title}</div>
+      <div className="chart-panel__title">
+        {title}
+        {selectionText && (
+          <span
+            className="chart-panel__selection-summary"
+            style={{
+              marginLeft: 8,
+              fontSize: 11,
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+              color: selectionColor,
+            }}
+          >
+            {selectionText}
+          </span>
+        )}
+      </div>
       <ReactECharts
         option={option}
         notMerge
         lazyUpdate
-        style={{ width: "100%", height: 190 }}
+        style={{
+          width: "100%",
+          height: 190,
+          cursor: isDragging ? "crosshair" : "default",
+        }}
+        onChartReady={(chart) => {
+          chartRef.current = chart;
+        }}
+        onEvents={onEvents}
       />
     </div>
   );
