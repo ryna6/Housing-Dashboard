@@ -1,0 +1,66 @@
+/* Container */
+.chart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Header: title + latest value / range info */
+.chart-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.chart-panel__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.chart-panel__subtitle {
+  font-size: 0.8rem;
+  color: #6b7280; /* gray-500-ish */
+}
+
+/* Range summary (drag selection info) */
+.chart-panel__range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.chart-panel__range-label {
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.chart-panel__range-value {
+  font-weight: 600;
+}
+
+.chart-panel__range-value--pos {
+  color: #16a34a; /* green-600 */
+}
+
+.chart-panel__range-value--neg {
+  color: #dc2626; /* red-600 */
+}
+
+.chart-panel__range-meta {
+  font-size: 0.75rem;
+  color: #9ca3af; /* gray-400 */
+}
+
+/* Chart container */
+.chart-panel__chart {
+  width: 100%;
+  height: 280px;
+}
+
+/* If ECharts renders to canvas, this keeps rounded look inside cards */
+.chart-panel__chart canvas {
+  border-radius: 0.75rem;
+}
