@@ -1,92 +1,153 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import ReactECharts from "echarts-for-react";
 import type { PanelPoint } from "../data/types";
+
+type ValueKey = "value" | "mom_pct" | "yoy_pct";
+
+type SelectionMode = "idle" | "dragging" | "selected";
 
 interface Props {
   title: string;
   series: PanelPoint[];
-  valueKey: "value" | "mom_pct" | "yoy_pct";
-
-  /** Optional label for the y-axis (left blank by default). */
-  valueAxisLabel?: string;
-
+  valueKey: ValueKey;
+  /**
+   * If true, the value is on a 0–100 scale and should be formatted with a % sign.
+   */
+  treatAsPercentScale?: boolean;
   /**
    * Optional formatter for numeric values on the Y-axis ticks
    * when not using percent scale.
    */
-  valueFormatter?: (value: number) => string;
-
+  valueAxisLabel?: string;
+  valueAxisFormatter?: (value: number) => string;
   /**
-   * Optional formatter used just for tooltips; if not provided,
-   * `valueFormatter` (or the default percent formatter) is used.
+   * Optional formatter for tooltip values. If omitted, the value axis formatter
+   * (or default formatter) will be reused.
    */
-  tooltipValueFormatter?: (value: number) => string;
-
+  tooltipValueFormatter?: (value: number | null | undefined) => string;
   /**
-   * Whether to draw the line as a step-wise series (good for
-   * policy rates).
-   */
-  step?: boolean;
-
-  /**
-   * If true, interpret data as percentages and show "%" in
-   * axis labels + tooltips.
-   */
-  treatAsPercentScale?: boolean;
-
-  /**
-   * If true and all values are positive, clamp the Y-axis
-   * minimum at 0 instead of auto-fitting.
+   * If true, force the Y-axis minimum to zero for positive-only series.
    */
   clampYMinToZero?: boolean;
+  /**
+   * Optional explicit Y-axis bounds.
+   */
+  minY?: number;
+  maxY?: number;
+}
+
+interface RangeInfo {
+  startIndex: number;
+  endIndex: number;
+  startDate: string;
+  endDate: string;
+  startValue: number;
+  endValue: number;
+  absoluteChange: number;
+  percentChange: number | null;
 }
 
 /**
- * Reasonable default formatter when caller doesn't provide one.
- * - Uses compact K/M/B units for large values.
- * - Falls back to 2 decimal places for smaller values.
- * - If treatAsPercentScale is true, we append "%".
+ * Helper to format numbers consistently.
  */
-function makeDefaultFormatter(treatAsPercentScale: boolean | undefined) {
-  return (value: number): string => {
-    if (!Number.isFinite(value)) return "-";
+function makeDefaultFormatter(treatAsPercentScale?: boolean) {
+  if (treatAsPercentScale) {
+    return (value: number) => `${value.toFixed(1)}%`;
+  }
+  return (value: number) =>
+    value.toLocaleString("en-CA", { maximumFractionDigits: 1 });
+}
 
-    const abs = Math.abs(value);
-    let base: string;
+/**
+ * Helper to format the change as "+X / +Y%" or "-X / -Y%".
+ */
+function formatDeltaValue(
+  info: RangeInfo,
+  formatter: (value: number) => string,
+): string {
+  const { absoluteChange, percentChange } = info;
+  const sign = absoluteChange >= 0 ? "+" : "−"; // use minus symbol for negatives
+  const absChange = Math.abs(absoluteChange);
 
-    if (abs >= 1_000_000_000) {
-      base = (value / 1_000_000_000).toFixed(1) + "B";
-    } else if (abs >= 1_000_000) {
-      base = (value / 1_000_000).toFixed(1) + "M";
-    } else if (abs >= 1_000) {
-      base = (value / 1_000).toFixed(1) + "K";
-    } else {
-      base = value.toFixed(2);
-    }
+  const formattedChange = formatter(absChange);
+  if (percentChange == null) {
+    return `${sign}${formattedChange}`;
+  }
 
-    return treatAsPercentScale ? `${base}%` : base;
+  const absPct = Math.abs(percentChange).toFixed(1);
+  return `${sign}${formattedChange} (${sign}${absPct}%)`;
+}
+
+/**
+ * Compute the range statistics given a start and end index in the series.
+ */
+function computeRangeInfo(
+  series: PanelPoint[],
+  valueKey: ValueKey,
+  startIndex: number,
+  endIndex: number,
+): RangeInfo | null {
+  if (!series.length) return null;
+
+  const s = Math.max(0, Math.min(startIndex, endIndex));
+  const e = Math.min(series.length - 1, Math.max(startIndex, endIndex));
+  if (s === e) return null;
+
+  const start = series[s];
+  const end = series[e];
+
+  const startRaw = start[valueKey] as number | null | undefined;
+  const endRaw = end[valueKey] as number | null | undefined;
+
+  if (startRaw == null || endRaw == null || !isFinite(startRaw) || !isFinite(endRaw)) {
+    return null;
+  }
+
+  const absoluteChange = endRaw - startRaw;
+  const percentChange =
+    startRaw !== 0 ? (absoluteChange / Math.abs(startRaw)) * 100 : null;
+
+  return {
+    startIndex: s,
+    endIndex: e,
+    startDate: start.date,
+    endDate: end.date,
+    startValue: startRaw,
+    endValue: endRaw,
+    absoluteChange,
+    percentChange,
   };
+}
+
+/**
+ * Small utility to build className strings.
+ */
+function classNames(...parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(" ");
 }
 
 export const ChartPanel: React.FC<Props> = ({
   title,
   series,
   valueKey,
-  valueAxisLabel,
-  valueFormatter,
-  tooltipValueFormatter,
-  step,
   treatAsPercentScale,
+  valueAxisFormatter,
+  tooltipValueFormatter,
   clampYMinToZero,
+  minY,
+  maxY,
 }) => {
-  // Sort by date just to be safe
-  const sorted = useMemo(
-    () =>
-      [...series].sort((a, b) =>
-        a.date < b.date ? -1 : a.date > b.date ? 1 : 0
-      ),
-    [series]
-  );
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>("idle");
+  const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
+  const [rangeInfo, setRangeInfo] = useState<RangeInfo | null>(null);
+
+  // Sort by date, but defensively handle non-array or undefined series at runtime.
+  const sorted = useMemo(() => {
+    const baseSeries = Array.isArray(series) ? series : [];
+    return [...baseSeries].sort((a, b) =>
+      a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
+    );
+  }, [series]);
 
   // Early "no data" state, same wording the rest of the app uses
   if (!sorted.length) {
@@ -107,220 +168,195 @@ export const ChartPanel: React.FC<Props> = ({
   });
 
   const axisFormatter =
-    valueFormatter ?? makeDefaultFormatter(treatAsPercentScale);
+    valueAxisFormatter ?? makeDefaultFormatter(treatAsPercentScale);
   const tooltipFormatter =
     tooltipValueFormatter ?? axisFormatter;
 
-  // Decide Y-min for clamp-to-zero behavior
-  const yMin = useMemo(() => {
-    const vals = rawValues.filter((v) => Number.isFinite(v)) as number[];
-    if (!vals.length) return undefined;
+  const [yMin, yMax] = useMemo<[number, number]>(() => {
+    const valid = rawValues.filter((v) => Number.isFinite(v)) as number[];
+    if (!valid.length) return [0, 1];
 
-    const min = Math.min(...vals);
-    if (clampYMinToZero && min > 0) {
-      return 0;
+    let localMin = Math.min(...valid);
+    let localMax = Math.max(...valid);
+
+    if (clampYMinToZero && localMin > 0) {
+      localMin = 0;
     }
-    return undefined; // let ECharts auto-scale
-  }, [rawValues, clampYMinToZero]);
 
-  // ─────────────────────────────────────
-  //  Drag-to-measure state
-  // ─────────────────────────────────────
-  const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
-  const [rangeInfo, setRangeInfo] = useState<{
-    startIndex: number;
-    endIndex: number;
-    startDate: string;
-    endDate: string;
-    delta: number;
-    pctChange: number | null;
-  } | null>(null);
+    if (minY != null) localMin = minY;
+    if (maxY != null) localMax = maxY;
 
-  const handleMouseDown = (params: any) => {
-    if (typeof params?.dataIndex === "number") {
+    if (localMax === localMin) {
+      const pad = Math.abs(localMin || 1) * 0.1;
+      return [localMin - pad, localMax + pad];
+    }
+
+    return [localMin, localMax];
+  }, [rawValues, clampYMinToZero, minY, maxY]);
+
+  const handleMouseDown = useCallback(
+    (params: any) => {
+      // Only respond to clicks on valid data points
+      if (!params || typeof params.dataIndex !== "number") return;
+      if (!Number.isFinite(rawValues[params.dataIndex])) return;
+
+      setSelectionMode("dragging");
       setDragStartIndex(params.dataIndex);
       setRangeInfo(null);
-    }
-  };
+    },
+    [rawValues],
+  );
 
-  const handleMouseUp = (params: any) => {
-    if (dragStartIndex == null) return;
-    if (typeof params?.dataIndex !== "number") {
+  const handleMouseUp = useCallback(
+    (params: any) => {
+      if (selectionMode !== "dragging" || dragStartIndex == null) {
+        return;
+      }
+      if (!params || typeof params.dataIndex !== "number") {
+        setSelectionMode("idle");
+        setDragStartIndex(null);
+        return;
+      }
+
+      const endIndex = params.dataIndex;
+      const info = computeRangeInfo(sorted, valueKey, dragStartIndex, endIndex);
+
+      if (!info) {
+        setSelectionMode("idle");
+        setDragStartIndex(null);
+        setRangeInfo(null);
+        return;
+      }
+
+      setSelectionMode("selected");
       setDragStartIndex(null);
-      return;
-    }
+      setRangeInfo(info);
+    },
+    [selectionMode, dragStartIndex, sorted, valueKey],
+  );
 
-    const start = dragStartIndex;
-    const end = params.dataIndex;
-
-    if (start === end) {
-      // treat as click, not a drag
+  const handleMouseLeave = useCallback(() => {
+    if (selectionMode === "dragging") {
+      setSelectionMode("idle");
       setDragStartIndex(null);
-      return;
+      setRangeInfo(null);
     }
+  }, [selectionMode]);
 
-    const i0 = Math.min(start, end);
-    const i1 = Math.max(start, end);
-
-    const v0 = rawValues[i0];
-    const v1 = rawValues[i1];
-
-    if (!Number.isFinite(v0) || !Number.isFinite(v1)) {
-      setDragStartIndex(null);
-      return;
-    }
-
-    const delta = (v1 as number) - (v0 as number);
-    const pctChange =
-      v0 && v0 !== 0 ? ((v1 as number) - (v0 as number)) / (v0 as number) * 100 : null;
-
-    setRangeInfo({
-      startIndex: i0,
-      endIndex: i1,
-      startDate: xData[i0],
-      endDate: xData[i1],
-      delta,
-      pctChange,
-    });
-    setDragStartIndex(null);
-  };
-
-  const onEvents = {
-    mousedown: handleMouseDown,
-    mouseup: handleMouseUp,
-  };
-
-  // Formatting for the drag range summary
-  const formatDeltaValue = (value: number): string => {
-    const sign = value > 0 ? "+" : value < 0 ? "−" : "";
-    if (treatAsPercentScale) {
-      // If the underlying series is already in %, delta is in percentage points
-      return `${sign}${Math.abs(value).toFixed(2)}%`;
-    }
-    return `${sign}${axisFormatter(Math.abs(value))}`;
-  };
-
-  const formatPctChange = (pct: number | null): string => {
-    if (pct == null || !Number.isFinite(pct)) return "";
-    const sign = pct > 0 ? "+" : pct < 0 ? "−" : "";
-    return `${sign}${Math.abs(pct).toFixed(2)}%`;
-  };
-
-  const rangeColor =
-    rangeInfo && rangeInfo.delta < 0 ? "#b91c1c" : "#15803d"; // red / green
-
-  // ─────────────────────────────────────
-  //  ECharts option
-  // ─────────────────────────────────────
-  const option: any = {
-    grid: {
-      left: 60,
-      right: 16,
-      top: 32,
-      bottom: 48,
-    },
-    tooltip: {
-      trigger: "axis",
-      axisPointer: { type: "line" },
-      valueFormatter: (v: any) => {
-        const num = typeof v === "number" ? v : Number(v);
-        if (!Number.isFinite(num)) return "-";
-        if (treatAsPercentScale) {
-          return tooltipFormatter(num);
-        }
-        return tooltipFormatter(num);
+  const option = useMemo(
+    () => ({
+      grid: {
+        left: 56,
+        right: 24,
+        top: 32,
+        bottom: 40,
       },
-    },
-    xAxis: {
-      type: "category",
-      boundaryGap: false,
-      data: xData,
-      axisLabel: {
-        formatter: (value: string) => value,
-      },
-    },
-    yAxis: {
-      type: "value",
-      min: yMin,
-      name: valueAxisLabel,
-      nameLocation: "middle",
-      nameGap: 44,
-      axisLabel: {
-        formatter: (val: number) => {
-          if (!Number.isFinite(val)) return "";
-          return axisFormatter(val);
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          type: "cross",
+        },
+        valueFormatter: (val: number | null | undefined) => {
+          if (val == null || !isFinite(val)) return "N/A";
+          return tooltipFormatter(val);
         },
       },
-      splitLine: {
-        show: true,
-        lineStyle: {
-          type: "dashed",
+      xAxis: {
+        type: "category",
+        data: xData,
+        axisLabel: {
+          formatter: (value: string) => value.slice(0, 7), // YYYY-MM
         },
       },
-    },
-    series: [
-      {
-        type: "line",
-        name: title,
-        data: rawValues,
-        showSymbol: false,
-        smooth: false,
-        step: step ? "middle" : false,
-        lineStyle: {
-          width: 2,
-        },
-        emphasis: {
-          focus: "series",
+      yAxis: {
+        type: "value",
+        min: yMin,
+        max: yMax,
+        axisLabel: {
+          formatter: (value: number) => {
+            if (!isFinite(value)) return "";
+            return axisFormatter(value);
+          },
         },
       },
-    ],
-    dataZoom: [
-      {
-        type: "inside",
-        throttle: 50,
-      },
-      {
-        type: "slider",
-        height: 20,
-        bottom: 8,
-      },
-    ],
-  };
+      dataZoom: [
+        {
+          type: "inside",
+          throttle: 50,
+        },
+        {
+          type: "slider",
+          height: 18,
+          bottom: 8,
+        },
+      ],
+      series: [
+        {
+          type: "line",
+          data: rawValues,
+          showSymbol: false,
+          smooth: false,
+          lineStyle: {
+            width: 2,
+          },
+          areaStyle: {
+            opacity: 0.05,
+          },
+        },
+      ],
+    }),
+    [xData, rawValues, yMin, yMax, axisFormatter, tooltipFormatter],
+  );
 
   return (
-    <div className="chart-panel">
+    <div
+      className={classNames(
+        "chart-panel",
+        selectionMode === "dragging" && "chart-panel--dragging",
+        selectionMode === "selected" && "chart-panel--selected",
+      )}
+      onMouseLeave={handleMouseLeave}
+    >
       <div className="chart-panel__header">
         <h3 className="chart-panel__title">{title}</h3>
+        <div className="chart-panel__meta">
+          {selectionMode === "selected" && rangeInfo ? (
+            <div className="chart-panel__selection-summary">
+              <div className="chart-panel__selection-dates">
+                {rangeInfo.startDate.slice(0, 10)} →{" "}
+                {rangeInfo.endDate.slice(0, 10)}
+              </div>
+              <div
+                className={classNames(
+                  "chart-panel__selection-change",
+                  rangeInfo.absoluteChange > 0 &&
+                    "chart-panel__selection-change--positive",
+                  rangeInfo.absoluteChange < 0 &&
+                    "chart-panel__selection-change--negative",
+                )}
+              >
+                {formatDeltaValue(rangeInfo, axisFormatter)}
+              </div>
+            </div>
+          ) : (
+            <div className="chart-panel__hint">
+              Click and drag on the chart to measure a period.
+            </div>
+          )}
+        </div>
       </div>
 
-      {rangeInfo && (
-        <div
-          className="chart-panel__range-delta"
-          style={{
-            marginTop: 4,
-            marginBottom: 4,
-            fontSize: 12,
-            fontWeight: 500,
-            color: rangeColor,
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 8,
+      <div className="chart-panel__body">
+        <ReactECharts
+          option={option}
+          notMerge
+          lazyUpdate
+          onEvents={{
+            mousedown: handleMouseDown,
+            mouseup: handleMouseUp,
           }}
-        >
-          <span className="chart-panel__range-delta-dates">
-            {rangeInfo.startDate} → {rangeInfo.endDate}
-          </span>
-          <span className="chart-panel__range-delta-values">
-            {formatDeltaValue(rangeInfo.delta)}
-            {rangeInfo.pctChange != null && (
-              <> ({formatPctChange(rangeInfo.pctChange)})</>
-            )}
-          </span>
-        </div>
-      )}
-
-      <div className="chart-panel__chart">
-        <ReactECharts option={option} onEvents={onEvents} />
+          style={{ width: "100%", height: "280px" }}
+        />
       </div>
     </div>
   );
