@@ -243,6 +243,56 @@ export const ChartPanel: React.FC<Props> = ({
       }
     };
 
+    // --- NEW: instant start markLine helpers (no animation) ---
+    const applyStartLineInstant = (label: string) => {
+      try {
+        inst.setOption(
+          {
+            series: [
+              {
+                // updates first series by index
+                markLine: {
+                  silent: true,
+                  symbol: "none",
+                  label: { show: false },
+                  animation: false,
+                  animationDuration: 0,
+                  animationDurationUpdate: 0,
+                  lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
+                  data: [{ xAxis: label }],
+                },
+              },
+            ],
+          },
+          { notMerge: false, lazyUpdate: true }
+        );
+      } catch {
+        // no-op
+      }
+    };
+
+    const clearStartLineInstant = () => {
+      try {
+        inst.setOption(
+          {
+            series: [
+              {
+                markLine: {
+                  data: [],
+                  animation: false,
+                  animationDuration: 0,
+                  animationDurationUpdate: 0,
+                },
+              },
+            ],
+          },
+          { notMerge: false, lazyUpdate: true }
+        );
+      } catch {
+        // no-op
+      }
+    };
+
     // rAF throttling for both showTip and selection overlay updates
     const lastTipIndexRef = { current: -1 as number };
     const pendingTipIndexRef = { current: null as null | number };
@@ -344,6 +394,9 @@ export const ChartPanel: React.FC<Props> = ({
       const snapIdx = closestNumericIndex(rawIdx);
       if (snapIdx == null) return;
 
+      // NEW: show the start dotted line immediately (no slow animation)
+      applyStartLineInstant(x[snapIdx]);
+
       setDragState({ startIndex: snapIdx, isDragging: true });
       requestShowTip(snapIdx);
       clearUnderCurveOverlay(); // set once we move to a second point
@@ -365,6 +418,10 @@ export const ChartPanel: React.FC<Props> = ({
 
     const resetDrag = () => {
       setDragState({ startIndex: null, isDragging: false });
+
+      // NEW: remove start dotted line instantly too
+      clearStartLineInstant();
+
       hideTip();
       clearUnderCurveOverlay();
 
@@ -601,16 +658,17 @@ export const ChartPanel: React.FC<Props> = ({
         step: step ? "end" : undefined,
         z: 3,
 
-        // persistent start vertical dotted line during drag
-        markLine: startLabel
-          ? {
-              silent: true,
-              symbol: "none",
-              label: { show: false },
-              lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
-              data: [{ xAxis: startLabel }],
-            }
-          : undefined,
+        // Keep markLine config present and non-animating; data toggles based on startLabel
+        markLine: {
+          silent: true,
+          symbol: "none",
+          label: { show: false },
+          animation: false,
+          animationDuration: 0,
+          animationDurationUpdate: 0,
+          lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
+          data: startLabel ? [{ xAxis: startLabel }] : [],
+        },
       },
 
       // Under-curve selection overlay series (data is driven imperatively during drag)
