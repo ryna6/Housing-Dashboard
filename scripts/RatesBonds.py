@@ -122,23 +122,27 @@ def generate_rates_from_boc() -> List[PanelRow]:
     Metrics → BoC series:
       - policy_rate      -> V39079    (Target for the overnight rate, %)
       - gov_2y_yield     -> V122538   (2-year GoC benchmark bond yield, %)
-      - gov_5y_yield     -> V122540   (5-year GoC benchmark bond yield, %)
+      - repo_volume      -> V44201362 (overnight repo operations volume, billions of dollars)
       - gov_10y_yield    -> V122487   (Long-term GoC bond yield >10y, %)
       - mortgage_5y      -> V80691311 (Prime rate, %)
     """
     rows: List[PanelRow] = []
     region = "canada"
 
+    # NOTE:
+    # - V44201362 is reported in *millions* of dollars.
+    #   We convert to *billions* below.
     series_by_metric: Dict[str, Tuple[str, str]] = {
         "policy_rate": ("V39079", "pct"),
         "gov_2y_yield": ("V122538", "pct"),
-        "gov_5y_yield": ("V122540", "pct"),
+        "repo_volume": ("V44201362", "billions"),  # <- unit label for the dashboard
         "gov_10y_yield": ("V122487", "pct"),
         "mortgage_5y": ("V80691311", "pct"),
     }
 
     all_series_ids = [cfg[0] for cfg in series_by_metric.values()]
 
+    # Fetch daily/weekly observations and collapse to monthly
     monthly = fetch_boc_series_monthly(all_series_ids, start="2000-01-01")
     if not monthly:
         return []
@@ -152,7 +156,13 @@ def generate_rates_from_boc() -> List[PanelRow]:
         if not month_keys:
             continue
 
+        # Raw values (BoC units)
         vals: List[float] = [monthly[d][series_id] for d in month_keys]
+
+        # Convert repo volume from millions → billions, BEFORE computing MoM/YoY/MA3
+        if metric == "repo_volume":
+            vals = [v / 1000.0 for v in vals]  # millions → billions
+
         mom, yoy, ma3 = compute_changes(vals)
 
         for dt_str, val, m, y, ma in zip(month_keys, vals, mom, yoy, ma3):
@@ -171,35 +181,7 @@ def generate_rates_from_boc() -> List[PanelRow]:
                 )
             )
 
-    # Derive mortgage_5y_spread where both mortgage_5y and gov_5y_yield are available
-    mort_by_date = {r.date: r for r in rows if r.metric == "mortgage_5y"}
-    g5_by_date = {r.date: r for r in rows if r.metric == "gov_5y_yield"}
-
-    common_dates = sorted(set(mort_by_date.keys()) & set(g5_by_date.keys()))
-    if common_dates:
-        spread_vals: List[float] = [
-            mort_by_date[d].value - g5_by_date[d].value for d in common_dates
-        ]
-        mom, yoy, ma3 = compute_changes(spread_vals)
-
-        for dt_str, val, m, y, ma in zip(common_dates, spread_vals, mom, yoy, ma3):
-            rows.append(
-                PanelRow(
-                    date=dt_str,
-                    region=region,
-                    segment="all",
-                    metric="mortgage_5y_spread",
-                    value=round(val, 3),
-                    unit="pct",
-                    source="boc_valet_derived",
-                    mom_pct=round(m, 3) if m is not None else None,
-                    yoy_pct=round(y, 3) if y is not None else None,
-                    ma3=round(ma, 3),
-                )
-            )
-
     return rows
-
 
 def generate_rates() -> List[PanelRow]:
     """
