@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import type { PanelPoint } from "../data/types";
-import "./ChartPanel.css";
 
 interface Props {
   title: string;
