@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import type { PanelPoint } from "../data/types";
 
