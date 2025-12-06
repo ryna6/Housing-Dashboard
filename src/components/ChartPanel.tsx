@@ -14,6 +14,7 @@ interface Props {
   clampYMinToZero?: boolean;
 }
 
+// Simple "nice number" helper for tick steps: 1, 2, 5 × 10^k
 function niceStep(rawStep: number): number {
   if (!Number.isFinite(rawStep) || rawStep <= 0) return 1;
   const exp = Math.floor(Math.log10(rawStep));
@@ -39,38 +40,6 @@ function formatRangeDelta(
   if (typeof tooltipValueFormatter === "function") return tooltipValueFormatter(absValue);
   if (typeof valueFormatter === "function") return valueFormatter(absValue);
   return absValue.toFixed(2);
-}
-
-function parseRgbLike(color: string): { r: number; g: number; b: number } | null {
-  const c = color.trim();
-  const rgbMatch = c.match(
-    /^rgba?\(\s*([0-9]{1,3})\s*[, ]\s*([0-9]{1,3})\s*[, ]\s*([0-9]{1,3})(?:\s*[,/]\s*([0-9.]+))?\s*\)$/
-  );
-  if (rgbMatch) {
-    const r = Math.max(0, Math.min(255, parseInt(rgbMatch[1], 10)));
-    const g = Math.max(0, Math.min(255, parseInt(rgbMatch[2], 10)));
-    const b = Math.max(0, Math.min(255, parseInt(rgbMatch[3], 10)));
-    return { r, g, b };
-  }
-
-  const hexMatch = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-  if (hexMatch) {
-    const hex = hexMatch[1];
-    if (hex.length === 3) {
-      return {
-        r: parseInt(hex[0] + hex[0], 16),
-        g: parseInt(hex[1] + hex[1], 16),
-        b: parseInt(hex[2] + hex[2], 16),
-      };
-    }
-    return {
-      r: parseInt(hex.slice(0, 2), 16),
-      g: parseInt(hex.slice(2, 4), 16),
-      b: parseInt(hex.slice(4, 6), 16),
-    };
-  }
-
-  return null;
 }
 
 export const ChartPanel: React.FC<Props> = ({
@@ -135,35 +104,7 @@ export const ChartPanel: React.FC<Props> = ({
     };
   }, []);
 
-  const selectionAreaGradient = React.useMemo(() => {
-    const rgb = parseRgbLike(theme.text);
-    let darkTheme = false;
-    if (rgb) {
-      const lum = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
-      darkTheme = lum > 0.6; // light text => dark background
-    }
-
-    const top = darkTheme ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)";
-    const mid = darkTheme ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)";
-    const bottom = "rgba(0,0,0,0.0)";
-
-    return {
-      type: "linear",
-      x: 0,
-      y: 0,
-      x2: 0,
-      y2: 1,
-      colorStops: [
-        { offset: 0, color: top },
-        { offset: 0.55, color: mid },
-        { offset: 1, color: bottom },
-      ],
-    };
-  }, [theme.text]);
-
-  const overlayEmpty = React.useMemo(() => new Array(y.length).fill(null), [y.length]);
-
-  // Chart instance + container
+  // Chart + container refs
   const chartRef = React.useRef<any | null>(null);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -178,11 +119,11 @@ export const ChartPanel: React.FC<Props> = ({
       if (typeof inst.isDisposed === "function" && inst.isDisposed()) return;
       fn(inst);
     } catch {
-      // swallow: prevents entire tab/page from blanking
+      // swallow to avoid taking down the whole tab subtree
     }
   }, []);
 
-  // Ensure chart is resized when it becomes visible (tabs often start hidden)
+  // Resize on tab visibility / dimension changes (common cause of blank charts)
   React.useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -212,25 +153,47 @@ export const ChartPanel: React.FC<Props> = ({
       ro.observe(el);
     }
 
-    const onVis = () => ensureSized();
-    window.addEventListener("resize", onVis);
-    document.addEventListener("visibilitychange", onVis);
+    const onAny = () => ensureSized();
+    window.addEventListener("resize", onAny);
+    document.addEventListener("visibilitychange", onAny);
 
     return () => {
       if (ro) ro.disconnect();
       if (raf != null) cancelAnimationFrame(raf);
-      window.removeEventListener("resize", onVis);
-      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("resize", onAny);
+      document.removeEventListener("visibilitychange", onAny);
     };
   }, [safeCall]);
 
-  // Drag state in ref (no React re-renders during drag)
+  // Drag state held in a ref (no React rerenders during drag)
   const dragRef = React.useRef<{ isDragging: boolean; startIndex: number | null }>({
     isDragging: false,
     startIndex: null,
   });
 
-  // Attach ZRender events safely (and never crash on cleanup)
+  // Reset any drag artifacts on data change
+  React.useEffect(() => {
+    dragRef.current = { isDragging: false, startIndex: null };
+
+    safeCall((inst) => {
+      try {
+        inst.dispatchAction({ type: "hideTip" });
+      } catch {
+        // no-op
+      }
+
+      // Clear start line and pointer label
+      inst.setOption(
+        {
+          tooltip: { axisPointer: { label: { show: false } } },
+          series: [{ markLine: { data: [] } }],
+        },
+        { notMerge: false, lazyUpdate: true }
+      );
+    });
+  }, [safeCall, safeSeries, valueKey]);
+
+  // Attach ZRender events (mousedown/drag) safely
   React.useEffect(() => {
     if (!hasData || x.length === 0) return;
 
@@ -238,7 +201,6 @@ export const ChartPanel: React.FC<Props> = ({
     safeCall((inst) => {
       zr = inst.getZr?.();
     });
-
     if (!zr) return;
 
     const isValidNumber = (v: any): v is number =>
@@ -304,6 +266,7 @@ export const ChartPanel: React.FC<Props> = ({
       });
     };
 
+    // INSTANT start dotted line (no gradual draw)
     const applyStartLineInstant = (label: string) => {
       safeCall((inst) => {
         inst.setOption(
@@ -335,23 +298,10 @@ export const ChartPanel: React.FC<Props> = ({
       });
     };
 
-    const clearOverlay = () => {
-      safeCall((inst) => {
-        inst.setOption(
-          { series: [{}, { data: overlayEmpty }] },
-          { notMerge: false, lazyUpdate: true }
-        );
-      });
-    };
-
-    // rAF throttle during drag
+    // rAF throttle showTip (prevents flicker)
     let tipRaf: number | null = null;
-    let overlayRaf: number | null = null;
     let pendingTipIdx: number | null = null;
     let lastTipIdx = -1;
-
-    let pendingOverlay: null | { a: number; b: number } = null;
-    let lastOverlayKey = "";
 
     const requestShowTip = (idx: number) => {
       if (idx === lastTipIdx) return;
@@ -371,79 +321,38 @@ export const ChartPanel: React.FC<Props> = ({
       });
     };
 
-    const applyOverlay = (a: number, b: number) => {
-      const overlay = new Array(y.length).fill(null);
-      for (let i = a; i <= b; i += 1) {
-        const v = y[i];
-        overlay[i] = Number.isFinite(v) && !Number.isNaN(v) ? v : null;
-      }
-      safeCall((inst) => {
-        inst.setOption({ series: [{}, { data: overlay }] }, { notMerge: false, lazyUpdate: true });
-      });
-    };
-
-    const requestOverlay = (startIdx: number, curIdx: number) => {
-      const a = Math.min(startIdx, curIdx);
-      const b = Math.max(startIdx, curIdx);
-
-      if (a === b) {
-        clearOverlay();
-        lastOverlayKey = "";
-        pendingOverlay = null;
-        return;
-      }
-
-      const key = `${a}-${b}`;
-      if (key === lastOverlayKey) return;
-
-      pendingOverlay = { a, b };
-      if (overlayRaf != null) return;
-
-      overlayRaf = requestAnimationFrame(() => {
-        overlayRaf = null;
-        if (!pendingOverlay) return;
-        const { a: aa, b: bb } = pendingOverlay;
-        pendingOverlay = null;
-        const k = `${aa}-${bb}`;
-        if (k === lastOverlayKey) return;
-        lastOverlayKey = k;
-        applyOverlay(aa, bb);
-      });
-    };
-
     const resetDrag = () => {
       dragRef.current = { isDragging: false, startIndex: null };
 
-      safeCall((inst) => inst.dispatchAction({ type: "hideTip" }));
+      safeCall((inst) => {
+        try {
+          inst.dispatchAction({ type: "hideTip" });
+        } catch {
+          // no-op
+        }
+      });
+
       showAxisPointerLabel(false);
       clearStartLineInstant();
-      clearOverlay();
 
       lastTipIdx = -1;
       pendingTipIdx = null;
-      pendingOverlay = null;
-      lastOverlayKey = "";
-
       if (tipRaf != null) cancelAnimationFrame(tipRaf);
-      if (overlayRaf != null) cancelAnimationFrame(overlayRaf);
       tipRaf = null;
-      overlayRaf = null;
     };
 
     const onMouseDown = (e: any) => {
       const raw = getIndexFromEvent(e);
       if (raw == null) return;
+
       const snap = closestNumericIndex(raw);
       if (snap == null) return;
 
       dragRef.current = { isDragging: true, startIndex: snap };
 
-      // Instant start line + label
-      applyStartLineInstant(x[snap]);
-      showAxisPointerLabel(true);
-
+      applyStartLineInstant(x[snap]); // instant start line
+      showAxisPointerLabel(true);     // show date label only during drag
       requestShowTip(snap);
-      clearOverlay();
     };
 
     const onMouseMove = (e: any) => {
@@ -452,11 +361,11 @@ export const ChartPanel: React.FC<Props> = ({
 
       const raw = getIndexFromEvent(e);
       if (raw == null) return;
+
       const snap = closestNumericIndex(raw);
       if (snap == null) return;
 
       requestShowTip(snap);
-      requestOverlay(ds.startIndex, snap);
     };
 
     try {
@@ -469,7 +378,6 @@ export const ChartPanel: React.FC<Props> = ({
     }
 
     return () => {
-      // NEVER let cleanup throw (this is a common “tab disappears” cause)
       try {
         zr.off("mousedown", onMouseDown);
         zr.off("mousemove", onMouseMove);
@@ -479,9 +387,8 @@ export const ChartPanel: React.FC<Props> = ({
         // no-op
       }
       if (tipRaf != null) cancelAnimationFrame(tipRaf);
-      if (overlayRaf != null) cancelAnimationFrame(overlayRaf);
     };
-  }, [hasData, x, y, overlayEmpty, safeCall, theme]);
+  }, [hasData, x, y, safeCall, theme]);
 
   if (!hasData) {
     return (
@@ -539,9 +446,9 @@ export const ChartPanel: React.FC<Props> = ({
     return val.toFixed(2);
   };
 
-  // Memoized option (keeps charts stable across tab switches)
   const option: any = React.useMemo(() => {
     return {
+      // Prevent “slow draw” of the line / markLine
       animation: false,
       animationDuration: 0,
       animationDurationUpdate: 0,
@@ -584,7 +491,9 @@ export const ChartPanel: React.FC<Props> = ({
           const ds = dragRef.current;
           const dragging = ds.isDragging && ds.startIndex != null && idx != null;
 
+          // While dragging: don't repeat the current date line (date is shown by axisPointer label)
           const header = dragging ? "" : `${axisValue}<br/>`;
+
           const valueLine = `<div style="font-weight: 600;">${formatValue(val)}</div>`;
           if (!dragging) return `${header}${valueLine}`;
 
@@ -605,6 +514,7 @@ export const ChartPanel: React.FC<Props> = ({
             return `${valueLine}`;
           }
 
+          // Directionally correct (current - start) => dragging backwards can be negative
           const change = curVal - startVal;
           const pctChange = startVal !== 0 ? (change / Math.abs(startVal)) * 100 : null;
 
@@ -622,6 +532,7 @@ export const ChartPanel: React.FC<Props> = ({
             pctStr = ` (${pctSign}${Math.abs(pctChange).toFixed(1)}%)`;
           }
 
+          // Only color the delta text (no pill background)
           const color = change > 0 ? theme.success : change < 0 ? theme.danger : theme.text;
 
           const deltaLine = `
@@ -629,6 +540,8 @@ export const ChartPanel: React.FC<Props> = ({
               ${sign}${deltaStr}${pctStr}
             </div>
           `;
+
+          // Keep tooltip narrow by putting the dates below
           const rangeLine = `
             <div style="margin-top: 4px; opacity: 0.75; font-size: 11px;">
               ${x[startIdx]} → ${x[curIdx]}
@@ -666,7 +579,6 @@ export const ChartPanel: React.FC<Props> = ({
       },
 
       series: [
-        // Main line
         {
           type: "line",
           data: y,
@@ -674,37 +586,17 @@ export const ChartPanel: React.FC<Props> = ({
           connectNulls: true,
           smooth: !step,
           step: step ? "end" : undefined,
-          z: 3,
-          markLine: { data: [] }, // driven imperatively for instant appearance
-        },
-
-        // Under-curve selection overlay (driven imperatively)
-        {
-          type: "line",
-          data: overlayEmpty,
-          showSymbol: false,
-          connectNulls: false,
-          smooth: !step,
-          step: step ? "end" : undefined,
-          silent: true,
           z: 2,
-          lineStyle: { opacity: 0 },
-          emphasis: { disabled: true },
-          tooltip: { show: false },
-          areaStyle: {
-            opacity: 1,
-            origin: "start",
-            color: selectionAreaGradient,
-          },
+
+          // Start line is driven imperatively so it appears instantly.
+          markLine: { data: [] },
         },
       ],
     };
   }, [
     x,
     y,
-    overlayEmpty,
     theme,
-    selectionAreaGradient,
     step,
     isPercentScale,
     valueAxisLabel,
@@ -713,7 +605,6 @@ export const ChartPanel: React.FC<Props> = ({
     yMin,
     yMax,
     interval,
-    formatValue,
   ]);
 
   return (
@@ -721,7 +612,6 @@ export const ChartPanel: React.FC<Props> = ({
       <div className="chart-panel__title">{title}</div>
       <ReactECharts
         option={option}
-        // keep original behavior (less risk of tab blanking due to weird merges)
         notMerge
         lazyUpdate
         onChartReady={handleChartReady}
