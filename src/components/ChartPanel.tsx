@@ -6,29 +6,11 @@ interface Props {
   title: string;
   series: PanelPoint[];
   valueKey: "value" | "mom_pct" | "yoy_pct";
-  /** Optional label for the y-axis (left blank by default). */
   valueAxisLabel?: string;
-  /**
-   * Optional formatter for numeric values on the Y-axis ticks
-   * when not using percent scale.
-   */
   valueFormatter?: (value: number) => string;
-  /**
-   * Optional formatter for numeric values in the tooltip. If omitted,
-   * we fall back to valueFormatter, and then to a generic formatter.
-   */
   tooltipValueFormatter?: (value: number) => string;
-  /** Render as a step line (discrete jumps between periods). */
   step?: boolean;
-  /**
-   * Treat numeric values as percentages for formatting (0–5% etc),
-   * even if the underlying valueKey is "value".
-   */
   treatAsPercentScale?: boolean;
-  /**
-   * Clamp the y-axis minimum at 0
-   * (e.g. policy rate, CPI, HPI).
-   */
   clampYMinToZero?: boolean;
 }
 
@@ -47,8 +29,7 @@ function niceStep(rawStep: number): number {
   return niceBase * Math.pow(10, exp);
 }
 
-// Helper to format absolute change value for range selection.
-// Reuses existing formatters where possible.
+// Format absolute delta value using existing formatters where possible.
 function formatRangeDelta(
   absValue: number,
   isPercentScale: boolean,
@@ -57,19 +38,12 @@ function formatRangeDelta(
 ): string {
   if (!Number.isFinite(absValue)) return "–";
 
-  // If the chart is on a percent scale already (e.g. MoM / YoY),
-  // treat this as percentage points.
   if (isPercentScale) {
     return `${absValue.toFixed(2)}%`;
   }
 
-  if (typeof tooltipValueFormatter === "function") {
-    return tooltipValueFormatter(absValue);
-  }
-
-  if (typeof valueFormatter === "function") {
-    return valueFormatter(absValue);
-  }
+  if (typeof tooltipValueFormatter === "function") return tooltipValueFormatter(absValue);
+  if (typeof valueFormatter === "function") return valueFormatter(absValue);
 
   return absValue.toFixed(2);
 }
@@ -102,26 +76,52 @@ export const ChartPanel: React.FC<Props> = ({
     treatAsPercentScale ??
     (valueKey === "mom_pct" || valueKey === "yoy_pct");
 
-  // --- Google Finance–style click/hold/drag anchor state (resets on mouseup) ---
-  const [chartInstance, setChartInstance] = React.useState<any | null>(null);
+  // Theme-aware tooltip styling (uses CSS vars if present; falls back gracefully)
+  const theme = React.useMemo(() => {
+    const fallback = {
+      surface: "rgba(255,255,255,0.92)",
+      border: "rgba(0,0,0,0.10)",
+      text: "rgba(0,0,0,0.92)",
+      danger: "#ef4444",
+      success: "#22c55e",
+      shadow: "0 10px 30px rgba(0,0,0,0.12)",
+    };
 
+    if (typeof window === "undefined") return fallback;
+
+    const css = getComputedStyle(document.documentElement);
+    const get = (name: string, fb: string) => css.getPropertyValue(name).trim() || fb;
+
+    return {
+      surface: get("--surface", fallback.surface),
+      border: get("--border-subtle", fallback.border),
+      text: get("--text", fallback.text),
+      danger: get("--danger", fallback.danger),
+      success: get("--success", get("--positive", fallback.success)),
+      shadow: get("--shadow-soft", fallback.shadow),
+    };
+  }, []);
+
+  // --- Google Finance-ish click/hold/drag anchor state ---
+  const [chartInstance, setChartInstance] = React.useState<any | null>(null);
   const handleChartReady = React.useCallback((instance: any) => {
     setChartInstance(instance);
   }, []);
 
+  // IMPORTANT: we do NOT update this on mousemove (prevents flicker).
   const [dragState, setDragState] = React.useState<{
     startIndex: number | null;
-    currentIndex: number | null;
     isDragging: boolean;
-  }>({
-    startIndex: null,
-    currentIndex: null,
-    isDragging: false,
-  });
+  }>({ startIndex: null, isDragging: false });
 
-  // Reset selection when chart data / metric changes
+  const dragRef = React.useRef(dragState);
   React.useEffect(() => {
-    setDragState({ startIndex: null, currentIndex: null, isDragging: false });
+    dragRef.current = dragState;
+  }, [dragState]);
+
+  // Reset drag when series/metric changes
+  React.useEffect(() => {
+    setDragState({ startIndex: null, isDragging: false });
   }, [series, valueKey]);
 
   const xKey = x.join("|");
@@ -135,11 +135,12 @@ export const ChartPanel: React.FC<Props> = ({
     const isValidNumber = (v: any): v is number =>
       typeof v === "number" && Number.isFinite(v) && !Number.isNaN(v);
 
+    const clampIndex = (idx: number) => Math.max(0, Math.min(x.length - 1, idx));
+
     const closestNumericIndex = (idx: number): number | null => {
       if (idx < 0 || idx >= y.length) return null;
       if (isValidNumber(y[idx])) return idx;
 
-      // Search outward for the closest numeric point
       for (let d = 1; d < y.length; d += 1) {
         const left = idx - d;
         const right = idx + d;
@@ -154,35 +155,20 @@ export const ChartPanel: React.FC<Props> = ({
       const oy = e?.offsetY;
       if (typeof ox !== "number" || typeof oy !== "number") return null;
 
-      // Only react inside the main plot area
       if (!inst.containPixel({ gridIndex: 0 }, [ox, oy])) return null;
 
       const converted = inst.convertFromPixel({ gridIndex: 0 }, [ox, oy]);
       const xVal = Array.isArray(converted) ? converted[0] : converted;
 
       let idx: number | null = null;
-      if (typeof xVal === "number" && Number.isFinite(xVal)) {
-        idx = Math.round(xVal);
-      } else if (typeof xVal === "string") {
+      if (typeof xVal === "number" && Number.isFinite(xVal)) idx = Math.round(xVal);
+      else if (typeof xVal === "string") {
         const found = x.indexOf(xVal);
         if (found >= 0) idx = found;
       }
 
       if (idx == null) return null;
-      idx = Math.max(0, Math.min(x.length - 1, idx));
-      return idx;
-    };
-
-    const showTipAt = (idx: number) => {
-      try {
-        inst.dispatchAction({
-          type: "showTip",
-          seriesIndex: 0,
-          dataIndex: idx,
-        });
-      } catch {
-        // no-op
-      }
+      return clampIndex(idx);
     };
 
     const hideTip = () => {
@@ -193,6 +179,31 @@ export const ChartPanel: React.FC<Props> = ({
       }
     };
 
+    // Throttle showTip to 1 per animation frame (prevents flicker)
+    const lastTipIndexRef = { current: -1 as number };
+    const pendingTipIndexRef = { current: null as null | number };
+    const rafRef = { current: null as null | number };
+
+    const requestShowTip = (idx: number) => {
+      if (idx === lastTipIndexRef.current) return;
+      pendingTipIndexRef.current = idx;
+
+      if (rafRef.current != null) return;
+
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null;
+        const next = pendingTipIndexRef.current;
+        if (next == null) return;
+
+        lastTipIndexRef.current = next;
+        try {
+          inst.dispatchAction({ type: "showTip", seriesIndex: 0, dataIndex: next });
+        } catch {
+          // no-op
+        }
+      });
+    };
+
     const onMouseDown = (e: any) => {
       const rawIdx = getIndexFromEvent(e);
       if (rawIdx == null) return;
@@ -200,35 +211,32 @@ export const ChartPanel: React.FC<Props> = ({
       const snapIdx = closestNumericIndex(rawIdx);
       if (snapIdx == null) return;
 
-      setDragState({ startIndex: snapIdx, currentIndex: snapIdx, isDragging: true });
-      showTipAt(snapIdx); // keep the vertical dotted cursor visible immediately
+      setDragState({ startIndex: snapIdx, isDragging: true });
+      requestShowTip(snapIdx); // ensure the active cursor line appears immediately
     };
 
     const onMouseMove = (e: any) => {
-      setDragState((prev) => {
-        if (!prev.isDragging || prev.startIndex == null) return prev;
+      const ds = dragRef.current;
+      if (!ds.isDragging || ds.startIndex == null) return;
 
-        const rawIdx = getIndexFromEvent(e);
-        if (rawIdx == null) return prev;
+      const rawIdx = getIndexFromEvent(e);
+      if (rawIdx == null) return;
 
-        const snapIdx = closestNumericIndex(rawIdx);
-        if (snapIdx == null) return prev;
+      const snapIdx = closestNumericIndex(rawIdx);
+      if (snapIdx == null) return;
 
-        if (snapIdx !== prev.currentIndex) {
-          showTipAt(snapIdx); // keep tooltip + cursor line visible while dragging
-          return { ...prev, currentIndex: snapIdx };
-        }
-
-        // Still keep tooltip visible even if index didn't change
-        showTipAt(snapIdx);
-        return prev;
-      });
+      requestShowTip(snapIdx);
     };
 
     const resetDrag = () => {
-      // requirement (1): reset immediately after mouse lets go
-      setDragState({ startIndex: null, currentIndex: null, isDragging: false });
+      setDragState({ startIndex: null, isDragging: false });
       hideTip();
+      lastTipIndexRef.current = -1;
+      pendingTipIndexRef.current = null;
+      if (rafRef.current != null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
 
     zr.on("mousedown", onMouseDown);
@@ -241,6 +249,9 @@ export const ChartPanel: React.FC<Props> = ({
       zr.off("mousemove", onMouseMove);
       zr.off("mouseup", resetDrag);
       zr.off("globalout", resetDrag);
+      if (rafRef.current != null) {
+        window.cancelAnimationFrame(rafRef.current);
+      }
     };
   }, [chartInstance, hasData, xKey]);
 
@@ -248,9 +259,7 @@ export const ChartPanel: React.FC<Props> = ({
     return (
       <div className="chart-panel chart-panel--empty">
         <div className="chart-panel__title">{title}</div>
-        <div className="chart-panel__empty-text">
-          Not available for this selection.
-        </div>
+        <div className="chart-panel__empty-text">Not available for this selection.</div>
       </div>
     );
   }
@@ -295,7 +304,6 @@ export const ChartPanel: React.FC<Props> = ({
     yMax = max;
   }
 
-  // Tooltip value formatting (preserves your existing behavior)
   const formatValue = (val: number): string => {
     if (isPercentScale) return `${val.toFixed(2)}%`;
     if (typeof tooltipValueFormatter === "function") return tooltipValueFormatter(val);
@@ -303,41 +311,37 @@ export const ChartPanel: React.FC<Props> = ({
     return val.toFixed(2);
   };
 
-  // For the persistent "start" dotted line while dragging
+  // Persistent "start" dotted line while dragging
   const startLabel =
-    dragState.isDragging && dragState.startIndex != null
-      ? x[dragState.startIndex]
-      : null;
+    dragState.isDragging && dragState.startIndex != null ? x[dragState.startIndex] : null;
 
   const option: any = {
     grid: { left: 40, right: 16, top: 8, bottom: 28 },
+
     tooltip: {
       trigger: "axis",
-
-      // (1) Theme-matching tooltip styling
+      triggerOn: "mousemove",
+      showDelay: 0,
+      hideDelay: 0,
+      transitionDuration: 0,
+      confine: true,
+      appendToBody: true,
       renderMode: "html",
-      backgroundColor: "var(--surface)",
-      borderColor: "var(--border-subtle)",
-      borderWidth: 1,
-      textStyle: { color: "var(--text)", fontSize: 12 },
-      padding: [10, 12],
-      extraCssText:
-        "border-radius: 14px; box-shadow: var(--shadow-soft); backdrop-filter: blur(8px);",
 
-      // (4) Keep a vertical dotted cursor + show the date label there,
-      // so we can drop the date line from the tooltip while dragging.
+      // Theme-matching tooltip styling
+      backgroundColor: theme.surface,
+      borderColor: theme.border,
+      borderWidth: 1,
+      textStyle: { color: theme.text, fontSize: 12 },
+      padding: [10, 12],
+      extraCssText: `border-radius: 14px; box-shadow: ${theme.shadow}; backdrop-filter: blur(8px);`,
+
+      // Vertical dotted cursor line (no label => removes the empty bottom box)
       axisPointer: {
         type: "line",
+        animation: false,
         lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
-        label: {
-          show: true,
-          backgroundColor: "var(--surface)",
-          borderColor: "var(--border-subtle)",
-          borderWidth: 1,
-          color: "var(--text)",
-          padding: [6, 8],
-          borderRadius: 10,
-        },
+        label: { show: false },
       },
 
       formatter: (params: any) => {
@@ -347,22 +351,18 @@ export const ChartPanel: React.FC<Props> = ({
           p && typeof p.dataIndex === "number" ? (p.dataIndex as number) : null;
 
         const val = p && typeof p.data === "number" ? (p.data as number) : NaN;
-        if (!Number.isFinite(val) || Number.isNaN(val)) {
-          return axisValue;
+        if (!Number.isFinite(val) || Number.isNaN(val)) return axisValue;
+
+        const dragging = dragState.isDragging && dragState.startIndex != null && idx != null;
+
+        // While dragging: do NOT show the "current date" header line
+        const header = dragging ? "" : `${axisValue}<br/>`;
+
+        const valueLine = `<div style="font-weight: 600;">${formatValue(val)}</div>`;
+
+        if (!dragging) {
+          return `${header}${valueLine}`;
         }
-
-        const dragging =
-          dragState.isDragging &&
-          dragState.startIndex != null &&
-          idx != null &&
-          dragState.currentIndex != null;
-
-        // (2) While dragging, don't repeat the date line here
-        const baseLine = dragging
-          ? `${formatValue(val)}`
-          : `${axisValue}<br/>${formatValue(val)}`;
-
-        if (!dragging) return baseLine;
 
         const startIdx = dragState.startIndex as number;
         const curIdx = idx as number;
@@ -378,13 +378,12 @@ export const ChartPanel: React.FC<Props> = ({
           Number.isNaN(startVal) ||
           Number.isNaN(curVal)
         ) {
-          return baseLine;
+          return `${valueLine}`;
         }
 
-        // (3) Directionally correct change: current - anchor
+        // Directionally correct change: current - start (so dragging backwards can be negative)
         const change = curVal - startVal;
-        const pctChange =
-          startVal !== 0 ? (change / Math.abs(startVal)) * 100 : null;
+        const pctChange = startVal !== 0 ? (change / Math.abs(startVal)) * 100 : null;
 
         const sign = change > 0 ? "+" : change < 0 ? "-" : "";
         const deltaStr = formatRangeDelta(
@@ -400,25 +399,23 @@ export const ChartPanel: React.FC<Props> = ({
           pctStr = ` (${pctSign}${Math.abs(pctChange).toFixed(1)}%)`;
         }
 
-        // (3) No pill/chip background: only color the change text
-        const upColor = "#4ade80";
-        const downColor = "var(--danger)";
-        const neutralColor = "var(--text)";
-        const color =
-          change > 0 ? upColor : change < 0 ? downColor : neutralColor;
+        // Only color the delta text (no pill)
+        const color = change > 0 ? theme.success : change < 0 ? theme.danger : theme.text;
 
-        const label = `${x[startIdx]} → ${x[curIdx]}`;
-
-        const deltaHtml = `
-          <span style="font-weight: 600; color: ${color};">
+        const deltaLine = `
+          <div style="margin-top: 6px; font-weight: 600; color: ${color};">
             ${sign}${deltaStr}${pctStr}
-          </span>
-          <span class="metric-card__delta-label">
-            &nbsp;${label}
-          </span>
+          </div>
         `;
 
-        return `${baseLine}<br/>${deltaHtml}`;
+        // Dates under delta (narrower tooltip)
+        const rangeLine = `
+          <div style="margin-top: 4px; opacity: 0.75; font-size: 11px;">
+            ${x[startIdx]} → ${x[curIdx]}
+          </div>
+        `;
+
+        return `${valueLine}${deltaLine}${rangeLine}`;
       },
     },
 
@@ -428,6 +425,7 @@ export const ChartPanel: React.FC<Props> = ({
       axisLine: { lineStyle: { opacity: 0.4 } },
       axisLabel: { fontSize: 10 },
     },
+
     yAxis: {
       type: "value",
       name: valueAxisLabel ?? "",
@@ -456,7 +454,7 @@ export const ChartPanel: React.FC<Props> = ({
         smooth: !step,
         step: step ? "end" : undefined,
 
-        // (4) Persistent start line while dragging (dotted vertical)
+        // Persistent start vertical dotted line while dragging
         markLine: startLabel
           ? {
               silent: true,
