@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import type { PanelPoint } from "../data/types";
 
@@ -47,6 +47,23 @@ function niceStep(rawStep: number): number {
   return niceBase * Math.pow(10, exp);
 }
 
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+type RangeSelection = { start: number; end: number };
+
+type RangeSummary = {
+  startIdx: number;
+  endIdx: number;
+  startLabel: string;
+  endLabel: string;
+  startVal: number;
+  endVal: number;
+  delta: number;
+  pctChange: number | null;
+};
+
 export const ChartPanel: React.FC<Props> = ({
   title,
   series,
@@ -58,12 +75,23 @@ export const ChartPanel: React.FC<Props> = ({
   treatAsPercentScale,
   clampYMinToZero = false,
 }) => {
+  const chartRef = useRef<any>(null);
+
+  // Keep the latest data available to the drag handlers without re-binding events.
+  const xRef = useRef<string[]>([]);
+
+  const [range, setRange] = useState<RangeSelection | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [chartReady, setChartReady] = useState(false);
+
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
   const x = sorted.map((p) => p.date.slice(0, 7)); // YYYY-MM
   const y = sorted.map((p) => {
     const v = p[valueKey] as number | null;
     return v == null ? NaN : v;
   });
+
+  xRef.current = x;
 
   const numeric = y.filter(
     (v) => typeof v === "number" && !Number.isNaN(v)
@@ -75,12 +103,6 @@ export const ChartPanel: React.FC<Props> = ({
     treatAsPercentScale ??
     (valueKey === "mom_pct" || valueKey === "yoy_pct");
 
-  // --- state for drag-to-measure range selection ---
-  const chartRef = useRef<any>(null);
-  const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
-  const [dragEndIndex, setDragEndIndex] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-
   if (!hasData) {
     return (
       <div className="chart-panel chart-panel--empty">
@@ -91,6 +113,203 @@ export const ChartPanel: React.FC<Props> = ({
       </div>
     );
   }
+
+  // Format numeric values consistently with the existing tooltip/axis behavior.
+  const formatValueForDisplay = (val: number): string => {
+    if (Number.isNaN(val)) return "–";
+
+    if (isPercentScale) {
+      return `${val.toFixed(2)}%`;
+    }
+
+    if (typeof tooltipValueFormatter === "function") {
+      return tooltipValueFormatter(val);
+    }
+
+    if (typeof valueFormatter === "function") {
+      return valueFormatter(val);
+    }
+
+    return val.toFixed(2);
+  };
+
+  const rangeSummary: RangeSummary | null = useMemo(() => {
+    if (!range) return null;
+    if (x.length === 0) return null;
+
+    const maxIdx = x.length - 1;
+    const s = clamp(range.start, 0, maxIdx);
+    const e = clamp(range.end, 0, maxIdx);
+    const i0 = Math.min(s, e);
+    const i1 = Math.max(s, e);
+
+    // Ignore degenerate selections (single point); only show when a real range exists.
+    if (i0 === i1) return null;
+
+    // Find the first/last finite values inside the selected span (handles missing data).
+    let startIdx: number | null = null;
+    for (let i = i0; i <= i1; i++) {
+      const v = y[i];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        startIdx = i;
+        break;
+      }
+    }
+
+    let endIdx: number | null = null;
+    for (let i = i1; i >= i0; i--) {
+      const v = y[i];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        endIdx = i;
+        break;
+      }
+    }
+
+    if (startIdx == null || endIdx == null) return null;
+    if (startIdx === endIdx) return null;
+
+    const startVal = y[startIdx];
+    const endVal = y[endIdx];
+    if (!Number.isFinite(startVal) || !Number.isFinite(endVal)) return null;
+
+    const delta = (endVal as number) - (startVal as number);
+    const pctChange =
+      startVal !== 0
+        ? (delta / Math.abs(startVal as number)) * 100
+        : null;
+
+    return {
+      startIdx,
+      endIdx,
+      startLabel: x[startIdx],
+      endLabel: x[endIdx],
+      startVal: startVal as number,
+      endVal: endVal as number,
+      delta,
+      pctChange,
+    };
+  }, [range, x, y]);
+
+  // Click/hold/drag (Google Finance-style): show Δ and %Δ over an arbitrary range.
+  useEffect(() => {
+    if (!chartReady || !hasData) return;
+
+    const ec = chartRef.current?.getEchartsInstance?.();
+    if (!ec) return;
+
+    const zr = ec.getZr();
+    let pointerDown = false;
+
+    const getIndexFromPointerEvent = (e: any): number | null => {
+      const xNow = xRef.current;
+      if (!xNow || xNow.length === 0) return null;
+
+      const ox =
+        typeof e?.offsetX === "number"
+          ? e.offsetX
+          : typeof e?.zrX === "number"
+          ? e.zrX
+          : typeof e?.x === "number"
+          ? e.x
+          : null;
+
+      const oy =
+        typeof e?.offsetY === "number"
+          ? e.offsetY
+          : typeof e?.zrY === "number"
+          ? e.zrY
+          : typeof e?.y === "number"
+          ? e.y
+          : null;
+
+      if (typeof ox !== "number" || typeof oy !== "number") return null;
+
+      const point: [number, number] = [ox, oy];
+      const inGrid = ec.containPixel({ gridIndex: 0 }, point);
+      if (!inGrid) return null;
+
+      let coord: any = null;
+      try {
+        coord = ec.convertFromPixel({ seriesIndex: 0 }, point);
+      } catch {
+        // ignore
+      }
+
+      const xCoord = Array.isArray(coord) ? coord[0] : coord;
+
+      if (typeof xCoord === "string") {
+        const idx = xNow.indexOf(xCoord);
+        return idx >= 0 ? idx : null;
+      }
+
+      if (typeof xCoord === "number" && Number.isFinite(xCoord)) {
+        return clamp(Math.round(xCoord), 0, Math.max(0, xNow.length - 1));
+      }
+
+      // Fallback: convert against the xAxis if series conversion didn't resolve.
+      try {
+        const axisCoord: any = ec.convertFromPixel({ xAxisIndex: 0 }, point);
+        const v = Array.isArray(axisCoord) ? axisCoord[0] : axisCoord;
+
+        if (typeof v === "string") {
+          const idx = xNow.indexOf(v);
+          return idx >= 0 ? idx : null;
+        }
+        if (typeof v === "number" && Number.isFinite(v)) {
+          return clamp(Math.round(v), 0, Math.max(0, xNow.length - 1));
+        }
+      } catch {
+        // ignore
+      }
+
+      return null;
+    };
+
+    const onDown = (e: any) => {
+      const idx = getIndexFromPointerEvent(e);
+      if (idx == null) return;
+      pointerDown = true;
+      setIsDragging(true);
+      setRange({ start: idx, end: idx });
+    };
+
+    const onMove = (e: any) => {
+      if (!pointerDown) return;
+      const idx = getIndexFromPointerEvent(e);
+      if (idx == null) return;
+      setRange((prev) => {
+        if (!prev) return { start: idx, end: idx };
+        if (prev.end === idx) return prev;
+        return { ...prev, end: idx };
+      });
+    };
+
+    const onUp = () => {
+      if (!pointerDown) return;
+      pointerDown = false;
+      setIsDragging(false);
+    };
+
+    zr.on("mousedown", onDown);
+    zr.on("mousemove", onMove);
+    zr.on("mouseup", onUp);
+    zr.on("globalout", onUp);
+
+    zr.on("touchstart", onDown);
+    zr.on("touchmove", onMove);
+    zr.on("touchend", onUp);
+
+    return () => {
+      zr.off("mousedown", onDown);
+      zr.off("mousemove", onMove);
+      zr.off("mouseup", onUp);
+      zr.off("globalout", onUp);
+
+      zr.off("touchstart", onDown);
+      zr.off("touchmove", onMove);
+      zr.off("touchend", onUp);
+    };
+  }, [chartReady, hasData]);
 
   // ----- Y-axis bounds with "±1 step" logic -----
   let yMin: number | undefined;
@@ -135,161 +354,6 @@ export const ChartPanel: React.FC<Props> = ({
 
     yMin = min;
     yMax = max;
-  }
-
-  // ----- helpers for selection / formatting -----
-  const formatSingleValue = (val: number): string => {
-    if (isPercentScale) {
-      return `${val.toFixed(2)}%`;
-    }
-    if (typeof tooltipValueFormatter === "function") {
-      return tooltipValueFormatter(val);
-    }
-    if (typeof valueFormatter === "function") {
-      return valueFormatter(val);
-    }
-    return val.toFixed(2);
-  };
-
-  const formatChangeValue = (delta: number): string => {
-    const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
-    const abs = Math.abs(delta);
-    if (isPercentScale) {
-      return `${sign}${abs.toFixed(2)}%`;
-    }
-    if (typeof tooltipValueFormatter === "function") {
-      // assume formatter works for absolute values; we prepend sign
-      return `${sign}${tooltipValueFormatter(abs)}`;
-    }
-    if (typeof valueFormatter === "function") {
-      return `${sign}${valueFormatter(abs)}`;
-    }
-    return `${sign}${abs.toFixed(2)}`;
-  };
-
-  const getIndexFromEvent = (params: any): number | null => {
-    if (!chartRef.current) return null;
-    const ev = params?.event;
-    if (!ev || typeof ev.offsetX !== "number" || typeof ev.offsetY !== "number") {
-      return null;
-    }
-
-    // Convert pixel position to x-axis coordinate
-    const pointInGrid = chartRef.current.convertFromPixel(
-      { xAxisIndex: 0 },
-      [ev.offsetX, ev.offsetY]
-    );
-
-    if (!pointInGrid || !Array.isArray(pointInGrid) || pointInGrid.length === 0) {
-      return null;
-    }
-
-    const axisValue = pointInGrid[0];
-    let idx: number;
-
-    if (typeof axisValue === "number") {
-      idx = Math.round(axisValue);
-    } else {
-      idx = x.indexOf(String(axisValue));
-    }
-
-    if (idx < 0 || idx >= x.length) {
-      return null;
-    }
-
-    return idx;
-  };
-
-  const handleMouseDown = (params: any) => {
-    // left-click only
-    const native = params?.event?.event;
-    if (native && "button" in native && native.button !== 0) return;
-
-    const idx = getIndexFromEvent(params);
-    if (idx == null) return;
-    setDragStartIndex(idx);
-    setDragEndIndex(idx);
-    setIsDragging(true);
-  };
-
-  const handleMouseMove = (params: any) => {
-    if (!isDragging || dragStartIndex == null) return;
-    const idx = getIndexFromEvent(params);
-    if (idx == null) return;
-    if (idx !== dragEndIndex) {
-      setDragEndIndex(idx);
-    }
-  };
-
-  const finishDrag = (params?: any) => {
-    if (!isDragging) return;
-
-    const idx = params ? getIndexFromEvent(params) : null;
-    if (idx != null && dragStartIndex != null) {
-      if (idx === dragStartIndex) {
-        // Click without drag: clear selection
-        setDragStartIndex(null);
-        setDragEndIndex(null);
-      } else {
-        setDragEndIndex(idx);
-      }
-    }
-    setIsDragging(false);
-  };
-
-  const handleMouseUp = (params: any) => {
-    finishDrag(params);
-  };
-
-  const handleGlobalOut = () => {
-    // If mouse leaves chart while dragging, just end the drag
-    if (isDragging) {
-      setIsDragging(false);
-    }
-  };
-
-  const onEvents: Record<string, (params: any) => void> = {
-    mousedown: handleMouseDown,
-    mousemove: handleMouseMove,
-    mouseup: handleMouseUp,
-    globalout: handleGlobalOut,
-  };
-
-  // Compute current selection summary (if any)
-  let selectionText: string | null = null;
-  let selectionColor: string | undefined;
-
-  if (
-    dragStartIndex != null &&
-    dragEndIndex != null &&
-    dragStartIndex !== dragEndIndex
-  ) {
-    const startIdx = Math.min(dragStartIndex, dragEndIndex);
-    const endIdx = Math.max(dragStartIndex, dragEndIndex);
-
-    const startVal = y[startIdx];
-    const endVal = y[endIdx];
-
-    if (
-      typeof startVal === "number" &&
-      !Number.isNaN(startVal) &&
-      typeof endVal === "number" &&
-      !Number.isNaN(endVal)
-    ) {
-      const delta = endVal - startVal;
-      const pct =
-        startVal === 0 ? null : (delta / Math.abs(startVal)) * 100;
-
-      const arrow = delta > 0 ? "▲" : delta < 0 ? "▼" : "";
-      selectionColor =
-        delta > 0 ? "#16a34a" : delta < 0 ? "#dc2626" : undefined; // green / red
-
-      const absText = formatChangeValue(delta);
-      const pctText =
-        pct == null ? "" : ` (${pct > 0 ? "+" : ""}${pct.toFixed(2)}%)`;
-
-      selectionText = `${x[startIdx]} → ${x[endIdx]}: ${arrow} ${absText}${pctText}`;
-    }
   }
 
   const option: any = {
@@ -360,38 +424,69 @@ export const ChartPanel: React.FC<Props> = ({
     ],
   };
 
+  const rangeChip = (() => {
+    if (!rangeSummary) return null;
+
+    const { delta, pctChange, startLabel, endLabel } = rangeSummary;
+
+    const chipClass =
+      "metric-card__delta-chip" +
+      (delta > 0
+        ? " metric-card__delta-chip--up"
+        : delta < 0
+        ? " metric-card__delta-chip--down"
+        : "");
+
+    const amountText = `${delta > 0 ? "+" : ""}${formatValueForDisplay(delta)}`;
+    const pctText =
+      pctChange != null && Number.isFinite(pctChange)
+        ? `${pctChange > 0 ? "+" : ""}${pctChange.toFixed(1)}%`
+        : null;
+
+    return (
+      <span
+        className={chipClass}
+        style={{
+          whiteSpace: "nowrap",
+          marginLeft: 8,
+          alignSelf: "flex-start",
+          opacity: isDragging ? 1 : 0.95,
+        }}
+      >
+        {amountText}
+        {pctText ? ` (${pctText})` : ""}
+        <span className="metric-card__delta-label"> {startLabel} → {endLabel}</span>
+      </span>
+    );
+  })();
+
   return (
     <div className="chart-panel">
-      <div className="chart-panel__title">
-        {title}
-        {selectionText && (
-          <span
-            className="chart-panel__selection-summary"
-            style={{
-              marginLeft: 8,
-              fontSize: 11,
-              fontWeight: 500,
-              whiteSpace: "nowrap",
-              color: selectionColor,
-            }}
-          >
-            {selectionText}
-          </span>
-        )}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 10,
+        }}
+      >
+        <div
+          className="chart-panel__title"
+          style={{ marginBottom: 0, flex: "1 1 auto" }}
+        >
+          {title}
+        </div>
+        {rangeChip}
       </div>
+
       <ReactECharts
+        ref={chartRef}
+        onChartReady={() => setChartReady(true)}
         option={option}
         notMerge
         lazyUpdate
-        style={{
-          width: "100%",
-          height: 190,
-          cursor: isDragging ? "crosshair" : "default",
-        }}
-        onChartReady={(chart) => {
-          chartRef.current = chart;
-        }}
-        onEvents={onEvents}
+        style={{ width: "100%", height: 190 }}
       />
     </div>
   );
