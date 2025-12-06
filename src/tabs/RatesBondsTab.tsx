@@ -129,7 +129,7 @@ export const RatesBondsTab: React.FC = () => {
           step
         />
         <ChartPanel
-          title="Overnight repo volume (BoC repo operations, billions)"
+          title="Overnight repo volume (billions)"
           series={repoSeries}
           valueKey="value"
           clampYMinToZero
