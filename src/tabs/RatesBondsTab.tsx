@@ -57,6 +57,15 @@ export const RatesBondsTab: React.FC = () => {
     [data]
   );
 
+  const repoSeries: PanelPoint[] = useMemo(
+    () =>
+      trimLastYears(
+        data.filter((p) => p.metric === "repo_volume" && p.region === REGION),
+        10
+      ),
+    [data]
+  );
+
   const gov2Series: PanelPoint[] = useMemo(
     () =>
       trimLastYears(
@@ -80,7 +89,7 @@ export const RatesBondsTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Rates</h1>
         <p className="tab__subtitle">
-          Bank of Canada policy rate, 5-year mortgage rate and Government of
+          Bank of Canada policy rate, 5-year mortgage rate, overnight repo volume, and Government of
           Canada bond yields (Bank of Canada)
         </p>
       </header>
@@ -117,6 +126,12 @@ export const RatesBondsTab: React.FC = () => {
           treatAsPercentScale
           clampYMinToZero
           step
+        />
+        <ChartPanel
+          title="Overnight repo volume (BoC repo operations, billions)"
+          series={repoSeries}
+          valueKey="value"
+          clampYMinToZero
         />
         <ChartPanel
           title="2-year Government bond yield"
