@@ -44,6 +44,7 @@ function formatRangeDelta(
 
 function parseRgbLike(color: string): { r: number; g: number; b: number } | null {
   const c = color.trim();
+
   const rgbMatch = c.match(
     /^rgba?\(\s*([0-9]{1,3})\s*[, ]\s*([0-9]{1,3})\s*[, ]\s*([0-9]{1,3})(?:\s*[,/]\s*([0-9.]+))?\s*\)$/
   );
@@ -85,12 +86,16 @@ export const ChartPanel: React.FC<Props> = ({
   treatAsPercentScale,
   clampYMinToZero = false,
 }) => {
+  // Defensive: some tabs may transiently pass undefined/null during data swaps
+  const safeSeries = Array.isArray(series) ? series : [];
+
   const sorted = React.useMemo(
-    () => [...series].sort((a, b) => a.date.localeCompare(b.date)),
-    [series]
+    () => [...safeSeries].sort((a, b) => a.date.localeCompare(b.date)),
+    [safeSeries]
   );
 
   const x = React.useMemo(() => sorted.map((p) => p.date.slice(0, 7)), [sorted]);
+
   const y = React.useMemo(() => {
     return sorted.map((p) => {
       const v = p[valueKey] as number | null;
@@ -107,7 +112,7 @@ export const ChartPanel: React.FC<Props> = ({
   const isPercentScale =
     treatAsPercentScale ?? (valueKey === "mom_pct" || valueKey === "yoy_pct");
 
-  // Theme-aware tooltip colors (uses CSS vars, falls back gracefully)
+  // Theme vars (fallbacks if not present)
   const theme = React.useMemo(() => {
     const fallback = {
       surface: "rgba(255,255,255,0.92)",
@@ -117,7 +122,6 @@ export const ChartPanel: React.FC<Props> = ({
       success: "#22c55e",
       shadow: "0 10px 30px rgba(0,0,0,0.12)",
     };
-
     if (typeof window === "undefined") return fallback;
 
     const css = getComputedStyle(document.documentElement);
@@ -133,14 +137,16 @@ export const ChartPanel: React.FC<Props> = ({
     };
   }, []);
 
-  // Under-curve selection overlay gradient (darker near line, fades to transparent at bottom)
+  // Under-curve selection gradient (darker near line, fades to transparent at bottom)
   const selectionAreaGradient = React.useMemo(() => {
     const rgb = parseRgbLike(theme.text);
     let darkTheme = false;
+
     if (rgb) {
       const lum = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
       darkTheme = lum > 0.6; // light text => dark UI
     }
+
     const top = darkTheme ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.10)";
     const mid = darkTheme ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.03)";
     const bottom = "rgba(0,0,0,0.0)";
@@ -159,52 +165,90 @@ export const ChartPanel: React.FC<Props> = ({
     };
   }, [theme.text]);
 
-  // Chart instance
-  const [chartInstance, setChartInstance] = React.useState<any | null>(null);
+  const overlayEmpty = React.useMemo(() => new Array(y.length).fill(null), [y.length]);
+
+  // Chart instance (ref, not state) to avoid re-render churn
+  const chartRef = React.useRef<any | null>(null);
+  const [chartReadyTick, setChartReadyTick] = React.useState(0);
+
   const handleChartReady = React.useCallback((instance: any) => {
-    setChartInstance(instance);
+    chartRef.current = instance;
+    setChartReadyTick((t) => t + 1);
   }, []);
 
-  // Drag state held in a ref (NO React re-renders while dragging => no flicker)
+  // ResizeObserver: fixes “blank charts on non-overview tabs”
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  React.useLayoutEffect(() => {
+    const inst = chartRef.current;
+    const el = containerRef.current;
+    if (!inst || !el) return;
+    if (typeof ResizeObserver === "undefined") return;
+
+    let raf: number | null = null;
+
+    const safeResize = () => {
+      if (raf != null) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        try {
+          if (!inst?.isDisposed?.()) inst.resize();
+        } catch {
+          // no-op
+        }
+      });
+    };
+
+    // initial attempt
+    safeResize();
+
+    const ro = new ResizeObserver(() => safeResize());
+    ro.observe(el);
+
+    return () => {
+      ro.disconnect();
+      if (raf != null) cancelAnimationFrame(raf);
+    };
+  }, [chartReadyTick]);
+
+  // Drag state in ref => no React re-renders on mousemove (prevents flicker)
   const dragRef = React.useRef<{ isDragging: boolean; startIndex: number | null }>({
     isDragging: false,
     startIndex: null,
   });
 
-  const overlayEmpty = React.useMemo(() => new Array(y.length).fill(null), [y.length]);
-
-  // Reset any active drag/overlays when data changes
+  // Reset any overlays/labels when data changes (and guard disposed instances)
   React.useEffect(() => {
+    const inst = chartRef.current;
     dragRef.current = { isDragging: false, startIndex: null };
-    if (!chartInstance) return;
+
+    if (!inst || inst?.isDisposed?.()) return;
 
     try {
-      chartInstance.dispatchAction({ type: "hideTip" });
+      inst.dispatchAction({ type: "hideTip" });
     } catch {
       // no-op
     }
 
-    // Clear start line + overlay instantly
     try {
-      chartInstance.setOption(
+      inst.setOption(
         {
+          tooltip: { axisPointer: { label: { show: false } } },
           series: [
             { markLine: { data: [] } },
             { data: overlayEmpty },
           ],
-          tooltip: { axisPointer: { label: { show: false } } },
         },
         { notMerge: false, lazyUpdate: true }
       );
     } catch {
       // no-op
     }
-  }, [chartInstance, overlayEmpty, series, valueKey]);
+  }, [chartReadyTick, overlayEmpty, valueKey, safeSeries]);
 
-  // Attach ZRender events
+  // Attach ZRender events (mousedown/drag)
   React.useEffect(() => {
-    const inst = chartInstance;
-    if (!inst || !hasData || x.length === 0) return;
+    const inst = chartRef.current;
+    if (!inst || inst?.isDisposed?.()) return;
+    if (!hasData || x.length === 0) return;
 
     const zr = inst.getZr();
 
@@ -216,7 +260,6 @@ export const ChartPanel: React.FC<Props> = ({
     const closestNumericIndex = (idx: number): number | null => {
       if (idx < 0 || idx >= y.length) return null;
       if (isValidNumber(y[idx])) return idx;
-
       for (let d = 1; d < y.length; d += 1) {
         const left = idx - d;
         const right = idx + d;
@@ -230,39 +273,119 @@ export const ChartPanel: React.FC<Props> = ({
       const ox = e?.offsetX;
       const oy = e?.offsetY;
       if (typeof ox !== "number" || typeof oy !== "number") return null;
-      if (!inst.containPixel({ gridIndex: 0 }, [ox, oy])) return null;
+      if (inst?.isDisposed?.()) return null;
 
-      const converted = inst.convertFromPixel({ gridIndex: 0 }, [ox, oy]);
-      const xVal = Array.isArray(converted) ? converted[0] : converted;
+      try {
+        if (!inst.containPixel({ gridIndex: 0 }, [ox, oy])) return null;
+        const converted = inst.convertFromPixel({ gridIndex: 0 }, [ox, oy]);
+        const xVal = Array.isArray(converted) ? converted[0] : converted;
 
-      let idx: number | null = null;
-      if (typeof xVal === "number" && Number.isFinite(xVal)) idx = Math.round(xVal);
-      else if (typeof xVal === "string") {
-        const found = x.indexOf(xVal);
-        if (found >= 0) idx = found;
+        let idx: number | null = null;
+        if (typeof xVal === "number" && Number.isFinite(xVal)) idx = Math.round(xVal);
+        else if (typeof xVal === "string") {
+          const found = x.indexOf(xVal);
+          if (found >= 0) idx = found;
+        }
+        if (idx == null) return null;
+        return clampIndex(idx);
+      } catch {
+        return null;
       }
-      if (idx == null) return null;
-      return clampIndex(idx);
+    };
+
+    const showAxisPointerLabel = (show: boolean) => {
+      if (inst?.isDisposed?.()) return;
+      try {
+        inst.setOption(
+          {
+            tooltip: {
+              axisPointer: {
+                label: {
+                  show,
+                  formatter: (p: any) => (p?.value != null ? String(p.value) : ""),
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                  borderWidth: 1,
+                  color: theme.text,
+                  padding: [6, 8],
+                  borderRadius: 10,
+                },
+              },
+            },
+          },
+          { notMerge: false, lazyUpdate: true }
+        );
+      } catch {
+        // no-op
+      }
+    };
+
+    const applyStartLineInstant = (label: string) => {
+      // shows instantly (no animation / no gradual draw)
+      if (inst?.isDisposed?.()) return;
+      try {
+        inst.setOption(
+          {
+            series: [
+              {
+                markLine: {
+                  silent: true,
+                  symbol: "none",
+                  label: { show: false },
+                  animation: false,
+                  lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
+                  data: [{ xAxis: label }],
+                },
+              },
+            ],
+          },
+          { notMerge: false, lazyUpdate: true }
+        );
+      } catch {
+        // no-op
+      }
+    };
+
+    const clearStartLineInstant = () => {
+      if (inst?.isDisposed?.()) return;
+      try {
+        inst.setOption(
+          { series: [{ markLine: { data: [] } }] },
+          { notMerge: false, lazyUpdate: true }
+        );
+      } catch {
+        // no-op
+      }
+    };
+
+    const hideTip = () => {
+      if (inst?.isDisposed?.()) return;
+      try {
+        inst.dispatchAction({ type: "hideTip" });
+      } catch {
+        // no-op
+      }
     };
 
     // rAF throttle for showTip + overlay updates
     const lastTipIndexRef = { current: -1 as number };
     const pendingTipIndexRef = { current: null as null | number };
-    const tipRafRef = { current: null as null | number };
+    let tipRaf: number | null = null;
 
     const lastOverlayKeyRef = { current: "" };
-    const pendingOverlayRef = { current: null as null | { a: number; b: number } };
-    const overlayRafRef = { current: null as null | number };
+    let overlayRaf: number | null = null;
+    let pendingOverlay: null | { a: number; b: number } = null;
 
     const requestShowTip = (idx: number) => {
       if (idx === lastTipIndexRef.current) return;
       pendingTipIndexRef.current = idx;
-      if (tipRafRef.current != null) return;
 
-      tipRafRef.current = window.requestAnimationFrame(() => {
-        tipRafRef.current = null;
+      if (tipRaf != null) return;
+      tipRaf = requestAnimationFrame(() => {
+        tipRaf = null;
         const next = pendingTipIndexRef.current;
         if (next == null) return;
+        if (inst?.isDisposed?.()) return;
 
         lastTipIndexRef.current = next;
         try {
@@ -273,32 +396,15 @@ export const ChartPanel: React.FC<Props> = ({
       });
     };
 
-    const applyStartLineInstant = (label: string) => {
-      // MarkLine appears instantly (no animation)
-      inst.setOption(
-        {
-          series: [
-            {
-              markLine: {
-                silent: true,
-                symbol: "none",
-                label: { show: false },
-                animation: false,
-                lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
-                data: [{ xAxis: label }],
-              },
-            },
-          ],
-        },
-        { notMerge: false, lazyUpdate: true }
-      );
-    };
-
-    const clearStartLineInstant = () => {
-      inst.setOption(
-        { series: [{ markLine: { data: [] } }] },
-        { notMerge: false, lazyUpdate: true }
-      );
+    const clearOverlay = () => {
+      if (inst?.isDisposed?.()) return;
+      try {
+        inst.setOption({ series: [{}, { data: overlayEmpty }] }, { notMerge: false, lazyUpdate: true });
+      } catch {
+        // no-op
+      }
+      lastOverlayKeyRef.current = "";
+      pendingOverlay = null;
     };
 
     const applyUnderCurveOverlay = (a: number, b: number) => {
@@ -308,19 +414,12 @@ export const ChartPanel: React.FC<Props> = ({
         overlay[i] = Number.isFinite(v) && !Number.isNaN(v) ? v : null;
       }
 
-      inst.setOption(
-        { series: [{}, { data: overlay }] },
-        { notMerge: false, lazyUpdate: true }
-      );
-    };
-
-    const clearOverlay = () => {
-      inst.setOption(
-        { series: [{}, { data: overlayEmpty }] },
-        { notMerge: false, lazyUpdate: true }
-      );
-      lastOverlayKeyRef.current = "";
-      pendingOverlayRef.current = null;
+      if (inst?.isDisposed?.()) return;
+      try {
+        inst.setOption({ series: [{}, { data: overlay }] }, { notMerge: false, lazyUpdate: true });
+      } catch {
+        // no-op
+      }
     };
 
     const requestOverlay = (startIdx: number, curIdx: number) => {
@@ -335,42 +434,18 @@ export const ChartPanel: React.FC<Props> = ({
       const key = `${a}-${b}`;
       if (key === lastOverlayKeyRef.current) return;
 
-      pendingOverlayRef.current = { a, b };
-      if (overlayRafRef.current != null) return;
+      pendingOverlay = { a, b };
+      if (overlayRaf != null) return;
 
-      overlayRafRef.current = window.requestAnimationFrame(() => {
-        overlayRafRef.current = null;
-        const pending = pendingOverlayRef.current;
-        if (!pending) return;
-
-        const k = `${pending.a}-${pending.b}`;
+      overlayRaf = requestAnimationFrame(() => {
+        overlayRaf = null;
+        if (!pendingOverlay) return;
+        const k = `${pendingOverlay.a}-${pendingOverlay.b}`;
         if (k === lastOverlayKeyRef.current) return;
 
         lastOverlayKeyRef.current = k;
-        applyUnderCurveOverlay(pending.a, pending.b);
+        applyUnderCurveOverlay(pendingOverlay.a, pendingOverlay.b);
       });
-    };
-
-    const showAxisPointerLabel = (show: boolean) => {
-      inst.setOption(
-        {
-          tooltip: {
-            axisPointer: {
-              label: {
-                show,
-                formatter: (p: any) => (p?.value != null ? String(p.value) : ""),
-                backgroundColor: theme.surface,
-                borderColor: theme.border,
-                borderWidth: 1,
-                color: theme.text,
-                padding: [6, 8],
-                borderRadius: 10,
-              },
-            },
-          },
-        },
-        { notMerge: false, lazyUpdate: true }
-      );
     };
 
     const onMouseDown = (e: any) => {
@@ -382,9 +457,12 @@ export const ChartPanel: React.FC<Props> = ({
 
       dragRef.current = { isDragging: true, startIndex: snapIdx };
 
-      // instantly show start line + date label + tip
+      // INSTANT start line
       applyStartLineInstant(x[snapIdx]);
+
+      // show label only during drag (prevents empty hover box)
       showAxisPointerLabel(true);
+
       requestShowTip(snapIdx);
       clearOverlay();
     };
@@ -406,12 +484,7 @@ export const ChartPanel: React.FC<Props> = ({
     const resetDrag = () => {
       dragRef.current = { isDragging: false, startIndex: null };
 
-      try {
-        inst.dispatchAction({ type: "hideTip" });
-      } catch {
-        // no-op
-      }
-
+      hideTip();
       showAxisPointerLabel(false);
       clearStartLineInstant();
       clearOverlay();
@@ -419,14 +492,13 @@ export const ChartPanel: React.FC<Props> = ({
       lastTipIndexRef.current = -1;
       pendingTipIndexRef.current = null;
 
-      if (tipRafRef.current != null) {
-        window.cancelAnimationFrame(tipRafRef.current);
-        tipRafRef.current = null;
-      }
-      if (overlayRafRef.current != null) {
-        window.cancelAnimationFrame(overlayRafRef.current);
-        overlayRafRef.current = null;
-      }
+      if (tipRaf != null) cancelAnimationFrame(tipRaf);
+      tipRaf = null;
+
+      if (overlayRaf != null) cancelAnimationFrame(overlayRaf);
+      overlayRaf = null;
+
+      pendingOverlay = null;
     };
 
     zr.on("mousedown", onMouseDown);
@@ -439,10 +511,11 @@ export const ChartPanel: React.FC<Props> = ({
       zr.off("mousemove", onMouseMove);
       zr.off("mouseup", resetDrag);
       zr.off("globalout", resetDrag);
-      if (tipRafRef.current != null) window.cancelAnimationFrame(tipRafRef.current);
-      if (overlayRafRef.current != null) window.cancelAnimationFrame(overlayRafRef.current);
+
+      if (tipRaf != null) cancelAnimationFrame(tipRaf);
+      if (overlayRaf != null) cancelAnimationFrame(overlayRaf);
     };
-  }, [chartInstance, hasData, x, y, overlayEmpty, theme, selectionAreaGradient]);
+  }, [chartReadyTick, hasData, x, y, overlayEmpty, theme]);
 
   if (!hasData) {
     return (
@@ -500,10 +573,9 @@ export const ChartPanel: React.FC<Props> = ({
     return val.toFixed(2);
   };
 
-  // Memoize the option so parent re-renders don't rebuild the chart
   const option: any = React.useMemo(() => {
     return {
-      // Key: eliminate “smooth draw” + reduce tab flicker
+      // kill all “slow generate” animations
       animation: false,
       animationDuration: 0,
       animationDurationUpdate: 0,
@@ -531,7 +603,7 @@ export const ChartPanel: React.FC<Props> = ({
           type: "line",
           animation: false,
           lineStyle: { type: "dotted", opacity: 0.65, width: 1 },
-          label: { show: false }, // shown/hidden imperatively during drag
+          label: { show: false }, // shown only during drag (imperatively)
         },
 
         formatter: (params: any) => {
@@ -546,7 +618,6 @@ export const ChartPanel: React.FC<Props> = ({
           const ds = dragRef.current;
           const dragging = ds.isDragging && ds.startIndex != null && idx != null;
 
-          // When dragging, don't repeat current date header (date shows via axisPointer label)
           const header = dragging ? "" : `${axisValue}<br/>`;
           const valueLine = `<div style="font-weight: 600;">${formatValue(val)}</div>`;
 
@@ -639,9 +710,11 @@ export const ChartPanel: React.FC<Props> = ({
           smooth: !step,
           step: step ? "end" : undefined,
           z: 3,
+          // markLine is driven imperatively during drag for instant appearance
+          markLine: { data: [] },
         },
 
-        // Under-curve selection overlay (data injected imperatively during drag)
+        // Under-curve selection overlay (data injected during drag)
         {
           type: "line",
           data: overlayEmpty,
@@ -651,7 +724,6 @@ export const ChartPanel: React.FC<Props> = ({
           step: step ? "end" : undefined,
           silent: true,
           z: 2,
-
           lineStyle: { opacity: 0 },
           emphasis: { disabled: true },
           tooltip: { show: false },
@@ -667,26 +739,25 @@ export const ChartPanel: React.FC<Props> = ({
     x,
     y,
     overlayEmpty,
+    selectionAreaGradient,
+    theme,
     step,
     isPercentScale,
     valueAxisLabel,
     valueFormatter,
     tooltipValueFormatter,
-    theme,
-    selectionAreaGradient,
     yMin,
     yMax,
     interval,
   ]);
 
   return (
-    <div className="chart-panel">
+    <div className="chart-panel" ref={containerRef}>
       <div className="chart-panel__title">{title}</div>
       <ReactECharts
         option={option}
-        // IMPORTANT: avoid full option replacement (reduces flicker)
-        notMerge={false}
-        lazyUpdate={true}
+        notMerge
+        lazyUpdate
         onChartReady={handleChartReady}
         style={{ width: "100%", height: 190 }}
       />
