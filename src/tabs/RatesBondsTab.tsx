@@ -110,7 +110,7 @@ export const RatesBondsTab: React.FC = () => {
         </div>
       )}
 
-      <section className="tab__metrics">
+      <section className="tab__metrics tab__metrics--rates">
         {!loading && !snapshots.length && !error && (
           <div className="tab__status">No rate data yet.</div>
         )}
