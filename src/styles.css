@@ -146,15 +146,9 @@ body {
   gap: 8px;
 }
 
-.tab__metrics--rates {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 1rem; /* adjust spacing as you like */
-}
-
 @media (min-width: 768px) {
   .tab__metrics {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
