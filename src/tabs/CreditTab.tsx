@@ -9,8 +9,7 @@ interface CreditViewOption {
 }
 
 interface CreditCardConfig {
-  // this is still the metric id used in panel_credit.json (from Credit.py)
-  // even if we don't pass it into ChartPanel yet
+  // metric id used in panel_credit.json (from Credit.py)
   metricKey: string;
   title: string;
   description?: string;
@@ -68,7 +67,8 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
   {
     metricKey: "business_total_debt",
     title: "Total business debt",
-    description: "Total credit liabilities of private non-financial corporations.",
+    description:
+      "Total credit liabilities of private non-financial corporations.",
   },
   {
     metricKey: "business_equity",
@@ -139,12 +139,18 @@ export const CreditTab: React.FC = () => {
       {/* Cards grid – 5 cards, responsive layout */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
-          <ChartPanel
-            key={card.metricKey}
-            // We ONLY pass props that are actually in ChartPanel's Props.
-            title={card.title}
-            description={card.description}
-          />
+          <div key={card.metricKey} className="flex flex-col gap-1">
+            {card.description && (
+              <p className="text-xs text-slate-500 px-1">{card.description}</p>
+            )}
+            <ChartPanel
+              title={card.title}
+              // TODO: wire up real series for card.metricKey.
+              // For now, pass an empty series so ChartPanel renders its "no data" state.
+              series={[]}
+              valueKey="value"
+            />
+          </div>
         ))}
       </div>
     </div>
