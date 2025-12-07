@@ -188,7 +188,7 @@ def load_insolvency_series() -> Dict[str, pd.Series]:
 
     Sheet name is 'Monthly_mensuels' (with capital M).
 
-    Layout (as per your description):
+    Layout:
     - Canada aggregates are in rows 2–16; consumer row 5, business row 8.
     - First month: Jan 1987 in column C; Feb 1987 = D; etc.
 
@@ -268,6 +268,9 @@ def load_mortgage_delinquency_series() -> pd.Series:
 def load_business_dsr_from_bis() -> pd.Series:
     """
     Stub for BIS NFC DSR loader – implement later.
+
+    When implemented, return a pandas.Series indexed by quarter-start Timestamps,
+    with values in percent and name "business_nfc_dsr".
     """
     raise NotImplementedError(
         "Implement BIS NFC DSR loader (business_nfc_dsr) using BIS WS_DSR API or a local CSV."
@@ -484,24 +487,26 @@ def build_credit_panel() -> List[PanelRow]:
 # Public entrypoint used by generate_data.py
 # --------------------------------------------------------------------------------------
 
-def generate_credit() -> List[Dict]:
+def generate_credit() -> List[PanelRow]:
     """
     Entry point used by scripts/generate_data.py:
         from Credit import generate_credit
 
-    Returns a list of dict rows so it can be concatenated with other tab panels.
+    Returns a list of PanelRow instances so it can be concatenated with other tab panels.
     Also writes panel_credit.json for debugging/inspection.
     """
     rows = build_credit_panel()
-    rows_dicts = [asdict(r) for r in rows]
 
+    # Write a standalone credit panel file (for inspection / debugging)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     out_path = DATA_DIR / "panel_credit.json"
     with out_path.open("w", encoding="utf-8") as f:
-        json.dump(rows_dicts, f, ensure_ascii=False)
+        json.dump([asdict(r) for r in rows], f, ensure_ascii=False)
     print(f"[Credit] Wrote {len(rows)} rows → {out_path}")
 
-    return rows_dicts
+    # IMPORTANT: return dataclass instances, not dicts, so generate_data.py's asdict()
+    # call works as expected.
+    return rows
 
 
 if __name__ == "__main__":
