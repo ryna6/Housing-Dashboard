@@ -85,26 +85,6 @@ function formatCurrencyBillions(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
-function formatHousingTooltip(value: number): string {
-  if (!Number.isFinite(value)) return "–";
-
-  const abs = Math.abs(value);
-  let scaled = value;
-  let suffix = "";
-
-  if (abs >= 1_000_000_000) {
-    return `${(value / 1_000_000).toFixed(2)}B`;
-  }
-  return `${scaled.toFixed(1)}${suffix}`;
-  if (abs >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (abs >= 1_000) {
-    return `${(value / 1_000).toFixed(0)}K`;
-  }
-  return `${scaled.toFixed(1)}${suffix}`;
-}
-
 function formatMoneyTooltip(value: number): string {
   if (!Number.isFinite(value)) return "–";
 
@@ -113,10 +93,13 @@ function formatMoneyTooltip(value: number): string {
   let suffix = "";
   
   if (abs >= 1_000_000_000) {
-    return `$${(value / 1_000_000_000).toFixed(1)}B`;
+    return `$${(value / 1_000_000_000).toFixed(2)}B`;
   }
   if (abs >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M`;
+    return `$${(value / 1_000_000).toFixed(2)}M`;
+  }
+  if (abs >= 1_000) {
+    return `${(value / 1_000).toFixed(0)}K`;
   }
   return `$${scaled.toFixed(2)}${suffix}`;
 }
@@ -246,7 +229,7 @@ export const SupplyTab: React.FC = () => {
           series={housingStartsSeries}
           valueKey="value"
           valueFormatter={formatCompactNumber}
-          tooltipValueFormatter={formatHousingTooltip}
+          tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
         <ChartPanel
@@ -254,7 +237,7 @@ export const SupplyTab: React.FC = () => {
           series={underConstructionSeries}
           valueKey="value"
           valueFormatter={formatCompactNumber}
-          tooltipValueFormatter={formatHousingTooltip}
+          tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
         <ChartPanel
@@ -262,7 +245,7 @@ export const SupplyTab: React.FC = () => {
           series={completionsSeries}
           valueKey="value"
           valueFormatter={formatCompactNumber}
-          tooltipValueFormatter={formatHousingTooltip}
+          tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
         <ChartPanel
