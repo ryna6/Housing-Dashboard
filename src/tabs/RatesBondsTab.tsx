@@ -52,7 +52,10 @@ function formatMoneyTooltip(value: number): string {
   const abs = Math.abs(value);
   let scaled = value;
   let suffix = "";
-  
+
+  if (abs >= 1_000_000_000_000) {
+    scaled = value / 1_000_000_000_000;
+    suffix = "T";
   } else if (abs >= 1_000_000_000) {
     scaled = value / 1_000_000_000;
     suffix = "B";
