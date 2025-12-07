@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-from urllib.request import urlopen
-from urllib.parse import urlencode
-
 from dataclasses import dataclass, asdict
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
+
+from urllib.request import urlopen
+from urllib.parse import urlencode
 
 import pandas as pd
 
@@ -24,14 +23,14 @@ RAW_DATA_DIR = ROOT_DIR / "data" / "raw"
 @dataclass
 class PanelRow:
     """
-    Canonical panel-row format used by the rest of the app.
+    Canonical panel-row format used by the app.
 
     date:   YYYY-MM-01 (we normalise everything to month-start)
     region: region label ("Canada" here)
     segment: segment label ("All" for these macro series)
     metric: string key used on the frontend (e.g. "household_non_mortgage_loans")
     value:  numeric value
-    unit:   text label ("C$ billions", "%", "count", etc.)
+    unit:   text label ("C$ millions", "%", "count", etc.)
     source: short source label ("StatCan", "OSB", "CMHC", "BIS")
     mom_pct: month-over-month (or quarter-over-quarter) % change
     yoy_pct: year-over-year % change (12 periods for monthly, 4 for quarterly)
@@ -51,16 +50,14 @@ class PanelRow:
 
 
 # --------------------------------------------------------------------------------------
-# StatCan credit series (household & business) via WDS
+# StatCan credit series (household & business) via WDS (no `requests`)
 # --------------------------------------------------------------------------------------
 
 STATCAN_WDS_URL = (
     "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange"
 )
 
-# These vector IDs are the ones you listed earlier for the original credit tab.
-# If you already have a StatCan helper module, you can delete this section
-# and plug that in instead.
+# Vector IDs (same ones you were using before)
 V_HH_NON_MORTGAGE = 1231415611  # Non-mortgage loans (SA) – households
 V_HH_MORTGAGE = 1231415620      # Mortgage loans (SA) – households
 V_HH_TOTAL_CREDIT = 1231415625  # Total credit (SA) – households
@@ -81,9 +78,7 @@ def fetch_statcan_vectors(
 
         columns: ["vector_id", "date", "value"]
 
-    NOTE: This is a very small, generic helper. If you already use your own StatCan
-    wrapper elsewhere in the project, feel free to swap this out and keep the same
-    output shape.
+    Uses only stdlib (`urllib`) so we don't depend on `requests`.
     """
     ids = list(vector_ids)
     if not ids:
@@ -94,9 +89,11 @@ def fetch_statcan_vectors(
         "startRefPeriod": start_ref_period,
         "endReferencePeriod": end_ref_period,
     }
-    resp = requests.get(STATCAN_WDS_URL, params=params, timeout=30)
-    resp.raise_for_status()
-    payload = resp.json()
+    query = urlencode(params)
+    url = f"{STATCAN_WDS_URL}?{query}"
+
+    with urlopen(url) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
 
     records: List[Dict] = []
     for item in payload:
@@ -109,7 +106,6 @@ def fetch_statcan_vectors(
             if v is None:
                 continue
             date = pd.to_datetime(dp["refPer"])
-            # For these series, values are already properly scaled.
             value = float(v)
             records.append({"vector_id": vid, "date": date, "value": value})
 
@@ -156,8 +152,8 @@ def load_business_credit_from_statcan() -> Dict[str, pd.Series]:
     - business_total_debt
     - business_equity
 
-    Assumptions (based on your earlier StatCan notes):
-    - V_BUS_TOTAL_CREDIT is total *credit liabilities* of private NFCs.
+    Assumptions (same as before):
+    - V_BUS_TOTAL_CREDIT is total credit liabilities of private NFCs.
     - V_BUS_TOTAL_CREDIT_EQUITY is total credit liabilities + equity securities.
     - So equity ≈ (credit + equity) - credit.
     """
@@ -174,18 +170,14 @@ def load_business_credit_from_statcan() -> Dict[str, pd.Series]:
 
     pivot = df.pivot(index="date", columns="vector_id", values="value")
 
-    # Total business debt as you originally constructed: loans (non-mortgage + mortgage)
     business_loans = pivot[str(V_BUS_NON_MORTGAGE)] + pivot[str(V_BUS_MORTGAGE)]
-
-    # Or you can switch to V_BUS_TOTAL_CREDIT directly if you prefer.
     business_total_credit = pivot[str(V_BUS_TOTAL_CREDIT)]
 
-    # Equity ≈ (credit + equity securities) - credit
     total_credit_plus_equity = pivot[str(V_BUS_TOTAL_CREDIT_EQUITY)]
     business_equity = total_credit_plus_equity - business_total_credit
 
     return {
-        # This is what your UI calls "Total business debt"
+        # This is what the UI calls "Total business debt"
         "business_total_debt": business_total_credit,
         "business_equity": business_equity,
     }
@@ -208,11 +200,8 @@ def load_insolvency_series() -> Dict[str, pd.Series]:
 
     Returns two monthly series indexed by Timestamp:
 
-    - household_default_rate (proxy)
-    - business_default_rate (proxy)
-
-    (Currently left as raw counts; you can later normalise per 1,000 people / businesses
-    if you want, without changing the frontend metric IDs.)
+    - household_default_rate (proxy – counts)
+    - business_default_rate (proxy – counts)
     """
     df_raw = pd.read_excel(
         INSOLVENCY_XLSX,
@@ -224,7 +213,6 @@ def load_insolvency_series() -> Dict[str, pd.Series]:
     consumer_row = df_raw.iloc[4, 2:]  # C5 onwards
     business_row = df_raw.iloc[7, 2:]  # C8 onwards
 
-    # Drop trailing all-NaN columns if any
     consumer_vals = consumer_row.dropna()
     business_vals = business_row.iloc[: len(consumer_vals)].dropna()
 
@@ -260,9 +248,7 @@ def load_mortgage_delinquency_series() -> pd.Series:
     - Canada aggregate is in row 6.
     - Quarterly labels are in row 5.
     - First data point: Q3 2012 in column C (C6), Q4 2012 in D6, Q1 2013 in E6, etc.
-    - Values are already percent, so no scaling.
-
-    We don't rely on the header text; we simply generate quarters starting at 2012Q3.
+    - Values are already percent.
     """
     df_raw = pd.read_excel(
         CMHC_DELINQ_XLSX,
@@ -274,7 +260,6 @@ def load_mortgage_delinquency_series() -> pd.Series:
     values = values_row.dropna()
     n_quarters = len(values)
 
-    # Q3 2012 is 2012Q3; generate that onwards.
     quarters = pd.period_range(start="2012Q3", periods=n_quarters, freq="Q")
     dates = quarters.to_timestamp(how="start")  # first day of each quarter
 
@@ -290,34 +275,12 @@ def load_business_dsr_from_bis() -> pd.Series:
     """
     Load the non-financial corporate debt service ratio for Canada (quarterly).
 
-    This is a *stub* that you should fill in using either:
+    This is intentionally left as a stub. Implement this using:
       - BIS SDMX API (dataset: WS_DSR), or
-      - A locally downloaded BIS CSV for WS_DSR.
+      - A locally downloaded WS_DSR CSV.
 
-    The function MUST return a pandas.Series indexed by Timestamp (quarter start),
-    with float values in percent and name "business_nfc_dsr".
-
-    Example (pseudo-code using pandasdmx, not executed here):
-
-        import sdmx
-
-        client = sdmx.Client("BIS")
-        # Inspect dataflow and DSD once to find the proper key for:
-        #   frequency=Q, country=CA, sector=non-financial corporations
-        msg = client.data("WS_DSR", key="Q.CA.NFC", params={"detail": "dataonly"})
-
-        obs = []
-        for series in msg.data.series.values():
-            for (key, dp) in series.obs.items():
-                period, value = dp
-                ts = pd.Period(period, freq="Q").to_timestamp(how="start")
-                obs.append((ts, float(value)))
-
-        df = pd.DataFrame(obs, columns=["date", "value"]).set_index("date").sort_index()
-        return df["value"].rename("business_nfc_dsr")
-
-    For now, this implementation raises NotImplementedError so the rest of the
-    pipeline is explicit about where you still need to plug in BIS.
+    Return a pandas.Series indexed by Timestamp (quarter start), with float values
+    in percent and name "business_nfc_dsr".
     """
     raise NotImplementedError(
         "Implement BIS NFC DSR loader (business_nfc_dsr) using BIS WS_DSR API or a local CSV."
@@ -398,19 +361,19 @@ def build_credit_panel() -> List[PanelRow]:
     """
     Build the full credit panel for the Credit tab, consisting of:
 
-    Household tab metrics:
+    Household metrics:
       - household_non_mortgage_loans
       - household_mortgage_loans
       - household_mortgage_share_of_credit
       - household_default_rate (insolvencies)
       - household_mortgage_delinquency_rate
 
-    Business tab metrics:
+    Business metrics:
       - business_total_debt
       - business_equity
       - business_debt_to_equity
       - business_default_rate (insolvencies)
-      - business_nfc_dsr (BIS)
+      - business_nfc_dsr (BIS – if implemented)
     """
     rows: List[PanelRow] = []
 
@@ -434,6 +397,7 @@ def build_credit_panel() -> List[PanelRow]:
 
     # --- Business StatCan credit / equity ---
     bus_credit = load_business_credit_from_statcan()
+
     # total debt
     s_debt = trim_to_last_n_years(bus_credit["business_total_debt"], years=10)
     rows.extend(
@@ -459,7 +423,6 @@ def build_credit_panel() -> List[PanelRow]:
     )
 
     # Debt-to-equity (ratio, unitless)
-    # Use aligned dates where both debt and equity exist.
     aligned = pd.concat(
         [s_debt.rename("debt"), s_equity.rename("equity")], axis=1
     ).dropna()
@@ -519,7 +482,6 @@ def build_credit_panel() -> List[PanelRow]:
     try:
         nfc_dsr = load_business_dsr_from_bis()
     except NotImplementedError:
-        # Leave NFC DSR out if you haven't wired BIS yet.
         nfc_dsr = pd.Series(dtype=float)
 
     if not nfc_dsr.empty:
@@ -537,16 +499,22 @@ def build_credit_panel() -> List[PanelRow]:
     return rows
 
 
-def main() -> None:
+# --------------------------------------------------------------------------------------
+# Public entrypoint used by generate_data.py
+# --------------------------------------------------------------------------------------
+
+def generate_credit() -> None:
+    """
+    Entry point used by scripts/generate_data.py:
+        from Credit import generate_credit
+    """
     rows = build_credit_panel()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-
     out_path = DATA_DIR / "panel_credit.json"
     with out_path.open("w", encoding="utf-8") as f:
         json.dump([asdict(r) for r in rows], f, ensure_ascii=False)
-
-    print(f"Wrote {len(rows)} credit panel rows → {out_path}")
+    print(f"[Credit] Wrote {len(rows)} rows → {out_path}")
 
 
 if __name__ == "__main__":
-    main()
+    generate_credit()
