@@ -35,7 +35,7 @@ function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
 function formatCurrencyBillions(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 1_000_000_000) {
-    return `$${(value / 1_000_000_000).toFixed(2)}B`;
+    return `$${(value / 1_000_000_000).toFixed(0)}B`;
   }
   if (abs >= 1_000_000) {
     return `$${(value / 1_000_000).toFixed(0)}M`;
@@ -44,24 +44,6 @@ function formatCurrencyBillions(value: number): string {
     return `$${(value / 1_000).toFixed(0)}K`;
   }
   return `$${value.toFixed(0)}`;
-}
-
-function formatMoneyTooltip(value: number): string {
-  if (!Number.isFinite(value)) return "–";
-
-  const abs = Math.abs(value);
-  let scaled = value;
-  let suffix = "";
-
-  if (abs >= 1_000_000_000_000) {
-    scaled = value / 1_000_000_000_000;
-    suffix = "T";
-  } else if (abs >= 1_000_000_000) {
-    scaled = value / 1_000_000_000;
-    suffix = "B";
-  } 
-  // 3 decimal places in the tooltip
-  return `$${scaled.toFixed(2)}${suffix}`;
 }
 
 export const RatesBondsTab: React.FC = () => {
@@ -165,7 +147,6 @@ export const RatesBondsTab: React.FC = () => {
           series={repoSeries}
           valueKey="value"
           valueFormatter={formatCurrencyBillions}
-          tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
         <ChartPanel
