@@ -132,7 +132,7 @@ function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
  * Compact currency formatter for large CAD series on charts
  * (cards rely on MetricSnapshotCard's internal formatting).
  */
-function formatCurrencyBillions(value: number): string {
+function formatCurrencyCompact(value: number): string {
   const abs = Math.abs(value);
   if (!Number.isFinite(value)) return "–";
 
@@ -274,7 +274,7 @@ export const CreditTab: React.FC = () => {
             series={series}
             valueKey="value"
             valueFormatter={
-              config.useCurrencyFormatter ? formatCurrencyBillions : undefined
+              config.useCurrencyFormatter ? formatCurrencyCompact : undefined
             }
             treatAsPercentScale={config.treatAsPercent}
             tooltipValueFormatter={formatMoneyTooltip}
