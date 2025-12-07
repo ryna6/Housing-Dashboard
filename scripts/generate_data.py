@@ -1,66 +1,77 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, List
 
-# Import the tab-specific generators
 from Overview import generate_overview
 from Prices import generate_prices
-from SalesListings import generate_sales
+from Sales import generate_sales
 from Rentals import generate_rentals
-from RatesBonds import generate_rates
-from InflationLabour import generate_inflation
+from Rates import generate_rates
+from Inflation import generate_inflation
 from Credit import generate_credit
 from Market import generate_market
 from Supply import generate_supply
 
 
-# Root paths
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "data" / "processed"
 
 
 def write_json(path: Path, rows: List[Any]) -> None:
     """
-    Write a list of dataclass rows to JSON.
-    Assumes each element in `rows` is a dataclass (PanelRow-style).
+    Write a panel (list of rows) to JSON.
+
+    Supports both:
+      - dataclass instances (uses asdict)
+      - plain dicts (passed through unchanged)
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = [asdict(r) for r in rows]
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    data = [
+        asdict(r) if is_dataclass(r) else r
+        for r in rows
+    ]
+
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
 
 
 def main() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Call each tab’s generator
+    """
+    Run all tab generators, concatenate into a single panel, and write panel.json.
+    Each generator is expected to return a list of dataclass instances (PanelRow)
+    or JSON-ready dicts.
+    """
+    # Individual tab panels
     overview = generate_overview()
     prices = generate_prices()
     sales = generate_sales()
+    rentals = generate_rentals()
     rates = generate_rates()
     inflation = generate_inflation()
     credit = generate_credit()
     market = generate_market()
     supply = generate_supply()
-    rentals = generate_rentals(prices, inflation)
 
-    panel = overview + prices + sales + rentals + rates + inflation + credit + market + supply
+    # Concatenate all rows into one big panel
+    panel = (
+        overview
+        + prices
+        + sales
+        + rentals
+        + rates
+        + inflation
+        + credit
+        + market
+        + supply
+    )
 
-    write_json(DATA_DIR / "overview.json", overview)
+    # Write combined panel
     write_json(DATA_DIR / "panel.json", panel)
-    write_json(DATA_DIR / "prices.json", prices)
-    write_json(DATA_DIR / "sales_listings.json", sales)
-    write_json(DATA_DIR / "rentals.json", rentals)
-    write_json(DATA_DIR / "rates_bonds.json", rates)
-    write_json(DATA_DIR / "inflation_labour.json", inflation)
-    write_json(DATA_DIR / "credit.json", credit)
-    write_json(DATA_DIR / "market.json", market)
-    write_json(DATA_DIR / "supply.json", supply)
-
-
-    print(f"Wrote dashboard data to {DATA_DIR}")
+    print(f"[generate_data] Wrote combined panel with {len(panel)} rows → {DATA_DIR / 'panel.json'}")
 
 
 if __name__ == "__main__":
