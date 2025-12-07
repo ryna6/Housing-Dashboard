@@ -68,7 +68,7 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
     metricKey: "business_total_debt",
     title: "Total business debt",
     description:
-      "Total credit liabilities of businesses.",
+      "Total credit liabilities of businesses",
   },
   {
     metricKey: "business_equity",
@@ -112,18 +112,18 @@ export const CreditTab: React.FC = () => {
         <div>
           <h2 className="text-xl font-semibold">Credit</h2>
           <p className="text-sm text-slate-500">
-            Explore household and business credit, defaults, and stress
-            indicators over the past 10 years.
+            Household & business credit, delinquencies, defaults, and stress indicators (Statistics Canada, Canadian Mortgage 
+            and Housing Corporation, & Innovation Science and Economic Development)
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <label htmlFor="credit-view" className="tab__regions-select">
+          <label className="tab__regions-select">
             View
           </label>
           <select
             id="credit-view"
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+            className="tab__regions-select"
             value={view}
             onChange={(e) => setView(e.target.value as CreditViewKey)}
           >
