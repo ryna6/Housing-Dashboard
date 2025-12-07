@@ -54,33 +54,27 @@ function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
 }
 
 /**
- * Compact formatter for counts, e.g. 100K, 1.2M.
- */
-function formatCompactNumber(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (abs >= 1_000) {
-    return `${(value / 1_000).toFixed(1)}K`;
-  }
-  return value.toFixed(0);
-}
-
-/**
  * Compact formatter for CAD flows in billions,
  * e.g. $18.2B, falling back to M/K for smaller values.
  */
 function formatCurrencyBillions(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 1_000_000_000) {
-    return `$${(value / 1_000_000_000).toFixed(1)}B`;
+    return `$${(value / 1_000_000_000).toFixed(0)}B`;
   }
   if (abs >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M`;
+    return `$${(value / 1_000_000).toFixed(0)}M`;
   }
   if (abs >= 1_000) {
     return `$${(value / 1_000).toFixed(0)}K`;
+  }
+  return `$${value.toFixed(0)}`;
+}
+
+function formatCompactNumber(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000) {
+    return `$${(value / 1_000).toFixed(1)}K`;
   }
   return `$${value.toFixed(0)}`;
 }
@@ -228,7 +222,7 @@ export const SupplyTab: React.FC = () => {
           title={`${housingTypeLabel} housing starts`}
           series={housingStartsSeries}
           valueKey="value"
-          valueFormatter={formatCompactNumber}
+          valueFormatter={formatCurrencyBillions}
           tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
@@ -236,7 +230,7 @@ export const SupplyTab: React.FC = () => {
           title={`${housingTypeLabel} construction`}
           series={underConstructionSeries}
           valueKey="value"
-          valueFormatter={formatCompactNumber}
+          valueFormatter={formatCurrencyBillions}
           tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
