@@ -63,7 +63,7 @@ function formatValue(value: number, unit: string): string {
   if (unit === "billions") {
     // value is stored in *dollars* (see RatesBonds.py), so convert to billions here
     const inBillions = value / 1_000_000_000;
-    return `$${inBillions.toFixed(0)}B`;   // 0 decimal places
+    return `$${inBillions.toFixed(2)}B`;   // 0 decimal places
   }
 
   if (unit === "cad") {
