@@ -160,9 +160,9 @@ def generate_rates_from_boc() -> List[PanelRow]:
         vals: List[float] = [monthly[d][series_id] for d in month_keys]
 
         
-        # Convert repo volume from millions → billions, BEFORE computing MoM/YoY/MA3
+        # Convert repo volume from hundred thousands → billions, BEFORE computing MoM/YoY/MA3
         if metric == "repo_volume":
-            vals = [v * 1000000 for v in vals]  # millions → billions
+            vals = [v * 1000000 for v in vals]  # hundred thousands → billions
         
         mom, yoy, ma3 = compute_changes(vals)
 
