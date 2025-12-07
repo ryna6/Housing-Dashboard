@@ -700,7 +700,6 @@ export const ChartPanel: React.FC<Props> = ({
       <div className="chart-panel__title">{title}</div>
       <ReactECharts
         option={option}
-        notMerge
         lazyUpdate
         onChartReady={handleChartReady}
         style={{ width: "100%", height: 190 }}
