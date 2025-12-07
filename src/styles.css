@@ -148,14 +148,13 @@ body {
 
 @media (min-width: 768px) {
   .tab__metrics {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 /* NEW: allow specific tabs to show all cards in a single row on wide screens */
 @media (min-width: 1024px) {
   .tab__metrics.tab__metrics--wide {
-    /* Inflation has 5 overview cards */
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
   /* Prices tab: 3 overview cards should span the full width on desktop */
