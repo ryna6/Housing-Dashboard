@@ -57,7 +57,7 @@ function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
  * Compact formatter for CAD flows in billions,
  * e.g. $18.2B, falling back to M/K for smaller values.
  */
-function formatCurrencyBillions(value: number): string {
+function formatCurrencyCompact(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 1_000_000_000) {
     return `$${(value / 1_000_000_000).toFixed(0)}B`;
@@ -71,31 +71,25 @@ function formatCurrencyBillions(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
-function formatCompactNumber(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 1_000) {
-    return `$${(value / 1_000).toFixed(1)}K`;
-  }
-  return `$${value.toFixed(0)}`;
-}
-
 function formatMoneyTooltip(value: number): string {
   if (!Number.isFinite(value)) return "–";
 
   const abs = Math.abs(value);
   let scaled = value;
   let suffix = "";
-  
+
   if (abs >= 1_000_000_000) {
-    return `$${(value / 1_000_000_000).toFixed(2)}B`;
-  }
-  if (abs >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(2)}M`;
-  }
-  if (abs >= 1_000) {
-    return `${(value / 1_000).toFixed(0)}K`;
-  }
-  return `$${scaled.toFixed(2)}${suffix}`;
+    scaled = value / 1_000_000_000;
+    suffix = "B";
+  } else if (abs >= 1_000_000) {
+    scaled = value / 1_000_000;
+    suffix = "M";
+  } 
+  else if (abs >= 1_000) {
+    scaled = value / 1_000;
+    suffix = "K";
+  } 
+  return `$${scaled.toFixed(1)}${suffix}`;
 }
 
 export const SupplyTab: React.FC = () => {
@@ -222,7 +216,7 @@ export const SupplyTab: React.FC = () => {
           title={`${housingTypeLabel} housing starts`}
           series={housingStartsSeries}
           valueKey="value"
-          valueFormatter={formatCurrencyBillions}
+          valueFormatter={formatCurrencyCompact}
           tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
@@ -230,7 +224,7 @@ export const SupplyTab: React.FC = () => {
           title={`${housingTypeLabel} construction`}
           series={underConstructionSeries}
           valueKey="value"
-          valueFormatter={formatCurrencyBillions}
+          valueFormatter={formatCurrencyCompact}
           tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
@@ -238,7 +232,7 @@ export const SupplyTab: React.FC = () => {
           title={`${housingTypeLabel} completions`}
           series={completionsSeries}
           valueKey="value"
-          valueFormatter={formatCompactNumber}
+          valueFormatter={formatCurrencyCompact}
           tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
@@ -246,7 +240,7 @@ export const SupplyTab: React.FC = () => {
           title={`${housingTypeLabel} investment`}
           series={investmentSeries}
           valueKey="value"
-          valueFormatter={formatCurrencyBillions}
+          valueFormatter={formatCurrencyCompact}
           tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
