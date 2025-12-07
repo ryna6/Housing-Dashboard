@@ -183,10 +183,17 @@ export const ChartPanel: React.FC<Props> = ({
     dragRef.current = dragState;
   }, [dragState]);
 
-  // Reset on data/metric change
+  // Reset drag selection only if there *was* an active selection
   React.useEffect(() => {
-    setDragState({ startIndex: null, isDragging: false });
-  }, [series, valueKey]);
+  setDragState((prev) => {
+    // If we’re already idle with no start index, don’t trigger another render
+    if (!prev.isDragging && prev.startIndex == null) {
+      return prev; // return previous object → React skips re-render
+    }
+
+    return { startIndex: null, isDragging: false };
+  });
+}, [series, valueKey]);
 
   const xKey = x.join("|");
 
