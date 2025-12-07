@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from "react";
-import type { PanelPoint } from "../data/types";
+import React, { useState } from "react";
 import { ChartPanel } from "../components/ChartPanel";
-import { useTabData } from "./useTabData";
+
+type CreditViewKey = "household" | "business";
 
 interface CreditViewOption {
   key: CreditViewKey;
@@ -33,32 +33,27 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
   {
     metricKey: "household_non_mortgage_loans",
     title: "Non-mortgage loans",
-    description:
-      "Household non-mortgage credit (consumer credit, lines of credit, etc.).",
+    description: "Household non-mortgage credit",
   },
   {
     metricKey: "household_mortgage_loans",
     title: "Mortgage loans",
-    description:
-      "Total residential mortgage debt outstanding held by households.",
+    description: "Household mortgage debt",
   },
   {
     metricKey: "household_mortgage_share_of_credit",
     title: "Mortgage share of household credit",
-    description:
-      "Mortgages as a share of total household credit (mortgage + non-mortgage).",
+    description: "Mortgages share of total household credit",
   },
   {
     metricKey: "household_default_rate",
     title: "Household default rate",
-    description:
-      "Consumer insolvency counts (bankruptcies + proposals), used as a proxy for household credit defaults.",
+    description: "Consumer default rate .",
   },
   {
     metricKey: "household_mortgage_delinquency_rate",
     title: "Mortgage delinquency rate",
-    description:
-      "Share of residential mortgages that are 90+ days in arrears (quarterly, CMHC).",
+    description: "Mortgage delinquency rate",
   },
 ];
 
@@ -67,32 +62,27 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
   {
     metricKey: "business_total_debt",
     title: "Total business debt",
-    description:
-      "Total credit liabilities of private non-financial corporations.",
+    description: "Total credit liabilities of businesses",
   },
   {
     metricKey: "business_equity",
     title: "Business equity",
-    description:
-      "Equity liabilities of private non-financial corporations (approx. equity securities component).",
+    description: "Equity liabilities of businesses",
   },
   {
     metricKey: "business_debt_to_equity",
     title: "Debt-to-equity ratio",
-    description:
-      "Leverage ratio for private non-financial corporations (debt / equity).",
+    description: "Debt to equity ratio",
   },
   {
     metricKey: "business_default_rate",
     title: "Business default rate",
-    description:
-      "Business insolvency counts (bankruptcies + proposals), used as a proxy for corporate defaults.",
+    description: "Business default rate",
   },
   {
     metricKey: "business_nfc_dsr",
     title: "Non-financial corporate DSR",
-    description:
-      "Debt service ratio for non-financial corporations: share of income used to service debt (BIS, quarterly).",
+    description: "Debt service ratio for businesses",
   },
 ];
 
@@ -100,50 +90,28 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
 // CreditTab component
 // -----------------------------------------------------------------------------
 
-export function CreditTab() {
-  const { data, loading, error } = useTabData("credit");
+export const CreditTab: React.FC = () => {
   const [view, setView] = useState<CreditViewKey>("household");
 
-  const currentCards = view === "household" ? HOUSEHOLD_CARDS : BUSINESS_CARDS;
+  const cards = view === "household" ? HOUSEHOLD_CARDS : BUSINESS_CARDS;
 
-  // Pre-build series per metric from the credit dataset
-  const seriesByMetric = useMemo(() => {
-    const grouped: Record<string, PanelPoint[]> = {};
-
-    if (!data || data.length === 0) {
-      return grouped;
-    }
-
-    for (const card of ALL_CARD_CONFIGS) {
-      const metricSeries = data.filter((p) => p.metric === card.metricKey);
-      grouped[card.metricKey] = trimLastYears(metricSeries, 10);
-    }
-
-    return grouped;
-  }, [data]);
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header row: title + subtitle + view selector */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Credit</h2>
-          <p className="text-sm text-slate-500">
-            Household & business credit, delinquencies, defaults, and stress
-            indicators (Statistics Canada, Canadian Mortgage and Housing 
-            Corporation, & Innovation Science and Economic Development)
-          </p>
-        </div>
+    <div className="tab">
+      <header className="tab__header">
+        <h1 className="tab__title">Credit</h1>
+        <p className="tab__subtitle">
+          Household & business credit, delinquencies, defaults, and stress
+          indicators (Statistics Canada, Canadian Mortgage and Housing
+          Corporation, & Innovation Science and Economic Development)
+        </p>
+      </header>
 
-        <div className="flex items-center gap-2">
-          <label
-            htmlFor="credit-view"
-            className="text-sm text-slate-600 whitespace-nowrap"
-          >
-            View
-          </label>
+      <div className="tab__controls">
+        <div className="tab__regions-group">
+          <span className="tab__regions-label">View:</span>
           <select
             id="credit-view"
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+            className="tab__regions-select"
             value={view}
             onChange={(e) => setView(e.target.value as CreditViewKey)}
           >
@@ -161,7 +129,7 @@ export function CreditTab() {
         {cards.map((card) => (
           <div key={card.metricKey} className="flex flex-col gap-1">
             {card.description && (
-              <p className="px-1 text-xs text-slate-500">{card.description}</p>
+              <p className="text-xs text-slate-500 px-1">{card.description}</p>
             )}
             <ChartPanel
               title={card.title}
