@@ -106,27 +106,26 @@ export const CreditTab: React.FC = () => {
   const cards = view === "household" ? HOUSEHOLD_CARDS : BUSINESS_CARDS;
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header row: title + view selector */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Credit</h2>
-          <p className="text-sm text-slate-500">
+    <div className="tab">
+      <header className="tab__header">
+        <h1 className="tab__title">Rentals</h1>
+          <p className="tab__subtitle">
             Household & business credit, delinquencies, defaults, and stress indicators (Statistics Canada, Canadian Mortgage 
             and Housing Corporation, & Innovation Science and Economic Development)
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <label className="tab__regions-select">
-            View
-          </label>
-          <select
-            id="credit-view"
-            className="tab__regions-select"
-            value={view}
-            onChange={(e) => setView(e.target.value as CreditViewKey)}
-          >
+        <div className="tab__controls">
+          <div className="tab__regions-group">
+            <label className="tab__regions-select">
+              View
+            </label>
+            <select
+              id="credit-view"
+              className="tab__regions-select"
+              value={view}
+              onChange={(e) => setView(e.target.value as CreditViewKey)}
+            >
             {CREDIT_VIEW_OPTIONS.map((opt) => (
               <option key={opt.key} value={opt.key}>
                 {opt.label}
