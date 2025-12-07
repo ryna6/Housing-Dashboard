@@ -139,18 +139,10 @@ function labelForMetric(metric: string): string {
       return "5y mortgage rate";
     case "repo_volume":
       return "Overnight repo volume";
-
     case "gov_2y_yield":
       return "2y GoC yield";
-    case "gov_5y_yield":
-      return "5y GoC yield";
     case "gov_10y_yield":
       return "10y GoC yield";
-
-    case "avg_rent":
-      return "Average rent";
-    case "vacancy_rate":
-      return "Vacancy rate";
 
     case "cpi_headline":
       return "Headline CPI";
@@ -164,6 +156,8 @@ function labelForMetric(metric: string): string {
       return "Unemployment Rate";
 
     // Rentals tab metrics
+    case "avg_rent":
+      return "Average rent";
     case "rent_level":
       return "Rent cost";
     case "rent_to_income":
@@ -275,7 +269,7 @@ export const MetricSnapshotCard: React.FC<Props> = ({
               )}
               <span className="metric-card__delta-label">
                 {" "}
-                vs previous rate
+                vs previous
               </span>
             </span>
           </div>
