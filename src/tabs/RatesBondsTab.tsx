@@ -59,7 +59,6 @@ function formatMoneyTooltip(value: number): string {
     scaled = value / 1_000_000;
     suffix = "M";
   } 
-  // 3 decimal places in the tooltip
   return `$${scaled.toFixed(2)}${suffix}`;
 }
 
