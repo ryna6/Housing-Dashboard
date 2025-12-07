@@ -108,32 +108,32 @@ export const CreditTab: React.FC = () => {
   return (
     <div className="tab">
       <header className="tab__header">
-        <h1 className="tab__title">Rentals</h1>
-          <p className="tab__subtitle">
-            Household & business credit, delinquencies, defaults, and stress indicators (Statistics Canada, Canadian Mortgage 
-            and Housing Corporation, & Innovation Science and Economic Development)
-          </p>
-        </div>
+        <h1 className="tab__title">Credit</h1>
+        <p className="tab__subtitle">
+          Household & business credit, delinquencies, defaults, and stress indicators (Statistics Canada, Canadian Mortgage 
+          and Housing Corporation, & Innovation Science and Economic Development)
+        </p>
+     </div>
 
-        <div className="tab__controls">
-          <div className="tab__regions-group">
-            <label className="tab__regions-select">
-              View
-            </label>
-            <select
-              id="credit-view"
-              className="tab__regions-select"
-              value={view}
-              onChange={(e) => setView(e.target.value as CreditViewKey)}
-            >
-            {CREDIT_VIEW_OPTIONS.map((opt) => (
-              <option key={opt.key} value={opt.key}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+     <div className="tab__controls">
+       <div className="tab__regions-group">
+       <label className="tab__regions-select">
+          View
+        </label>
+          <select
+            id="credit-view"
+            className="tab__regions-select"
+            value={view}
+            onChange={(e) => setView(e.target.value as CreditViewKey)}
+          >
+          {CREDIT_VIEW_OPTIONS.map((opt) => (
+            <option key={opt.key} value={opt.key}>
+               {opt.label}
+            </option>
+           ))}
+           </select>
         </div>
-      </div>
+     </div>
 
       {/* Cards grid – 5 cards, responsive layout */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
