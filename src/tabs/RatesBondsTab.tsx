@@ -36,17 +36,11 @@ function formatCurrencyCompact(value: number): string {
   const abs = Math.abs(value);
   if (!Number.isFinite(value)) return "–";
 
-  if (abs >= 1_000_000_000_000) {
-    return `$${(value / 1_000_000_000_000).toFixed(1)}T`;
-  }
   if (abs >= 1_000_000_000) {
-    return `$${(value / 1_000_000_000).toFixed(1)}B`;
+    return `$${(value / 1_000_000_000).toFixed(0)}B`;
   }
   if (abs >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (abs >= 1_000) {
-    return `$${(value / 1_000).toFixed(0)}K`;
+    return `$${(value / 1_000_000).toFixed(0)}M`;
   }
   return `$${value.toFixed(0)}`;
 }
@@ -58,12 +52,12 @@ function formatMoneyTooltip(value: number): string {
   let scaled = value;
   let suffix = "";
 
-  if (abs >= 1_000_000_000_000) {
-    scaled = value / 1_000_000_000_000;
-    suffix = "T";
-  } else if (abs >= 1_000_000_000) {
+  if (abs >= 1_000_000_000) {
     scaled = value / 1_000_000_000;
     suffix = "B";
+  } else if (abs >= 1_000_000) {
+    scaled = value / 1_000_000;
+    suffix = "M";
   } 
   // 3 decimal places in the tooltip
   return `$${scaled.toFixed(2)}${suffix}`;
