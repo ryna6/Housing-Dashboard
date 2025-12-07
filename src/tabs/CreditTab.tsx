@@ -128,10 +128,11 @@ export const CreditTab: React.FC = () => {
       </div>
 
       {/* Cards grid – 5 cards side by side on desktop */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+      <div className="tab__charts">
         {cards.map((card) => (
           <div key={card.metricKey}>
             <ChartPanel
+              key={card.metricKey}
               title={card.title}
               // TODO: wire up real series for card.metricKey.
               // For now, pass an empty series so ChartPanel renders its "no data" state.
