@@ -24,6 +24,17 @@ RAW_DATA_DIR = ROOT_DIR / "data" / "raw"
 class PanelRow:
     """
     Canonical panel-row format used by the app.
+
+    date:   YYYY-MM-01 (we normalise everything to month-start)
+    region: region label ("Canada" here)
+    segment: segment label ("All" for these macro series)
+    metric: string key used on the frontend (e.g. "household_non_mortgage_loans")
+    value:  numeric value
+    unit:   text label ("C$ millions", "%", "count", etc.)
+    source: short source label ("StatCan", "OSB", "CMHC", "BIS")
+    mom_pct: month-over-month (or quarter-over-quarter) % change
+    yoy_pct: year-over-year % change (12 periods for monthly, 4 for quarterly)
+    ma3:   3-period moving average
     """
 
     date: str
@@ -175,7 +186,7 @@ def load_insolvency_series() -> Dict[str, pd.Series]:
     """
     Load monthly consumer + business insolvency counts from the ISED/OSB file.
 
-    Sheet name is now 'Monthly_mensuels' (with capital M).
+    Sheet name is 'Monthly_mensuels' (with capital M).
 
     Layout (as per your description):
     - Canada aggregates are in rows 2–16; consumer row 5, business row 8.
@@ -188,7 +199,7 @@ def load_insolvency_series() -> Dict[str, pd.Series]:
     """
     df_raw = pd.read_excel(
         INSOLVENCY_XLSX,
-        sheet_name="Monthly_mensuels",  # updated sheet name
+        sheet_name="Monthly_mensuels",
         header=None,
     )
 
@@ -226,6 +237,12 @@ CMHC_DELINQ_XLSX = RAW_DATA_DIR / "CMHC Delinquency Rate 2012-2025.xlsx"
 def load_mortgage_delinquency_series() -> pd.Series:
     """
     Load quarterly mortgage delinquency rate (% of mortgages 90+ days in arrears).
+
+    - Sheet: "Mortgage delinquency rate"
+    - Canada aggregate is in row 6.
+    - Quarterly labels are in row 5.
+    - First data point: Q3 2012 in column C (C6), Q4 2012 in D6, Q1 2013 in E6, etc.
+    - Values are already percent.
     """
     df_raw = pd.read_excel(
         CMHC_DELINQ_XLSX,
@@ -280,6 +297,8 @@ def series_to_panel_rows(
 ) -> List[PanelRow]:
     """
     Convert a time series into a list of PanelRow objects, computing simple MoM/QoQ and YoY.
+
+    freq: "M" (monthly) or "Q" (quarterly) – controls YoY lag and MA window.
     """
     if series.empty:
         return []
@@ -326,6 +345,23 @@ def series_to_panel_rows(
 # --------------------------------------------------------------------------------------
 
 def build_credit_panel() -> List[PanelRow]:
+    """
+    Build the full credit panel for the Credit tab, consisting of:
+
+    Household metrics:
+      - household_non_mortgage_loans
+      - household_mortgage_loans
+      - household_mortgage_share_of_credit
+      - household_default_rate (insolvencies)
+      - household_mortgage_delinquency_rate
+
+    Business metrics:
+      - business_total_debt
+      - business_equity
+      - business_debt_to_equity
+      - business_default_rate (insolvencies)
+      - business_nfc_dsr (BIS – if implemented)
+    """
     rows: List[PanelRow] = []
 
     # --- Household StatCan credit ---
@@ -448,13 +484,24 @@ def build_credit_panel() -> List[PanelRow]:
 # Public entrypoint used by generate_data.py
 # --------------------------------------------------------------------------------------
 
-def generate_credit() -> None:
+def generate_credit() -> List[Dict]:
+    """
+    Entry point used by scripts/generate_data.py:
+        from Credit import generate_credit
+
+    Returns a list of dict rows so it can be concatenated with other tab panels.
+    Also writes panel_credit.json for debugging/inspection.
+    """
     rows = build_credit_panel()
+    rows_dicts = [asdict(r) for r in rows]
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     out_path = DATA_DIR / "panel_credit.json"
     with out_path.open("w", encoding="utf-8") as f:
-        json.dump([asdict(r) for r in rows], f, ensure_ascii=False)
+        json.dump(rows_dicts, f, ensure_ascii=False)
     print(f"[Credit] Wrote {len(rows)} rows → {out_path}")
+
+    return rows_dicts
 
 
 if __name__ == "__main__":
