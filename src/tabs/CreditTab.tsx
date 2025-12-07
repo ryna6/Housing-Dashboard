@@ -12,7 +12,8 @@ interface CreditCardConfig {
   // metric id used in panel_credit.json (from Credit.py)
   metricKey: string;
   title: string;
-  description?: string;
+  // which field from PanelPoint to plot: level vs MoM/QoQ change
+  valueKey?: "value" | "mom_pct" | "yoy_pct";
 }
 
 // -----------------------------------------------------------------------------
@@ -33,27 +34,29 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
   {
     metricKey: "household_non_mortgage_loans",
     title: "Non-mortgage loans",
-    description: "Household non-mortgage credit",
+    // levels make more sense here
+    valueKey: "value",
   },
   {
     metricKey: "household_mortgage_loans",
     title: "Mortgage loans",
-    description: "Household mortgage debt",
+    valueKey: "value",
   },
   {
     metricKey: "household_mortgage_share_of_credit",
     title: "Mortgage share of household credit",
-    description: "Mortgages share of total household credit",
+    valueKey: "value",
   },
   {
     metricKey: "household_default_rate",
-    title: "Household default rate",
-    description: "Consumer default rate .",
+    title: "Household default rate (period change)",
+    // show period-on-period change (MoM / QoQ depending on frequency)
+    valueKey: "mom_pct",
   },
   {
     metricKey: "household_mortgage_delinquency_rate",
-    title: "Mortgage delinquency rate",
-    description: "Mortgage delinquency rate",
+    title: "Mortgage delinquency rate (period change)",
+    valueKey: "mom_pct",
   },
 ];
 
@@ -62,27 +65,27 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
   {
     metricKey: "business_total_debt",
     title: "Total business debt",
-    description: "Total credit liabilities of businesses",
+    valueKey: "value",
   },
   {
     metricKey: "business_equity",
     title: "Business equity",
-    description: "Equity liabilities of businesses",
+    valueKey: "value",
   },
   {
     metricKey: "business_debt_to_equity",
     title: "Debt-to-equity ratio",
-    description: "Debt to equity ratio",
+    valueKey: "value",
   },
   {
     metricKey: "business_default_rate",
-    title: "Business default rate",
-    description: "Business default rate",
+    title: "Business default rate (period change)",
+    valueKey: "mom_pct",
   },
   {
     metricKey: "business_nfc_dsr",
-    title: "Non-financial corporate DSR",
-    description: "Debt service ratio for businesses",
+    title: "Non-financial corporate DSR (period change)",
+    valueKey: "mom_pct",
   },
 ];
 
@@ -124,19 +127,16 @@ export const CreditTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Cards grid – 5 cards, responsive layout */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {/* Cards grid – 5 cards side by side on desktop */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
         {cards.map((card) => (
-          <div key={card.metricKey} className="flex flex-col gap-1">
-            {card.description && (
-              <p className="text-xs text-slate-500 px-1">{card.description}</p>
-            )}
+          <div key={card.metricKey}>
             <ChartPanel
               title={card.title}
               // TODO: wire up real series for card.metricKey.
               // For now, pass an empty series so ChartPanel renders its "no data" state.
               series={[]}
-              valueKey="value"
+              valueKey={card.valueKey ?? "value"}
             />
           </div>
         ))}
