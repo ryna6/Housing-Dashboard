@@ -9,7 +9,8 @@ interface CreditViewOption {
 }
 
 interface CreditCardConfig {
-  // this is the metric id used in panel_credit.json (from Credit.py)
+  // this is still the metric id used in panel_credit.json (from Credit.py)
+  // even if we don't pass it into ChartPanel yet
   metricKey: string;
   title: string;
   description?: string;
@@ -140,9 +141,7 @@ export const CreditTab: React.FC = () => {
         {cards.map((card) => (
           <ChartPanel
             key={card.metricKey}
-            // IMPORTANT: `ChartPanel` does NOT have a `metricKey` prop,
-            // so we pass the metric id using the prop name it expects: `metric`.
-            metric={card.metricKey}
+            // We ONLY pass props that are actually in ChartPanel's Props.
             title={card.title}
             description={card.description}
           />
