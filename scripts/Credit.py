@@ -1,36 +1,39 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, asdict
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional
 
-import urllib.request
-from urllib.error import HTTPError, URLError
+import pandas as pd
+import requests
 
-# Root paths
+
+# --------------------------------------------------------------------------------------
+# Paths & basic types
+# --------------------------------------------------------------------------------------
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "data" / "processed"
-
-# StatCan WDS endpoint
-WDS_URL = "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods"
+RAW_DATA_DIR = ROOT_DIR / "data" / "raw"
 
 
 @dataclass
 class PanelRow:
     """
-    Shared panel row model.
+    Canonical panel-row format used by the rest of the app.
 
-    date:   "YYYY-MM-01" (first of month)
-    region: e.g. "ca" for Canada
-    segment: "household" | "business" | "corporate"
-    metric: metric id string
-    value:  numeric value (level or ratio)
-    unit:   "cad" | "pct" | "ratio"
-    source: data source identifier
-    mom_pct: month-over-month % change
-    yoy_pct: year-over-year % change
-    ma3:   trailing 3-period moving average of value
+    date:   YYYY-MM-01 (we normalise everything to month-start)
+    region: region label ("Canada" here)
+    segment: segment label ("All" for these macro series)
+    metric: string key used on the frontend (e.g. "household_non_mortgage_loans")
+    value:  numeric value
+    unit:   text label ("C$ billions", "%", "count", etc.)
+    source: short source label ("StatCan", "OSB", "CMHC", "BIS")
+    mom_pct: month-over-month (or quarter-over-quarter) % change
+    yoy_pct: year-over-year % change (12 periods for monthly, 4 for quarterly)
+    ma3:   3-period moving average
     """
 
     date: str
@@ -45,430 +48,502 @@ class PanelRow:
     ma3: Optional[float]
 
 
-# ---------- generic helpers ----------
+# --------------------------------------------------------------------------------------
+# StatCan credit series (household & business) via WDS
+# --------------------------------------------------------------------------------------
+
+STATCAN_WDS_URL = (
+    "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange"
+)
+
+# These vector IDs are the ones you listed earlier for the original credit tab.
+# If you already have a StatCan helper module, you can delete this section
+# and plug that in instead.
+V_HH_NON_MORTGAGE = 1231415611  # Non-mortgage loans (SA) – households
+V_HH_MORTGAGE = 1231415620      # Mortgage loans (SA) – households
+V_HH_TOTAL_CREDIT = 1231415625  # Total credit (SA) – households
+
+V_BUS_NON_MORTGAGE = 1231415688       # Non-mortgage loans (SA) – business
+V_BUS_MORTGAGE = 1231415692           # Mortgage loans (SA) – business
+V_BUS_TOTAL_CREDIT = 1304432231       # Total credit liabilities – private NFC
+V_BUS_TOTAL_CREDIT_EQUITY = 1231415703  # Total credit liabilities + equity securities
 
 
-def _compute_changes(
-    values: List[float],
-) -> Tuple[List[Optional[float]], List[Optional[float]], List[Optional[float]]]:
+def fetch_statcan_vectors(
+    vector_ids: Iterable[int],
+    start_ref_period: str = "1980-01-01",
+    end_ref_period: str = "2100-01-01",
+) -> pd.DataFrame:
     """
-    Compute MoM %, YoY %, and 3-period moving average for a series.
+    Fetch one or more StatCan vectors via the WDS REST API and return a tidy DataFrame:
 
-    mom_pct[i] = (v[i] / v[i-1] - 1) * 100  (if previous exists and non-zero)
-    yoy_pct[i] = (v[i] / v[i-12] - 1) * 100 (if 12-month lag exists and non-zero)
-    ma3[i]     = trailing mean over last up to 3 observations
+        columns: ["vector_id", "date", "value"]
+
+    NOTE: This is a very small, generic helper. If you already use your own StatCan
+    wrapper elsewhere in the project, feel free to swap this out and keep the same
+    output shape.
     """
-    n = len(values)
-    mom: List[Optional[float]] = [None] * n
-    yoy: List[Optional[float]] = [None] * n
-    ma3: List[Optional[float]] = [None] * n
+    ids = list(vector_ids)
+    if not ids:
+        return pd.DataFrame(columns=["vector_id", "date", "value"])
 
-    for i, v in enumerate(values):
-        # MoM
-        if i > 0:
-            prev = values[i - 1]
-            if prev not in (0, 0.0):
-                mom[i] = (v / prev - 1.0) * 100.0
+    params = {
+        "vectorIds": ",".join(str(v) for v in ids),
+        "startRefPeriod": start_ref_period,
+        "endReferencePeriod": end_ref_period,
+    }
+    resp = requests.get(STATCAN_WDS_URL, params=params, timeout=30)
+    resp.raise_for_status()
+    payload = resp.json()
 
-        # YoY (12-month lag)
-        if i >= 12:
-            prev12 = values[i - 12]
-            if prev12 not in (0, 0.0):
-                yoy[i] = (v / prev12 - 1.0) * 100.0
+    records: List[Dict] = []
+    for item in payload:
+        if item.get("status") != "SUCCESS":
+            continue
+        obj = item["object"]
+        vid = str(obj["vectorId"])
+        for dp in obj.get("vectorDataPoint", []):
+            v = dp.get("value")
+            if v is None:
+                continue
+            date = pd.to_datetime(dp["refPer"])
+            # For these series, values are already properly scaled.
+            value = float(v)
+            records.append({"vector_id": vid, "date": date, "value": value})
 
-        # trailing 3-period MA (use fewer than 3 points at start)
-        start = max(0, i - 2)
-        window = values[start : i + 1]
-        ma3[i] = sum(window) / len(window)
+    df = pd.DataFrame.from_records(records)
+    if df.empty:
+        return df
 
-    return mom, yoy, ma3
+    return df.sort_values(["vector_id", "date"]).reset_index(drop=True)
 
 
-def _fetch_vectors(vector_ids: List[str], latest_n: int = 1000) -> Dict[str, Dict[str, float]]:
+def load_household_credit_from_statcan() -> Dict[str, pd.Series]:
     """
-    Fetch time series for given StatCan vector IDs via WDS.
+    Returns monthly household credit series:
 
-    Returns:
-        { "v123456": { "YYYY-MM-01": value_in_millions, ... }, ... }
+    - household_non_mortgage_loans
+    - household_mortgage_loans
+    - household_mortgage_share_of_credit
     """
-    if not vector_ids:
-        return {}
+    df = fetch_statcan_vectors(
+        [V_HH_NON_MORTGAGE, V_HH_MORTGAGE, V_HH_TOTAL_CREDIT]
+    )
+    if df.empty:
+        raise RuntimeError("No StatCan household credit data returned.")
 
-    # Map numeric id -> "v1234" form
-    id_map: Dict[int, str] = {int(v.lstrip("vV")): v for v in vector_ids}
+    pivot = df.pivot(index="date", columns="vector_id", values="value")
 
-    payload = [
-        {"vectorId": numeric_id, "latestN": latest_n}
-        for numeric_id in sorted(id_map.keys())
-    ]
-    data_bytes = json.dumps(payload).encode("utf-8")
+    hh_non_mortgage = pivot[str(V_HH_NON_MORTGAGE)]
+    hh_mortgage = pivot[str(V_HH_MORTGAGE)]
+    hh_total_credit = pivot[str(V_HH_TOTAL_CREDIT)]
 
-    req = urllib.request.Request(
-        WDS_URL,
-        data=data_bytes,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+    mortgage_share = (hh_mortgage / hh_total_credit) * 100.0
+
+    return {
+        "household_non_mortgage_loans": hh_non_mortgage,
+        "household_mortgage_loans": hh_mortgage,
+        "household_mortgage_share_of_credit": mortgage_share,
+    }
+
+
+def load_business_credit_from_statcan() -> Dict[str, pd.Series]:
+    """
+    Returns business / corporate loan + equity series:
+
+    - business_total_debt
+    - business_equity
+
+    Assumptions (based on your earlier StatCan notes):
+    - V_BUS_TOTAL_CREDIT is total *credit liabilities* of private NFCs.
+    - V_BUS_TOTAL_CREDIT_EQUITY is total credit liabilities + equity securities.
+    - So equity ≈ (credit + equity) - credit.
+    """
+    df = fetch_statcan_vectors(
+        [
+            V_BUS_NON_MORTGAGE,
+            V_BUS_MORTGAGE,
+            V_BUS_TOTAL_CREDIT,
+            V_BUS_TOTAL_CREDIT_EQUITY,
+        ]
+    )
+    if df.empty:
+        raise RuntimeError("No StatCan business credit data returned.")
+
+    pivot = df.pivot(index="date", columns="vector_id", values="value")
+
+    # Total business debt as you originally constructed: loans (non-mortgage + mortgage)
+    business_loans = pivot[str(V_BUS_NON_MORTGAGE)] + pivot[str(V_BUS_MORTGAGE)]
+
+    # Or you can switch to V_BUS_TOTAL_CREDIT directly if you prefer.
+    business_total_credit = pivot[str(V_BUS_TOTAL_CREDIT)]
+
+    # Equity ≈ (credit + equity securities) - credit
+    total_credit_plus_equity = pivot[str(V_BUS_TOTAL_CREDIT_EQUITY)]
+    business_equity = total_credit_plus_equity - business_total_credit
+
+    return {
+        # This is what your UI calls "Total business debt"
+        "business_total_debt": business_total_credit,
+        "business_equity": business_equity,
+    }
+
+
+# --------------------------------------------------------------------------------------
+# Insolvency (OSB/ISED) – default rate proxy
+# --------------------------------------------------------------------------------------
+
+INSOLVENCY_XLSX = RAW_DATA_DIR / "ISED Insolvency Data 1987-2025.xlsx"
+
+
+def load_insolvency_series() -> Dict[str, pd.Series]:
+    """
+    Load monthly consumer + business insolvency counts from the ISED/OSB file.
+
+    - Sheet: "monthly_mensuels"
+    - Canada aggregates are in rows 2–16; consumer row 5, business row 8.
+    - First month: Jan 1987 in column C; Feb 1987 = D; etc.
+
+    Returns two monthly series indexed by Timestamp:
+
+    - household_default_rate (proxy)
+    - business_default_rate (proxy)
+
+    (Currently left as raw counts; you can later normalise per 1,000 people / businesses
+    if you want, without changing the frontend metric IDs.)
+    """
+    df_raw = pd.read_excel(
+        INSOLVENCY_XLSX,
+        sheet_name="monthly_mensuels",
+        header=None,
     )
 
-    try:
-        with urllib.request.urlopen(req) as resp:
-            raw = resp.read().decode("utf-8")
-    except (HTTPError, URLError) as exc:
-        raise RuntimeError(f"Failed to fetch StatCan vectors {vector_ids}: {exc}") from exc
+    # Row index is 0-based; row 5 -> index 4, row 8 -> index 7
+    consumer_row = df_raw.iloc[4, 2:]  # C5 onwards
+    business_row = df_raw.iloc[7, 2:]  # C8 onwards
 
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid JSON from StatCan WDS for vectors {vector_ids}") from exc
+    # Drop trailing all-NaN columns if any
+    consumer_vals = consumer_row.dropna()
+    business_vals = business_row.iloc[: len(consumer_vals)].dropna()
 
-    if not isinstance(parsed, list):
-        raise RuntimeError(f"Unexpected WDS response shape: {parsed!r}")
+    n_months = len(consumer_vals)
+    start_date = pd.Timestamp(year=1987, month=1, day=1)
+    dates = pd.date_range(start=start_date, periods=n_months, freq="MS")
 
-    result: Dict[str, Dict[str, float]] = {}
+    s_household = pd.Series(
+        consumer_vals.to_numpy(dtype=float), index=dates
+    ).sort_index()
+    s_business = pd.Series(
+        business_vals.to_numpy(dtype=float), index=dates
+    ).sort_index()
 
-    # Each entry corresponds to one vector
-    for entry in parsed:
-        if not isinstance(entry, dict):
-            continue
-        if entry.get("status") != "SUCCESS":
-            # If one vector fails, we skip it (you can tighten this to raise instead)
-            continue
-
-        obj = entry.get("object") or {}
-        numeric_id = obj.get("vectorId")
-        if numeric_id is None:
-            continue
-
-        v_code = id_map.get(int(numeric_id))
-        if v_code is None:
-            continue
-
-        series: Dict[str, float] = {}
-        for dp in obj.get("vectorDataPoint", []):
-            ref_per = dp.get("refPer")
-            if not ref_per:
-                continue
-            # Monthly data are dated to first of month; normalise to YYYY-MM-01
-            date_str = ref_per[:7] + "-01"
-            try:
-                value = float(dp.get("value"))
-            except (TypeError, ValueError):
-                continue
-            series[date_str] = value
-
-        # make sure iteration order is ascending by date
-        result[v_code] = {k: series[k] for k in sorted(series.keys())}
-
-    return result
+    return {
+        "household_default_rate": s_household,
+        "business_default_rate": s_business,
+    }
 
 
-def _build_metric_rows(
-    *,
-    segment: str,
+# --------------------------------------------------------------------------------------
+# CMHC mortgage delinquency – household mortgage delinquency rate
+# --------------------------------------------------------------------------------------
+
+CMHC_DELINQ_XLSX = RAW_DATA_DIR / "CMHC Delinquency Rate 2012-2025.xlsx"
+
+
+def load_mortgage_delinquency_series() -> pd.Series:
+    """
+    Load quarterly mortgage delinquency rate (% of mortgages 90+ days in arrears).
+
+    - Sheet: "Mortgage delinquency rate"
+    - Canada aggregate is in row 6.
+    - Quarterly labels are in row 5.
+    - First data point: Q3 2012 in column C (C6), Q4 2012 in D6, Q1 2013 in E6, etc.
+    - Values are already percent, so no scaling.
+
+    We don't rely on the header text; we simply generate quarters starting at 2012Q3.
+    """
+    df_raw = pd.read_excel(
+        CMHC_DELINQ_XLSX,
+        sheet_name="Mortgage delinquency rate",
+        header=None,
+    )
+
+    values_row = df_raw.iloc[5, 2:]  # row 6 (index 5), from column C onwards
+    values = values_row.dropna()
+    n_quarters = len(values)
+
+    # Q3 2012 is 2012Q3; generate that onwards.
+    quarters = pd.period_range(start="2012Q3", periods=n_quarters, freq="Q")
+    dates = quarters.to_timestamp(how="start")  # first day of each quarter
+
+    s = pd.Series(values.to_numpy(dtype=float), index=dates).sort_index()
+    return s.rename("household_mortgage_delinquency_rate")
+
+
+# --------------------------------------------------------------------------------------
+# BIS non-financial corporate DSR – business NFC DSR (quarterly)
+# --------------------------------------------------------------------------------------
+
+def load_business_dsr_from_bis() -> pd.Series:
+    """
+    Load the non-financial corporate debt service ratio for Canada (quarterly).
+
+    This is a *stub* that you should fill in using either:
+      - BIS SDMX API (dataset: WS_DSR), or
+      - A locally downloaded BIS CSV for WS_DSR.
+
+    The function MUST return a pandas.Series indexed by Timestamp (quarter start),
+    with float values in percent and name "business_nfc_dsr".
+
+    Example (pseudo-code using pandasdmx, not executed here):
+
+        import sdmx
+
+        client = sdmx.Client("BIS")
+        # Inspect dataflow and DSD once to find the proper key for:
+        #   frequency=Q, country=CA, sector=non-financial corporations
+        msg = client.data("WS_DSR", key="Q.CA.NFC", params={"detail": "dataonly"})
+
+        obs = []
+        for series in msg.data.series.values():
+            for (key, dp) in series.obs.items():
+                period, value = dp
+                ts = pd.Period(period, freq="Q").to_timestamp(how="start")
+                obs.append((ts, float(value)))
+
+        df = pd.DataFrame(obs, columns=["date", "value"]).set_index("date").sort_index()
+        return df["value"].rename("business_nfc_dsr")
+
+    For now, this implementation raises NotImplementedError so the rest of the
+    pipeline is explicit about where you still need to plug in BIS.
+    """
+    raise NotImplementedError(
+        "Implement BIS NFC DSR loader (business_nfc_dsr) using BIS WS_DSR API or a local CSV."
+    )
+
+
+# --------------------------------------------------------------------------------------
+# Helpers: trimming + PanelRow conversion
+# --------------------------------------------------------------------------------------
+
+def trim_to_last_n_years(series: pd.Series, years: int = 10) -> pd.Series:
+    if series.empty:
+        return series
+    last_date = series.index.max()
+    cutoff = last_date - pd.DateOffset(years=years)
+    return series[series.index >= cutoff]
+
+
+def series_to_panel_rows(
+    series: pd.Series,
     metric: str,
     unit: str,
-    date_to_value: Dict[str, float],
     source: str,
+    freq: str,
+    region: str = "Canada",
+    segment: str = "All",
 ) -> List[PanelRow]:
     """
-    Convert a date->value series into PanelRow objects with MoM / YoY / MA3.
+    Convert a time series into a list of PanelRow objects, computing simple MoM/QoQ and YoY.
+
+    freq: "M" (monthly) or "Q" (quarterly) – controls YoY lag and MA window.
     """
-    if not date_to_value:
+    if series.empty:
         return []
 
-    dates = sorted(date_to_value.keys())
-    values = [date_to_value[d] for d in dates]
+    df = series.to_frame("value").sort_index()
 
-    mom, yoy, ma3 = _compute_changes(values)
+    if freq == "M":
+        df["mom_pct"] = df["value"].pct_change(1) * 100.0
+        df["yoy_pct"] = df["value"].pct_change(12) * 100.0
+        ma_window = 3
+    elif freq == "Q":
+        df["mom_pct"] = df["value"].pct_change(1) * 100.0  # QoQ
+        df["yoy_pct"] = df["value"].pct_change(4) * 100.0
+        ma_window = 3
+    else:
+        df["mom_pct"] = df["value"].pct_change(1) * 100.0
+        df["yoy_pct"] = None
+        ma_window = 3
+
+    df["ma3"] = df["value"].rolling(ma_window).mean()
 
     rows: List[PanelRow] = []
-    for dt, val, m, y, ma in zip(dates, values, mom, yoy, ma3):
+    for ts, row in df.iterrows():
+        date_str = pd.Timestamp(ts).strftime("%Y-%m-01")
         rows.append(
             PanelRow(
-                date=dt,
-                region="canada",
+                date=date_str,
+                region=region,
                 segment=segment,
                 metric=metric,
-                value=round(val, 2),
+                value=float(row["value"]),
                 unit=unit,
                 source=source,
-                mom_pct=round(m, 3) if m is not None else None,
-                yoy_pct=round(y, 3) if y is not None else None,
-                ma3=round(ma, 3) if ma is not None else None,
+                mom_pct=float(row["mom_pct"]) if pd.notna(row["mom_pct"]) else None,
+                yoy_pct=float(row["yoy_pct"]) if pd.notna(row["yoy_pct"]) else None,
+                ma3=float(row["ma3"]) if pd.notna(row["ma3"]) else None,
             )
         )
     return rows
 
 
-# ---------- main generator ----------
+# --------------------------------------------------------------------------------------
+# Main builder: combine everything into one panel
+# --------------------------------------------------------------------------------------
 
-
-def generate_credit() -> List[PanelRow]:
+def build_credit_panel() -> List[PanelRow]:
     """
-    Entry point used by scripts/generate_data.py.
+    Build the full credit panel for the Credit tab, consisting of:
 
-    Fetches StatCan WDS series, converts to dollars where required,
-    computes derived ratios, and returns PanelRow objects for:
+    Household tab metrics:
+      - household_non_mortgage_loans
+      - household_mortgage_loans
+      - household_mortgage_share_of_credit
+      - household_default_rate (insolvencies)
+      - household_mortgage_delinquency_rate
 
-      - Household view
-      - Business view
-      - Corporate debt view
+    Business tab metrics:
+      - business_total_debt
+      - business_equity
+      - business_debt_to_equity
+      - business_default_rate (insolvencies)
+      - business_nfc_dsr (BIS)
     """
-    # Household vectors (monthly SA, millions of dollars)
-    v_household_non_mortgage = "v1231415611"
-    v_household_mortgage = "v1231415620"
-    v_household_total_credit = "v1231415625"  # denominator only
-    v_household_loc = "v1231415615"
-
-    # Business vectors
-    v_business_non_mortgage = "v1231415688"
-    v_business_mortgage = "v1231415692"
-    v_business_total_credit = "v1304432231"  # denominator for share
-    v_business_debt_sec = "v1231415697"
-
-    # Corporate vectors (private NFCs)
-    v_corp_debt_sec = v_business_debt_sec
-    v_corp_equity_sec = "v1231415700"
-    v_corp_total_credit = v_business_total_credit
-
-    all_vectors = sorted(
-        {
-            v_household_non_mortgage,
-            v_household_mortgage,
-            v_household_total_credit,
-            v_household_loc,
-            v_business_non_mortgage,
-            v_business_mortgage,
-            v_business_total_credit,
-            v_business_debt_sec,
-            v_corp_equity_sec,
-        }
-    )
-
-    # Fetch all required vector series in one call
-    vector_series = _fetch_vectors(all_vectors, latest_n=1000)
-
     rows: List[PanelRow] = []
 
-    # ------------------------------------------------------------------
-    # 1. Household view
-    # ------------------------------------------------------------------
-    seg = "household"
-
-    # Levels: millions -> plain dollars
-    household_non_mortgage = {
-        d: val * 1_000_000.0 for d, val in vector_series.get(v_household_non_mortgage, {}).items()
-    }
-    household_mortgage = {
-        d: val * 1_000_000.0 for d, val in vector_series.get(v_household_mortgage, {}).items()
-    }
-    household_loc = {
-        d: val * 1_000_000.0 for d, val in vector_series.get(v_household_loc, {}).items()
-    }
-
-    rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="household_non_mortgage_loans",
-            unit="cad",
-            date_to_value=household_non_mortgage,
-            source=f"statcan_{v_household_non_mortgage}",
+    # --- Household StatCan credit ---
+    hh_credit = load_household_credit_from_statcan()
+    for key, series in hh_credit.items():
+        s = trim_to_last_n_years(series, years=10)
+        if key == "household_mortgage_share_of_credit":
+            unit = "%"
+        else:
+            unit = "C$ millions"
+        rows.extend(
+            series_to_panel_rows(
+                s,
+                metric=key,
+                unit=unit,
+                source="StatCan",
+                freq="M",
+            )
         )
-    )
+
+    # --- Business StatCan credit / equity ---
+    bus_credit = load_business_credit_from_statcan()
+    # total debt
+    s_debt = trim_to_last_n_years(bus_credit["business_total_debt"], years=10)
     rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="household_mortgage_loans",
-            unit="cad",
-            date_to_value=household_mortgage,
-            source=f"statcan_{v_household_mortgage}",
-        )
-    )
-    rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="household_loc",
-            unit="cad",
-            date_to_value=household_loc,
-            source=f"statcan_{v_household_loc}",
+        series_to_panel_rows(
+            s_debt,
+            metric="business_total_debt",
+            unit="C$ millions",
+            source="StatCan",
+            freq="M",  # these vectors are monthly
         )
     )
 
-    # Derived: mortgage share of household credit (%)
-    hh_mortgage_raw = vector_series.get(v_household_mortgage, {})
-    hh_total_raw = vector_series.get(v_household_total_credit, {})
-    mortgage_share: Dict[str, float] = {}
-    for dt in sorted(set(hh_mortgage_raw.keys()) & set(hh_total_raw.keys())):
-        num = hh_mortgage_raw.get(dt)
-        denom = hh_total_raw.get(dt)
-        if num is None or denom in (None, 0, 0.0):
-            continue
-        mortgage_share[dt] = (num / denom) * 100.0
-
+    # equity
+    s_equity = trim_to_last_n_years(bus_credit["business_equity"], years=10)
     rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="household_mortgage_share",
-            unit="pct",
-            date_to_value=mortgage_share,
-            source=f"statcan_derived_{v_household_mortgage}_{v_household_total_credit}",
+        series_to_panel_rows(
+            s_equity,
+            metric="business_equity",
+            unit="C$ millions",
+            source="StatCan",
+            freq="M",
         )
     )
 
-    # ------------------------------------------------------------------
-    # 2. Business view
-    # ------------------------------------------------------------------
-    seg = "business"
-
-    business_non_mortgage = {
-        d: val * 1_000_000.0 for d, val in vector_series.get(v_business_non_mortgage, {}).items()
-    }
-    business_mortgage = {
-        d: val * 1_000_000.0 for d, val in vector_series.get(v_business_mortgage, {}).items()
-    }
-    business_debt_sec = {
-        d: val * 1_000_000.0 for d, val in vector_series.get(v_business_debt_sec, {}).items()
-    }
-
-    rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="business_non_mortgage_loans",
-            unit="cad",
-            date_to_value=business_non_mortgage,
-            source=f"statcan_{v_business_non_mortgage}",
+    # Debt-to-equity (ratio, unitless)
+    # Use aligned dates where both debt and equity exist.
+    aligned = pd.concat(
+        [s_debt.rename("debt"), s_equity.rename("equity")], axis=1
+    ).dropna()
+    if not aligned.empty:
+        d_to_e = (aligned["debt"] / aligned["equity"]).rename(
+            "business_debt_to_equity"
         )
-    )
-    rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="business_mortgage_loans",
-            unit="cad",
-            date_to_value=business_mortgage,
-            source=f"statcan_{v_business_mortgage}",
+        d_to_e = trim_to_last_n_years(d_to_e, years=10)
+        rows.extend(
+            series_to_panel_rows(
+                d_to_e,
+                metric="business_debt_to_equity",
+                unit="ratio",
+                source="StatCan",
+                freq="M",
+            )
         )
-    )
+
+    # --- Insolvencies: household + business default rate (proxy) ---
+    insolv = load_insolvency_series()
+    hh_default = trim_to_last_n_years(insolv["household_default_rate"], years=10)
     rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="business_debt_securities",
-            unit="cad",
-            date_to_value=business_debt_sec,
-            source=f"statcan_{v_business_debt_sec}",
+        series_to_panel_rows(
+            hh_default,
+            metric="household_default_rate",
+            unit="count",
+            source="OSB/ISED",
+            freq="M",
         )
     )
 
-    # Derived: business loans share of total credit (%)
-    biz_non_raw = vector_series.get(v_business_non_mortgage, {})
-    biz_mort_raw = vector_series.get(v_business_mortgage, {})
-    biz_total_raw = vector_series.get(v_business_total_credit, {})
-
-    biz_share: Dict[str, float] = {}
-    common_dates = (
-        set(biz_non_raw.keys()) & set(biz_mort_raw.keys()) & set(biz_total_raw.keys())
-    )
-    for dt in sorted(common_dates):
-        nm = biz_non_raw.get(dt)
-        mt = biz_mort_raw.get(dt)
-        denom = biz_total_raw.get(dt)
-        if nm is None or mt is None or denom in (None, 0, 0.0):
-            continue
-        loans_total = nm + mt
-        biz_share[dt] = (loans_total / denom) * 100.0
-
+    bus_default = trim_to_last_n_years(insolv["business_default_rate"], years=10)
     rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="business_loans_share",
-            unit="pct",
-            date_to_value=biz_share,
-            source=f"statcan_derived_{v_business_non_mortgage}_{v_business_mortgage}_{v_business_total_credit}",
+        series_to_panel_rows(
+            bus_default,
+            metric="business_default_rate",
+            unit="count",
+            source="OSB/ISED",
+            freq="M",
         )
     )
 
-    # ------------------------------------------------------------------
-    # 3. Corporate debt view (private NFCs)
-    # ------------------------------------------------------------------
-    seg = "corporate"
-
-    corp_debt_sec = {
-        d: val * 1_000_000.0 for d, val in vector_series.get(v_corp_debt_sec, {}).items()
-    }
-    corp_equity_sec = {
-        d: val * 1_000_000.0 for d, val in vector_series.get(v_corp_equity_sec, {}).items()
-    }
-    corp_total_credit = {
-        d: val * 1_000_000.0 for d, val in vector_series.get(v_corp_total_credit, {}).items()
-    }
-
+    # --- CMHC mortgage delinquency (quarterly) ---
+    hh_delinquency = load_mortgage_delinquency_series()
+    hh_delinquency = trim_to_last_n_years(hh_delinquency, years=10)
     rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="corp_debt_securities",
-            unit="cad",
-            date_to_value=corp_debt_sec,
-            source=f"statcan_{v_corp_debt_sec}",
-        )
-    )
-    rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="corp_equity_securities",
-            unit="cad",
-            date_to_value=corp_equity_sec,
-            source=f"statcan_{v_corp_equity_sec}",
-        )
-    )
-    rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="corp_credit_total",
-            unit="cad",
-            date_to_value=corp_total_credit,
-            source=f"statcan_{v_corp_total_credit}",
+        series_to_panel_rows(
+            hh_delinquency,
+            metric="household_mortgage_delinquency_rate",
+            unit="%",
+            source="CMHC",
+            freq="Q",
         )
     )
 
-    # Derived: debt-to-equity ratio (unitless)
-    corp_total_raw = vector_series.get(v_corp_total_credit, {})
-    corp_equity_raw = vector_series.get(v_corp_equity_sec, {})
-    debt_to_equity: Dict[str, float] = {}
-    for dt in sorted(set(corp_total_raw.keys()) & set(corp_equity_raw.keys())):
-        total_credit = corp_total_raw.get(dt)
-        equity = corp_equity_raw.get(dt)
-        if equity in (None, 0, 0.0) or total_credit is None:
-            continue
-        debt_to_equity[dt] = total_credit / equity
+    # --- BIS NFC DSR (quarterly) ---
+    try:
+        nfc_dsr = load_business_dsr_from_bis()
+    except NotImplementedError:
+        # Leave NFC DSR out if you haven't wired BIS yet.
+        nfc_dsr = pd.Series(dtype=float)
 
-    rows.extend(
-        _build_metric_rows(
-            segment=seg,
-            metric="corp_debt_to_equity",
-            unit="ratio",
-            date_to_value=debt_to_equity,
-            source=f"statcan_derived_{v_corp_total_credit}_{v_corp_equity_sec}",
+    if not nfc_dsr.empty:
+        nfc_dsr = trim_to_last_n_years(nfc_dsr, years=10)
+        rows.extend(
+            series_to_panel_rows(
+                nfc_dsr,
+                metric="business_nfc_dsr",
+                unit="%",
+                source="BIS",
+                freq="Q",
+            )
         )
-    )
 
     return rows
 
 
-def _write_json(path: Path, rows: List[PanelRow]) -> None:
-    data = [asdict(r) for r in rows]
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-
-
 def main() -> None:
-    """
-    Standalone entry: python scripts/Credit.py
-
-    (Netlify build still uses scripts/generate_data.py as the orchestrator.)
-    """
+    rows = build_credit_panel()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    rows = generate_credit()
-    out_path = DATA_DIR / "credit.json"
-    _write_json(out_path, rows)
-    print(f"Wrote {len(rows)} credit rows to {out_path}")
+
+    out_path = DATA_DIR / "panel_credit.json"
+    with out_path.open("w", encoding="utf-8") as f:
+        json.dump([asdict(r) for r in rows], f, ensure_ascii=False)
+
+    print(f"Wrote {len(rows)} credit panel rows → {out_path}")
 
 
 if __name__ == "__main__":
