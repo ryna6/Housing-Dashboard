@@ -146,6 +146,7 @@ export const CreditTab: React.FC = () => {
             metricKey={card.metricKey}
             title={card.title}
             description={card.description}
+            tabKey={TabKey}
           />
         ))}
       </div>
