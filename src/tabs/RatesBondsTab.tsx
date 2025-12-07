@@ -46,6 +46,21 @@ function formatCurrencyBillions(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
+function formatMoneyTooltip(value: number): string {
+  if (!Number.isFinite(value)) return "–";
+
+  const abs = Math.abs(value);
+  let scaled = value;
+  let suffix = "";
+  
+  } else if (abs >= 1_000_000_000) {
+    scaled = value / 1_000_000_000;
+    suffix = "B";
+  } 
+  // 3 decimal places in the tooltip
+  return `$${scaled.toFixed(2)}${suffix}`;
+}
+
 export const RatesBondsTab: React.FC = () => {
   const { data, loading, error } = useTabData("rates_bonds");
 
@@ -147,6 +162,7 @@ export const RatesBondsTab: React.FC = () => {
           series={repoSeries}
           valueKey="value"
           valueFormatter={formatCurrencyBillions}
+          tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
         <ChartPanel
