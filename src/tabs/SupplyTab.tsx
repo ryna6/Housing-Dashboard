@@ -84,12 +84,28 @@ function formatMoneyTooltip(value: number): string {
   } else if (abs >= 1_000_000) {
     scaled = value / 1_000_000;
     suffix = "M";
-  } 
-  else if (abs >= 1_000) {
+  } else if (abs >= 1_000) {
     scaled = value / 1_000;
     suffix = "K";
   } 
   return `$${scaled.toFixed(1)}${suffix}`;
+}
+
+function formatBigMoneyTooltip(value: number): string {
+  if (!Number.isFinite(value)) return "–";
+
+  const abs = Math.abs(value);
+  let scaled = value;
+  let suffix = "";
+
+  if (abs >= 1_000_000_000) {
+    scaled = value / 1_000_000_000;
+    suffix = "B";
+  } else if (abs >= 1_000_000) {
+    scaled = value / 1_000_000;
+    suffix = "M";
+  }
+  return `$${scaled.toFixed(2)}${suffix}`;
 }
 
 export const SupplyTab: React.FC = () => {
@@ -241,7 +257,7 @@ export const SupplyTab: React.FC = () => {
           series={investmentSeries}
           valueKey="value"
           valueFormatter={formatCurrencyCompact}
-          tooltipValueFormatter={formatMoneyTooltip}
+          tooltipValueFormatter={formatBigMoneyTooltip}
           clampYMinToZero
         />
       </section>
