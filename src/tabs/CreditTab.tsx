@@ -118,7 +118,7 @@ export const CreditTab: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <label htmlFor="credit-view" className="text-sm text-slate-600">
+          <label htmlFor="credit-view" className="tab__regions-select">
             View
           </label>
           <select
