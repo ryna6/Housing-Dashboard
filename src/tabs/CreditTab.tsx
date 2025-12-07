@@ -34,31 +34,31 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
     metricKey: "household_non_mortgage_loans",
     title: "Non-mortgage loans",
     description:
-      "Household non-mortgage credit (consumer credit, lines of credit, etc.).",
+      "Household non-mortgage credit",
   },
   {
     metricKey: "household_mortgage_loans",
     title: "Mortgage loans",
     description:
-      "Total residential mortgage debt outstanding held by households.",
+      "Household mortgage debt",
   },
   {
     metricKey: "household_mortgage_share_of_credit",
     title: "Mortgage share of household credit",
     description:
-      "Mortgages as a share of total household credit (mortgage + non-mortgage).",
+      "Mortgages share of total household credit",
   },
   {
     metricKey: "household_default_rate",
     title: "Household default rate",
     description:
-      "Consumer insolvency counts (bankruptcies + proposals), used as a proxy for household credit defaults.",
+      "Consumer default rate .",
   },
   {
     metricKey: "household_mortgage_delinquency_rate",
     title: "Mortgage delinquency rate",
     description:
-      "Share of residential mortgages that are 90+ days in arrears (quarterly, CMHC).",
+      "Mortgage delinquency rate",
   },
 ];
 
@@ -68,31 +68,31 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
     metricKey: "business_total_debt",
     title: "Total business debt",
     description:
-      "Total credit liabilities of private non-financial corporations.",
+      "Total credit liabilities of businesses.",
   },
   {
     metricKey: "business_equity",
     title: "Business equity",
     description:
-      "Equity liabilities of private non-financial corporations (approx. equity securities component).",
+      "Equity liabilities of businesses",
   },
   {
     metricKey: "business_debt_to_equity",
     title: "Debt-to-equity ratio",
     description:
-      "Leverage ratio for private non-financial corporations (debt / equity).",
+      "Debt to equity ratio",
   },
   {
     metricKey: "business_default_rate",
     title: "Business default rate",
     description:
-      "Business insolvency counts (bankruptcies + proposals), used as a proxy for corporate defaults.",
+      "Business default rate",
   },
   {
     metricKey: "business_nfc_dsr",
     title: "Non-financial corporate DSR",
     description:
-      "Debt service ratio for non-financial corporations: share of income used to service debt (BIS, quarterly).",
+      "Debt service ratio for businesses",
   },
 ];
 
