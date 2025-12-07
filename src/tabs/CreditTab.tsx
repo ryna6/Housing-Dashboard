@@ -145,6 +145,23 @@ function formatCurrencyBillions(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
+function formatMoneyTooltip(value: number): string {
+  if (!Number.isFinite(value)) return "–";
+
+  const abs = Math.abs(value);
+  let scaled = value;
+  let suffix = "";
+
+  if (abs >= 1_000_000_000_000) {
+    scaled = value / 1_000_000_000_000;
+    suffix = "T";
+  } else if (abs >= 1_000_000_000) {
+    scaled = value / 1_000_000_000;
+    suffix = "B";
+  } 
+  return `$${scaled.toFixed(2)}${suffix}`;
+}
+
 function getSegmentForView(view: CreditView): string {
   if (view === "household") return "household";
   if (view === "business") return "business";
@@ -260,6 +277,7 @@ export const CreditTab: React.FC = () => {
               config.useCurrencyFormatter ? formatCurrencyBillions : undefined
             }
             treatAsPercentScale={config.treatAsPercent}
+            tooltipValueFormatter={formatMoneyTooltip}
             clampYMinToZero
           />
         ))}
