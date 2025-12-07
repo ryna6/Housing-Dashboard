@@ -9,6 +9,7 @@ interface CreditViewOption {
 }
 
 interface CreditCardConfig {
+  // this is the metric id used in panel_credit.json (from Credit.py)
   metricKey: string;
   title: string;
   description?: string;
@@ -24,7 +25,7 @@ const CREDIT_VIEW_OPTIONS: CreditViewOption[] = [
 ];
 
 // -----------------------------------------------------------------------------
-// Card configs – metric IDs must line up with credit.py
+// Card configs – metric IDs must line up with Credit.py
 // -----------------------------------------------------------------------------
 
 // 1. Household view – 5 cards
@@ -77,7 +78,8 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
   {
     metricKey: "business_debt_to_equity",
     title: "Debt-to-equity ratio",
-    description: "Leverage ratio for private non-financial corporations (debt / equity).",
+    description:
+      "Leverage ratio for private non-financial corporations (debt / equity).",
   },
   {
     metricKey: "business_default_rate",
@@ -109,8 +111,8 @@ export const CreditTab: React.FC = () => {
         <div>
           <h2 className="text-xl font-semibold">Credit</h2>
           <p className="text-sm text-slate-500">
-            Explore household and business credit, defaults, and stress indicators
-            over the past 10 years.
+            Explore household and business credit, defaults, and stress
+            indicators over the past 10 years.
           </p>
         </div>
 
@@ -138,7 +140,9 @@ export const CreditTab: React.FC = () => {
         {cards.map((card) => (
           <ChartPanel
             key={card.metricKey}
-            metricKey={card.metricKey}
+            // IMPORTANT: `ChartPanel` does NOT have a `metricKey` prop,
+            // so we pass the metric id using the prop name it expects: `metric`.
+            metric={card.metricKey}
             title={card.title}
             description={card.description}
           />
