@@ -170,6 +170,7 @@ export const RatesBondsTab: React.FC = () => {
           series={repoSeries}
           valueKey="value"
           valueFormatter={formatCurrencyCompact}
+          tooltipValueFormatter={formatMoneyTooltip}
           clampYMinToZero
         />
         <ChartPanel
