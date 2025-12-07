@@ -194,7 +194,7 @@ def load_insolvency_series() -> Dict[str, pd.Series]:
     """
     Load monthly consumer + business insolvency counts from the ISED/OSB file.
 
-    - Sheet: "monthly_mensuels"
+    - Sheet: "Monthly_mensuels"
     - Canada aggregates are in rows 2–16; consumer row 5, business row 8.
     - First month: Jan 1987 in column C; Feb 1987 = D; etc.
 
@@ -205,7 +205,7 @@ def load_insolvency_series() -> Dict[str, pd.Series]:
     """
     df_raw = pd.read_excel(
         INSOLVENCY_XLSX,
-        sheet_name="monthly_mensuels",
+        sheet_name="Monthly_mensuels",
         header=None,
     )
 
