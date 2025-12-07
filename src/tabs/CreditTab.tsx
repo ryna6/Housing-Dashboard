@@ -1,11 +1,5 @@
 import React, { useState } from "react";
-// Adjust these imports to match your project structure
 import { ChartPanel } from "../components/ChartPanel";
-import type { TabKey } from "./tabConfig";
-
-// If you have a TabKey enum that includes Credit, you can keep this.
-// Otherwise you can remove TabKey usage entirely in this file.
-const CREDIT_TAB_KEY: TabKey = "credit" as TabKey;
 
 type CreditViewKey = "household" | "business";
 
@@ -38,17 +32,20 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
   {
     metricKey: "household_non_mortgage_loans",
     title: "Non-mortgage loans",
-    description: "Household non-mortgage credit (consumer credit, lines of credit, etc.).",
+    description:
+      "Household non-mortgage credit (consumer credit, lines of credit, etc.).",
   },
   {
     metricKey: "household_mortgage_loans",
     title: "Mortgage loans",
-    description: "Total residential mortgage debt outstanding held by households.",
+    description:
+      "Total residential mortgage debt outstanding held by households.",
   },
   {
     metricKey: "household_mortgage_share_of_credit",
     title: "Mortgage share of household credit",
-    description: "Mortgages as a share of total household credit (mortgage + non-mortgage).",
+    description:
+      "Mortgages as a share of total household credit (mortgage + non-mortgage).",
   },
   {
     metricKey: "household_default_rate",
@@ -141,12 +138,9 @@ export const CreditTab: React.FC = () => {
         {cards.map((card) => (
           <ChartPanel
             key={card.metricKey}
-            // NOTE: adjust these prop names to match your actual ChartPanel API.
-            tabKey={CREDIT_TAB_KEY}
             metricKey={card.metricKey}
             title={card.title}
             description={card.description}
-            tabKey={TabKey}
           />
         ))}
       </div>
