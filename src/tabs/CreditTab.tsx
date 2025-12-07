@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import type { PanelPoint } from "../data/types";
 import { ChartPanel } from "../components/ChartPanel";
-
-type CreditViewKey = "household" | "business";
+import { useTabData } from "./useTabData";
 
 interface CreditViewOption {
   key: CreditViewKey;
@@ -100,11 +100,27 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
 // CreditTab component
 // -----------------------------------------------------------------------------
 
-export const CreditTab: React.FC = () => {
+export function CreditTab() {
+  const { data, loading, error } = useTabData("credit");
   const [view, setView] = useState<CreditViewKey>("household");
 
-  const cards = view === "household" ? HOUSEHOLD_CARDS : BUSINESS_CARDS;
+  const currentCards = view === "household" ? HOUSEHOLD_CARDS : BUSINESS_CARDS;
 
+  // Pre-build series per metric from the credit dataset
+  const seriesByMetric = useMemo(() => {
+    const grouped: Record<string, PanelPoint[]> = {};
+
+    if (!data || data.length === 0) {
+      return grouped;
+    }
+
+    for (const card of ALL_CARD_CONFIGS) {
+      const metricSeries = data.filter((p) => p.metric === card.metricKey);
+      grouped[card.metricKey] = trimLastYears(metricSeries, 10);
+    }
+
+    return grouped;
+  }, [data]);
   return (
     <div className="flex flex-col gap-4">
       {/* Header row: title + subtitle + view selector */}
