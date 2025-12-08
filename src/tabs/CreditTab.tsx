@@ -44,7 +44,7 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
   },
   {
     metricKey: "household_mortgage_share_of_credit",
-    title: "Mortgage share of household credit",
+    title: "Mortgage % of household credit",
     valueKey: "value",
   },
   {
