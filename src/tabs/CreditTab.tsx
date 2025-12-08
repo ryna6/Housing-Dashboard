@@ -12,7 +12,7 @@ interface CreditViewOption {
 }
 
 interface CreditCardConfig {
-  // metric id used in credit.json (from Credit.py)
+  // metric id used in panel_credit.json (from Credit.py)
   metricKey: string;
   title: string;
   // which field from PanelPoint to plot: level vs MoM/QoQ change
@@ -46,20 +46,19 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
   },
   {
     metricKey: "household_mortgage_share_of_credit",
-    title: "Mortgage % of total credit",
+    title: "Mortgage % of credit",
     valueKey: "value",
   },
   {
     metricKey: "household_default_rate",
     title: "Household default rate",
-    // show the level of insolvencies (count), not % change
+    // show period-on-period change (MoM / QoQ depending on frequency)
     valueKey: "value",
   },
   {
     metricKey: "household_mortgage_delinquency_rate",
     title: "Mortgage delinquency rate",
-    // keep as % change
-    valueKey: "mom_pct",
+    valueKey: "value",
   },
 ];
 
@@ -78,24 +77,23 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
   {
     metricKey: "business_debt_to_equity",
     title: "Debt-to-equity ratio",
-    // ratio (no units)
     valueKey: "value",
   },
   {
     metricKey: "business_default_rate",
     title: "Business default rate",
-    // show the level of insolvencies (count), not % change
     valueKey: "value",
   },
   {
     metricKey: "business_nfc_dsr",
     title: "Business debt service ratio",
-    // show the level of the DSR (percent of income)
-    valueKey: "value",
+    valueKey: "mom_pct",
   },
 ];
 
 // Where the backend writes the credit panel.
+// Credit.py currently writes "panel_credit.json" into data/processed. 
+// If you renamed it to "credit.json" in your repo, just change this path.
 const CREDIT_DATA_URL = "/data/processed/credit.json";
 
 // -----------------------------------------------------------------------------
@@ -129,6 +127,7 @@ export const CreditTab: React.FC = () => {
         }
 
         if (!cancelled) {
+          // panel_credit.json is just a list of PanelRow dicts from Credit.py
           setData(json as PanelPoint[]);
         }
       } catch (err: any) {
@@ -149,6 +148,7 @@ export const CreditTab: React.FC = () => {
     };
   }, []);
 
+      
   function formatCurrencyCompact(value: number): string {
     const abs = Math.abs(value);
     if (!Number.isFinite(value)) return "–";
@@ -182,41 +182,20 @@ export const CreditTab: React.FC = () => {
       return `${(value / 1).toFixed(2)}K`;
     }
       return `$${value.toFixed(1)}`;
-   }
+    }
   
-  const { seriesByMetric, snapshotsByMetric } = useMemo(() => {
-    const byMetric: Record<string, PanelPoint[]> = {};
-    const snapshots: Record<string, MetricSnapshot> = {};
+  // Group rows by metric id so each card can pull its own series
+  const seriesByMetric = useMemo(() => {
+    const grouped: Record<string, PanelPoint[]> = {};
 
     for (const row of data) {
-      const metric = (row as any).metric as string | undefined;
-      if (!metric) continue;
-      if (!byMetric[metric]) byMetric[metric] = [];
-      byMetric[metric].push(row);
+      const key = (row as any).metric as string | undefined;
+      if (!key) continue;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(row);
     }
 
-    for (const [metric, rows] of Object.entries(byMetric)) {
-      const sorted = rows
-        .slice()
-        .sort((a, b) => {
-          const da = (a as any).date ?? "";
-          const db = (b as any).date ?? "";
-          if (da < db) return -1;
-          if (da > db) return 1;
-          return 0;
-        });
-
-      const latest = sorted[sorted.length - 1];
-      const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
-
-      snapshots[metric] = {
-        metric,
-        latest,
-        prev,
-      };
-    }
-
-    return { seriesByMetric: byMetric, snapshotsByMetric: snapshots };
+    return grouped;
   }, [data]);
 
   const cards = view === "household" ? HOUSEHOLD_CARDS : BUSINESS_CARDS;
@@ -225,6 +204,11 @@ export const CreditTab: React.FC = () => {
     <div className="tab">
       <header className="tab__header">
         <h1 className="tab__title">Credit</h1>
+        <p className="tab__subtitle">
+          Household &amp; business credit, delinquencies, defaults, and stress
+          indicators (Statistics Canada, Canadian Mortgage and Housing
+          Corporation, &amp; Innovation Science and Economic Development)
+        </p>
       </header>
 
       <div className="tab__controls">
@@ -280,55 +264,26 @@ export const CreditTab: React.FC = () => {
         })}
       </div>
 
-      {/* Charts grid – 5 charts side by side on desktop */}
+      {/* Cards grid – 5 cards side by side on desktop */}
       <div className="tab__charts">
         {cards.map((card) => {
           const series = seriesByMetric[card.metricKey] ?? [];
-
-          const valueKey = card.valueKey ?? "value";
-
-          // Default percent handling based on valueKey
-          let treatAsPercentScale =
-            valueKey === "mom_pct" || valueKey === "yoy_pct"
-
-          let valueAxisLabel: string | undefined;
-          switch (card.metricKey) {
-            case "household_mortgage_share_of_credit":
-              treatAsPercentScale = true;
-              break;
-
-            case "business_nfc_dsr":
-              // DSR is a percent of income
-              treatAsPercentScale = true;
-              break;
-
-            case "household_default_rate":
-            case "business_default_rate":
-              // Use raw counts (no % on axis)
-              treatAsPercentScale = false;
-              break;
-
-            case "business_debt_to_equity":
-              // Pure ratio – no unit, no percent sign
-              treatAsPercentScale = false;
-              valueAxisLabel = "";
-              break;
-
-            default:
-              break;
-          }
 
           return (
             <div key={card.metricKey}>
               <ChartPanel
                 title={card.title}
                 series={series}
-                valueKey={valueKey}
-                valueAxisLabel={valueAxisLabel}
+                valueKey={card.valueKey ?? "value"}
+                // Treat rates / shares / % changes as percent scales
+                treatAsPercentScale={
+                  card.valueKey === "mom_pct" ||
+                  card.valueKey === "yoy_pct" ||
+                  card.metricKey.includes("rate") ||
+                  card.metricKey.includes("share")
+                }
                 valueFormatter={formatCurrencyCompact}
                 tooltipValueFormatter={formatMoneyTooltip}
-                treatAsPercentScale={treatAsPercentScale}
-                // All these metrics are non-negative so zero baseline is fine
                 clampYMinToZero
               />
             </div>
