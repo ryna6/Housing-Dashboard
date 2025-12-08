@@ -1,5 +1,9 @@
 import React, { useState } from "react";
+import type { PanelPoint, RegionCode, Segment } from "../data/types";
+import { MetricSnapshotCard } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
+import { getLatestByMetric } from "../data/dataClient";
+import { useTabData } from "./useTabData";
 
 type CreditViewKey = "household" | "business";
 
