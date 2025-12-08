@@ -146,6 +146,37 @@ export const CreditTab: React.FC = () => {
     };
   }, []);
 
+      
+  function formatCurrencyCompact(value: number): string {
+    const abs = Math.abs(value);
+    if (!Number.isFinite(value)) return "–";
+
+    if (abs >= 1_000_000_000) {
+      return `$${(value / 1_000_000).toFixed(0)}B`;
+    }
+    if (abs >= 1_000_000) {
+      return `$${(value / 1_000).toFixed(0)}M`;
+    }
+    return `$${value.toFixed(0)}`;
+  }
+
+  function formatMoneyTooltip(value: number): string {
+    if (!Number.isFinite(value)) return "–";
+
+    const abs = Math.abs(value);
+    let scaled = value;
+    let suffix = "";
+
+    if (abs >= 1_000_000) {
+      scaled = value / 1_000_000;
+      suffix = "B";
+    } else if (abs >= 1_000) {
+      scaled = value / 1_000;
+      suffix = "M";
+    } 
+    return `$${scaled.toFixed(2)}${suffix}`;
+  }
+  
   // Group rows by metric id so each card can pull its own series
   const seriesByMetric = useMemo(() => {
     const grouped: Record<string, PanelPoint[]> = {};
@@ -215,7 +246,8 @@ export const CreditTab: React.FC = () => {
                   card.metricKey.includes("rate") ||
                   card.metricKey.includes("share")
                 }
-                // All of these metrics are non-negative so zero baseline is fine
+                valueFormatter={formatCurrencyCompact}
+                tooltipValueFormatter={formatMoneyTooltip}
                 clampYMinToZero
               />
             </div>
