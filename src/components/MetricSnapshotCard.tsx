@@ -59,11 +59,18 @@ function formatValue(value: number, unit: string): string {
     return `${value.toFixed(2)}%`;
   }
 
-  // NEW: for repo_volume (unit = "billions")
+  // Repo_volume (unit = "billions")
   if (unit === "billions") {
     // value is stored in *dollars* (see RatesBonds.py), so convert to billions here
     const inBillions = value / 1_000_000_000;
     return `$${inBillions.toFixed(2)}B`;   // 0 decimal places
+  }
+
+  // Credit tab (unit = "millions")
+  if (unit === "millions") {
+    // value is stored in *dollars* (see RatesBonds.py), so convert to billions here
+    const inMillions = value * 100;
+    return `$${inMillions.toFixed(0)}`;   // 0 decimal places
   }
 
   if (unit === "cad") {
