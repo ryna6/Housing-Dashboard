@@ -162,7 +162,7 @@ export const CreditTab: React.FC = () => {
     if (!Number.isFinite(value)) return "–";
 
     if (abs >= 1_000_000_000_000) {
-      return `$${(value / 1_000_000_000_000).toFixed(3)}T`;
+      return `$${(value / 1_000_000_000_000).toFixed(1)}T`;
     }
     if (abs >= 1_000_000_000) {
       return `$${(value / 1_000_000_000).toFixed(0)}B`;
