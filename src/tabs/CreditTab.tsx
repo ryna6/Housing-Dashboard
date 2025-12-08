@@ -330,8 +330,8 @@ export const CreditTab: React.FC = () => {
                 series={series}
                 valueKey={valueKey}
                 valueAxisLabel={valueAxisLabel}
-                valueFormatter={valueFormatter}
-                tooltipValueFormatter={tooltipValueFormatter}
+                valueFormatter={formatCurrencyCompact}
+                tooltipValueFormatter={formatMoneyTooltip}
                 treatAsPercentScale={treatAsPercentScale}
                 // All these metrics are non-negative so zero baseline is fine
                 clampYMinToZero
