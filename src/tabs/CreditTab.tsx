@@ -214,6 +214,7 @@ export const CreditTab: React.FC = () => {
           ? ({
               ...row,
               value: ((row as any).value as number) * 1_000_000,
+              unit: "cad",
             } as PanelPoint)
           : row;
 
@@ -284,7 +285,7 @@ export const CreditTab: React.FC = () => {
 
       {/* Snapshot cards row – force horizontal layout with wrapping */}
       <div
-        className="tab__metrics-grid"
+        className="tab__metrics tab__metrics--wide"
         style={{
           display: "flex",
           flexWrap: "wrap",
