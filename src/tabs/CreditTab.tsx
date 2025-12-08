@@ -167,13 +167,17 @@ export const CreditTab: React.FC = () => {
     let scaled = value;
     let suffix = "";
 
+    if (abs >= 1_000_000_000) {
+      return `$${(value / 1_000_000_000).toFixed(3)}B`;
+    }
     if (abs >= 1_000_000) {
-      return `${(value / 1_000_000).toFixed(3)}B`;
-    } else if (abs >= 1_000) {
-      return `${(value / 1_000).toFixed(2)}M`;
-    } 
-    return `${scaled.toFixed(1)}${suffix}`;
-  }
+      return `$${(value / 1_000_000).toFixed(2)}M`;
+    }
+    if (abs >= 1_000) {
+      return `$${(value / 1_000).toFixed(2)}K`;
+    }
+      return `$${value.toFixed(1)}`;
+    }
   
   // Group rows by metric id so each card can pull its own series
   const seriesByMetric = useMemo(() => {
