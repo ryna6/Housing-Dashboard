@@ -594,4 +594,4 @@ def generate_credit() -> List[PanelRow]:
 
 
 if __name__ == "__main__":
-    generate_credit()
+    main()
