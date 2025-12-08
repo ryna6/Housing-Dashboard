@@ -44,19 +44,19 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
   },
   {
     metricKey: "household_mortgage_share_of_credit",
-    title: "Mortgage % of household credit",
+    title: "Mortgage % of credit",
     valueKey: "value",
   },
   {
     metricKey: "household_default_rate",
     title: "Household default rate",
     // show period-on-period change (MoM / QoQ depending on frequency)
-    valueKey: "mom_pct",
+    valueKey: "value",
   },
   {
     metricKey: "household_mortgage_delinquency_rate",
     title: "Mortgage delinquency rate",
-    valueKey: "mom_pct",
+    valueKey: "value",
   },
 ];
 
@@ -80,7 +80,7 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
   {
     metricKey: "business_default_rate",
     title: "Business default rate",
-    valueKey: "mom_pct",
+    valueKey: "value",
   },
   {
     metricKey: "business_nfc_dsr",
