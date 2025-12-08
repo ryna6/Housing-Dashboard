@@ -67,7 +67,7 @@ function formatValue(value: number, unit: string): string {
   }
 
   // Credit tab (unit = "millions")
-  if (unit === "millions") {
+  if (unit === "cmillions") {
     // value is stored in *dollars* (see RatesBonds.py), so convert to billions here
     const inMillions = value * 100;
     return `$${inMillions.toFixed(0)}`;   // 0 decimal places
