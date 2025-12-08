@@ -584,13 +584,30 @@ def generate_credit() -> List[PanelRow]:
     # Write a standalone credit panel file (for inspection / debugging)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     out_path = DATA_DIR / "panel_credit.json"
-    write_json(out_path, credit)
+    with out_path.open("w", encoding="utf-8") as f:
+        json.dump([asdict(r) for r in rows], f, ensure_ascii=False)
     print(f"[Credit] Wrote {len(rows)} rows → {out_path}")
 
     # IMPORTANT: return dataclass instances, not dicts, so generate_data.py's asdict()
     # call works as expected.
     return rows
 
+# ---------------------------------------------------------------------------
+# IO + entry point
+# ---------------------------------------------------------------------------
 
+def write_json(path: Path, rows: List[PanelRow]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = [asdict(r) for r in rows]
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def main() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    credit = generate_credit()
+    out_path = DATA_DIR / "credit.json"
+    write_json(out_path, credit)
+    print(f"Wrote {len(credit)} credit rows to {out_path}")
+    
 if __name__ == "__main__":
     main()
