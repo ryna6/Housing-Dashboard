@@ -151,10 +151,10 @@ export const CreditTab: React.FC = () => {
     const abs = Math.abs(value);
     if (!Number.isFinite(value)) return "–";
 
-    if (abs >= 1_000_000_000) {
+    if (abs >= 1_000_000) {
       return `$${(value / 1_000_000).toFixed(0)}B`;
     }
-    if (abs >= 1_000_000) {
+    if (abs >= 1_000) {
       return `$${(value / 1_000).toFixed(0)}M`;
     }
     return `$${value.toFixed(0)}`;
@@ -168,13 +168,11 @@ export const CreditTab: React.FC = () => {
     let suffix = "";
 
     if (abs >= 1_000_000) {
-      scaled = value / 1_000_000;
-      suffix = "B";
+      return `${(value / 1_000_000).toFixed(3)}B`;
     } else if (abs >= 1_000) {
-      scaled = value / 1_000;
-      suffix = "M";
+      return `${(value / 1_000).toFixed(2)}M`;
     } 
-    return `$${scaled.toFixed(2)}${suffix}`;
+    return `${scaled.toFixed(1)}${suffix}`;
   }
   
   // Group rows by metric id so each card can pull its own series
