@@ -99,6 +99,7 @@ function formatBigCurrencyCompact(value: number): string {
   if (abs >= 1_000_000) {
     return `$${(value / 1_000_000).toFixed(0)}M`;
   }
+  return `${value.toFixed(0)}`;
 }
 
 function formatBigMoneyTooltip(value: number): string {
