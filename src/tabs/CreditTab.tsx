@@ -157,7 +157,7 @@ export const CreditTab: React.FC = () => {
     if (abs >= 1_000) {
       return `$${(value / 1_000).toFixed(0)}M`;
     }
-    return `$${value.toFixed(0)}`;
+    return `$${value.toFixed(2)}`;
   }
 
   function formatMoneyTooltip(value: number): string {
