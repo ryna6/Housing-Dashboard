@@ -293,16 +293,14 @@ def load_business_dsr_from_bis(
     Returns
     -------
     pd.Series
-        Index: Period strings 'YYYY-MM-01'
+        Index: DatetimeIndex (month-start) 'YYYY-MM-01'
         Values: float DSR (as provided by BIS, usually in percent of income).
     """
-    # SDMX REST endpoint for BIS statistics (WS_DSR dataflow)
     base_url = "https://stats.bis.org/statx/sdmx/data/WS_DSR"
 
-    # Build the SDMX key: frequency.country.sector.instrument.measure
+    # frequency.country.sector.instrument.measure
     key = f"Q.{country}.{sector}.T.A"
 
-    # Ask for uncompressed CSV so we can let pandas do the parsing
     query = "detail=dataonly&compressed=false&format=csv"
     url = f"{base_url}/{key}?{query}"
 
@@ -314,7 +312,6 @@ def load_business_dsr_from_bis(
         logger.warning("[BIS] Failed to load DSR series: %s", exc)
         return pd.Series(dtype=float)
 
-    # We expect at minimum TIME_PERIOD and OBS_VALUE columns
     if "TIME_PERIOD" not in df.columns or "OBS_VALUE" not in df.columns:
         logger.warning(
             "[BIS] Unexpected DSR payload columns: %s", ", ".join(df.columns)
@@ -346,20 +343,21 @@ def load_business_dsr_from_bis(
         except Exception:
             return None
 
+    # Normalise labels, then convert to real datetimes + numeric values
     df["date"] = df["date"].map(_normalize_quarter_label)
     df = df.dropna(subset=["date"])
+    df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
+    df["value"] = pd.to_numeric(df["value"], errors="coerce")
+    df = df.dropna(subset=["date", "value"])
 
-    # If BIS returns multiple rows per date (e.g. different breakdowns),
-    # collapse to a single aggregate by simple average.
+    # Aggregate in case BIS returns multiple rows per date
     series = (
         df.groupby("date")["value"]
         .mean()
         .sort_index()
     )
 
-    # Use our Period alias (string) for consistency with other loaders
-    series.index = series.index.astype(Period)
-
+    # series.index is now a proper DatetimeIndex, so trim_to_last_n_years works
     logger.info("[BIS] Loaded %d DSR observations", len(series))
     return series
 
