@@ -485,7 +485,7 @@ def build_credit_panel() -> List[PanelRow]:
         series_to_panel_rows(
             s_equity,
             metric="business_equity",
-            unit="count
+            unit="count"
             source="StatCan",
             freq="M",
         )
