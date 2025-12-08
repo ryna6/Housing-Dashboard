@@ -153,16 +153,13 @@ body {
 }
 
 /* NEW: allow specific tabs to show all cards in a single row on wide screens */
-@media (min-width: 1440px) {
+@media (min-width: 1024px) {
   .tab__metrics.tab__metrics--wide {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
   /* Prices tab: 3 overview cards should span the full width on desktop */
   .tab__metrics.tab__metrics--3col {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  .app__inner,
-  .bottom-nav__inner {
-    max-width: 1400px;
   }
 }
 
