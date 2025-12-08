@@ -52,7 +52,7 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
   {
     metricKey: "household_default_rate",
     title: "Household default rate",
-    // show period-on-period change (MoM / QoQ depending on frequency)
+    // show level (not percentage)
     valueKey: "value",
   },
   {
@@ -92,13 +92,22 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
 ];
 
 // Where the backend writes the credit panel.
-// Credit.py currently writes "panel_credit.json" into data/processed. 
-// If you renamed it to "credit.json" in your repo, just change this path.
 const CREDIT_DATA_URL = "/data/processed/credit.json";
 
 // -----------------------------------------------------------------------------
-// CreditTab component
+// Helpers
 // -----------------------------------------------------------------------------
+
+// Metrics whose values are in units of 1,000,000 (e.g. 800,000 → 800B)
+// We rescale them to the “real” dollar value for charts & cards.
+function metricUsesMillionUnits(metricKey: string): boolean {
+  return (
+    metricKey === "household_non_mortgage_loans" ||
+    metricKey === "household_mortgage_loans" ||
+    metricKey === "business_total_debt" ||
+    metricKey === "business_equity"
+  );
+}
 
 export const CreditTab: React.FC = () => {
   const [view, setView] = useState<CreditViewKey>("household");
@@ -148,7 +157,6 @@ export const CreditTab: React.FC = () => {
     };
   }, []);
 
-      
   function formatCurrencyCompact(value: number): string {
     const abs = Math.abs(value);
     if (!Number.isFinite(value)) return "–";
@@ -181,9 +189,9 @@ export const CreditTab: React.FC = () => {
     if (abs >= 1) {
       return `${(value / 1).toFixed(2)}K`;
     }
-      return `$${value.toFixed(1)}`;
-    }
-  
+    return `$${value.toFixed(1)}`;
+  }
+
   // Group rows by metric id so each card can pull its own series
   const { seriesByMetric, snapshotsByMetric } = useMemo(() => {
     const byMetric: Record<string, PanelPoint[]> = {};
@@ -193,7 +201,17 @@ export const CreditTab: React.FC = () => {
       const metric = (row as any).metric as string | undefined;
       if (!metric) continue;
       if (!byMetric[metric]) byMetric[metric] = [];
-      byMetric[metric].push(row);
+
+      // 1) Scale million-unit metrics so both charts and cards use true values
+      const scaledRow =
+        metricUsesMillionUnits(metric) && typeof (row as any).value === "number"
+          ? ({
+              ...row,
+              value: ((row as any).value as number) * 1_000_000,
+            } as PanelPoint)
+          : row;
+
+      byMetric[metric].push(scaledRow);
     }
 
     for (const [metric, rows] of Object.entries(byMetric)) {
@@ -210,6 +228,7 @@ export const CreditTab: React.FC = () => {
       const latest = sorted[sorted.length - 1];
       const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
 
+      // latest / prev already use the scaled values where applicable
       snapshots[metric] = {
         metric,
         latest,
@@ -257,8 +276,15 @@ export const CreditTab: React.FC = () => {
         </div>
       )}
 
-      {/* Snapshot cards row */}
-      <div className="tab__metrics-grid">
+      {/* Snapshot cards row – force horizontal layout with wrapping */}
+      <div
+        className="tab__metrics-grid"
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "1.5rem",
+        }}
+      >
         {cards.map((card) => {
           const snapshot = snapshotsByMetric[card.metricKey];
 
@@ -286,26 +312,47 @@ export const CreditTab: React.FC = () => {
         })}
       </div>
 
-      {/* Cards grid – 5 cards side by side on desktop */}
+      {/* Charts grid – 5 cards side by side on desktop */}
       <div className="tab__charts">
         {cards.map((card) => {
           const series = seriesByMetric[card.metricKey] ?? [];
+          const valueKey = card.valueKey ?? "value";
+
+          // Default percent handling based on key/value
+          let treatAsPercentScale =
+            valueKey === "mom_pct" ||
+            valueKey === "yoy_pct" ||
+            card.metricKey.includes("rate") ||
+            card.metricKey.includes("share");
+
+          let valueFormatter = formatCurrencyCompact;
+          let tooltipValueFormatter = formatMoneyTooltip;
+
+          // 2) Household default rate: no percentage units
+          if (card.metricKey === "household_default_rate") {
+            treatAsPercentScale = false;
+          }
+
+          // 3) Mortgage delinquency rate: small percentages with proper decimals
+          if (card.metricKey === "household_mortgage_delinquency_rate") {
+            treatAsPercentScale = false;
+            valueFormatter = (v: number) =>
+              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+            tooltipValueFormatter = (v: number) =>
+              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+          }
 
           return (
             <div key={card.metricKey}>
               <ChartPanel
                 title={card.title}
                 series={series}
-                valueKey={card.valueKey ?? "value"}
-                // Treat rates / shares / % changes as percent scales
-                treatAsPercentScale={
-                  card.valueKey === "mom_pct" ||
-                  card.valueKey === "yoy_pct" ||
-                  card.metricKey.includes("rate") ||
-                  card.metricKey.includes("share")
-                }
-                valueFormatter={formatCurrencyCompact}
-                tooltipValueFormatter={formatMoneyTooltip}
+                valueKey={valueKey}
+                // Treat rates / shares / % changes as percent scales, unless
+                // overridden above for specific metrics.
+                treatAsPercentScale={treatAsPercentScale}
+                valueFormatter={valueFormatter}
+                tooltipValueFormatter={tooltipValueFormatter}
                 clampYMinToZero
               />
             </div>
