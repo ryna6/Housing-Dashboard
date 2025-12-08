@@ -9,7 +9,9 @@ from urllib.request import urlopen
 from urllib.parse import urlencode
 
 import pandas as pd
+import logging
 
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------------------
 # Paths & basic types
