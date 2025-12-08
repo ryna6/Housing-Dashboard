@@ -185,17 +185,39 @@ export const CreditTab: React.FC = () => {
     }
   
   // Group rows by metric id so each card can pull its own series
-  const seriesByMetric = useMemo(() => {
-    const grouped: Record<string, PanelPoint[]> = {};
+  const { seriesByMetric, snapshotsByMetric } = useMemo(() => {
+    const byMetric: Record<string, PanelPoint[]> = {};
+    const snapshots: Record<string, MetricSnapshot> = {};
 
     for (const row of data) {
-      const key = (row as any).metric as string | undefined;
-      if (!key) continue;
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(row);
+      const metric = (row as any).metric as string | undefined;
+      if (!metric) continue;
+      if (!byMetric[metric]) byMetric[metric] = [];
+      byMetric[metric].push(row);
     }
 
-    return grouped;
+    for (const [metric, rows] of Object.entries(byMetric)) {
+      const sorted = rows
+        .slice()
+        .sort((a, b) => {
+          const da = (a as any).date ?? "";
+          const db = (b as any).date ?? "";
+          if (da < db) return -1;
+          if (da > db) return 1;
+          return 0;
+        });
+
+      const latest = sorted[sorted.length - 1];
+      const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
+
+      snapshots[metric] = {
+        metric,
+        latest,
+        prev,
+      };
+    }
+
+    return { seriesByMetric: byMetric, snapshotsByMetric: snapshots };
   }, [data]);
 
   const cards = view === "household" ? HOUSEHOLD_CARDS : BUSINESS_CARDS;
