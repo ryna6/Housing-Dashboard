@@ -265,17 +265,101 @@ def load_mortgage_delinquency_series() -> pd.Series:
 # BIS non-financial corporate DSR – business NFC DSR (quarterly)
 # --------------------------------------------------------------------------------------
 
-def load_business_dsr_from_bis() -> pd.Series:
+def load_business_dsr_from_bis(
+    country: str = "CA",
+    sector: str = "NFC",
+) -> pd.Series:
     """
-    Stub for BIS NFC DSR loader – implement later.
+    Fetch the non-financial corporate debt-service ratio (DSR) from BIS via SDMX.
 
-    When implemented, return a pandas.Series indexed by quarter-start Timestamps,
-    with values in percent and name "business_nfc_dsr".
+    BIS publishes DSR data under the WS_DSR dataflow. The SDMX key typically has the
+    structure:
+
+        <frequency>.<country>.<sector>.<instrument>.<measure>
+
+    For this dashboard we want:
+        - quarterly frequency (Q)
+        - Canada (CA)
+        - non-financial corporates (NFC)
+        - total instruments (T)
+        - DSR as a percentage of income (A)
+
+    i.e. key: Q.<country>.<sector>.T.A, for example: Q.CA.NFC.T.A
+
+    We request CSV output from the SDMX endpoint and normalise dates to YYYY-MM-01.
+
+    Returns
+    -------
+    pd.Series
+        Index: Period strings 'YYYY-MM-01'
+        Values: float DSR (as provided by BIS, usually in percent of income).
     """
-    raise NotImplementedError(
-        "Implement BIS NFC DSR loader (business_nfc_dsr) using BIS WS_DSR API or a local CSV."
+    # SDMX REST endpoint for BIS statistics (WS_DSR dataflow)
+    base_url = "https://stats.bis.org/statx/sdmx/data/WS_DSR"
+
+    # Build the SDMX key: frequency.country.sector.instrument.measure
+    key = f"Q.{country}.{sector}.T.A"
+
+    # Ask for uncompressed CSV so we can let pandas do the parsing
+    query = "detail=dataonly&compressed=false&format=csv"
+    url = f"{base_url}/{key}?{query}"
+
+    logger.info("[BIS] Fetching non-financial corporate DSR from %s", url)
+
+    try:
+        df = pd.read_csv(url)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("[BIS] Failed to load DSR series: %s", exc)
+        return pd.Series(dtype=float)
+
+    # We expect at minimum TIME_PERIOD and OBS_VALUE columns
+    if "TIME_PERIOD" not in df.columns or "OBS_VALUE" not in df.columns:
+        logger.warning(
+            "[BIS] Unexpected DSR payload columns: %s", ", ".join(df.columns)
+        )
+        return pd.Series(dtype=float)
+
+    df = df[["TIME_PERIOD", "OBS_VALUE"]].rename(
+        columns={"TIME_PERIOD": "date", "OBS_VALUE": "value"}
     )
 
+    def _normalize_quarter_label(label: str) -> Optional[str]:
+        """
+        Convert labels like '2012-Q3' or date-like strings to 'YYYY-MM-01'.
+        """
+        if isinstance(label, str) and "Q" in label:
+            # '2012-Q3' → 2012-07-01 (first month of the quarter)
+            try:
+                year_str, q_str = label.split("-Q")
+                q = int(q_str)
+                month = (q - 1) * 3 + 1
+                return f"{int(year_str):04d}-{month:02d}-01"
+            except Exception:
+                return None
+
+        # Fallback: let pandas parse whatever comes back
+        try:
+            dt = pd.to_datetime(label)
+            return dt.strftime("%Y-%m-01")
+        except Exception:
+            return None
+
+    df["date"] = df["date"].map(_normalize_quarter_label)
+    df = df.dropna(subset=["date"])
+
+    # If BIS returns multiple rows per date (e.g. different breakdowns),
+    # collapse to a single aggregate by simple average.
+    series = (
+        df.groupby("date")["value"]
+        .mean()
+        .sort_index()
+    )
+
+    # Use our Period alias (string) for consistency with other loaders
+    series.index = series.index.astype(Period)
+
+    logger.info("[BIS] Loaded %d DSR observations", len(series))
+    return series
 
 # --------------------------------------------------------------------------------------
 # Helpers: trimming + PanelRow conversion
