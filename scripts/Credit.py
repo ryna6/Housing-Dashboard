@@ -516,7 +516,7 @@ def build_credit_panel() -> List[PanelRow]:
         series_to_panel_rows(
             hh_default,
             metric="household_default_rate",
-            unit="count",
+            unit="index",
             source="OSB/ISED",
             freq="Q",
         )
@@ -527,7 +527,7 @@ def build_credit_panel() -> List[PanelRow]:
         series_to_panel_rows(
             bus_default,
             metric="business_default_rate",
-            unit="count",
+            unit="index",
             source="OSB/ISED",
             freq="M",
         )
