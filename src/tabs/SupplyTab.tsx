@@ -60,15 +60,15 @@ function trimLastYears(series: PanelPoint[], years: number): PanelPoint[] {
 function formatCurrencyCompact(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 1_000_000_000) {
-    return `$${(value / 1_000_000_000).toFixed(0)}B`;
+    return `${(value / 1_000_000_000).toFixed(0)}B`;
   }
   if (abs >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(0)}M`;
+    return `${(value / 1_000_000).toFixed(0)}M`;
   }
   if (abs >= 1_000) {
-    return `$${(value / 1_000).toFixed(0)}K`;
+    return `${(value / 1_000).toFixed(0)}K`;
   }
-  return `$${value.toFixed(0)}`;
+  return `${value.toFixed(0)}`;
 }
 
 function formatMoneyTooltip(value: number): string {
@@ -88,7 +88,17 @@ function formatMoneyTooltip(value: number): string {
     scaled = value / 1_000;
     suffix = "K";
   } 
-  return `$${scaled.toFixed(1)}${suffix}`;
+  return `${scaled.toFixed(1)}${suffix}`;
+}
+
+function formatBigCurrencyCompact(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) {
+    return `$${(value / 1_000_000_000).toFixed(0)}B`;
+  }
+  if (abs >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(0)}M`;
+  }
 }
 
 function formatBigMoneyTooltip(value: number): string {
@@ -256,7 +266,7 @@ export const SupplyTab: React.FC = () => {
           title={`${housingTypeLabel} investment`}
           series={investmentSeries}
           valueKey="value"
-          valueFormatter={formatCurrencyCompact}
+          valueFormatter={formatBigCurrencyCompact}
           tooltipValueFormatter={formatBigMoneyTooltip}
           clampYMinToZero
         />
