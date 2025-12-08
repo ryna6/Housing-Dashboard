@@ -455,7 +455,7 @@ def build_credit_panel() -> List[PanelRow]:
     hh_credit = load_household_credit_from_statcan()
     for key, series in hh_credit.items():
         s = trim_to_last_n_years(series, years=10)
-        unit = "%" if key == "household_mortgage_share_of_credit" else "millions"
+        unit = "%" if key == "household_mortgage_share_of_credit" else "cmillions"
         rows.extend(
             series_to_panel_rows(
                 s,
@@ -474,7 +474,7 @@ def build_credit_panel() -> List[PanelRow]:
         series_to_panel_rows(
             s_debt,
             metric="business_total_debt",
-            unit="C$ millions",
+            unit="cmillions",
             source="StatCan",
             freq="M",
         )
@@ -485,7 +485,7 @@ def build_credit_panel() -> List[PanelRow]:
         series_to_panel_rows(
             s_equity,
             metric="business_equity",
-            unit="C$ millions",
+            unit="cmillions",
             source="StatCan",
             freq="M",
         )
