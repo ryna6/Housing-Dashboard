@@ -177,7 +177,7 @@ export const CreditTab: React.FC = () => {
       return `$${(value / 1_000).toFixed(2)}M`;
     }
     if (abs >= 1) {
-      return `$${(value / 1).toFixed(2)}K`;
+      return `${(value / 1).toFixed(2)}K`;
     }
       return `$${value.toFixed(1)}`;
     }
