@@ -92,7 +92,7 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
 // Where the backend writes the credit panel.
 // Credit.py currently writes "panel_credit.json" into data/processed. 
 // If you renamed it to "credit.json" in your repo, just change this path.
-const CREDIT_DATA_URL = "/data/panel_credit.json";
+const CREDIT_DATA_URL = "/data/credit.json";
 
 // -----------------------------------------------------------------------------
 // CreditTab component
