@@ -233,7 +233,6 @@ export const CreditTab: React.FC = () => {
             title={card.title}
             unit={card.unit}
             latest={latest}
-            helpText={card.description}
           />
         ))}
       </section>
@@ -244,7 +243,6 @@ export const CreditTab: React.FC = () => {
           <ChartPanel
             key={card.metricKey}
             title={card.title}
-            helpText={card.description}
             unit={card.unit}
             valueKey={card.valueKey ?? "value"}
             series={buildSeriesForMetric(
