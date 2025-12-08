@@ -87,7 +87,7 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
   {
     metricKey: "business_nfc_dsr",
     title: "Business debt service ratio",
-    valueKey: "mom_pct",
+    valueKey: "value",
   },
 ];
 
@@ -338,7 +338,11 @@ export const CreditTab: React.FC = () => {
           // 2) Household default rate: no percentage units
           if (card.metricKey === "household_default_rate") {
             treatAsPercentScale = false;
-          }
+            valueFormatter = (v: number) =>
+              Number.isFinite(v) ? v.toFixed(2) : "–";
+            tooltipValueFormatter = (v: number) =>
+              Number.isFinite(v) ? v.toFixed(2) : "–";
+             }
 
           // 3) Mortgage delinquency rate: small percentages with proper decimals
           if (card.metricKey === "household_mortgage_delinquency_rate") {
