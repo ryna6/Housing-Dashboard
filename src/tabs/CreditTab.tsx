@@ -149,6 +149,41 @@ export const CreditTab: React.FC = () => {
     };
   }, []);
 
+  function formatCurrencyCompact(value: number): string {
+    const abs = Math.abs(value);
+    if (!Number.isFinite(value)) return "–";
+
+    if (abs >= 1_000_000) {
+      return `$${(value / 1_000_000).toFixed(1)}B`;
+    }
+    if (abs >= 1_000) {
+      return `$${(value / 1_000).toFixed(0)}M`;
+    }
+    if (abs >= 1) {
+      return `${(value / 1).toFixed(2)}`;
+    }
+    return `$${value.toFixed(2)}`;
+  }
+
+  function formatMoneyTooltip(value: number): string {
+    if (!Number.isFinite(value)) return "–";
+
+    const abs = Math.abs(value);
+    let scaled = value;
+    let suffix = "";
+
+    if (abs >= 1_000_000) {
+      return `$${(value / 1_000_000).toFixed(3)}B`;
+    }
+    if (abs >= 1_000) {
+      return `$${(value / 1_000).toFixed(2)}M`;
+    }
+    if (abs >= 1) {
+      return `${(value / 1).toFixed(2)}K`;
+    }
+      return `$${value.toFixed(1)}`;
+   }
+  
   const { seriesByMetric, snapshotsByMetric } = useMemo(() => {
     const byMetric: Record<string, PanelPoint[]> = {};
     const snapshots: Record<string, MetricSnapshot> = {};
@@ -254,42 +289,7 @@ export const CreditTab: React.FC = () => {
 
           // Default percent handling based on valueKey
           let treatAsPercentScale =
-            valueKey === "mom_pct" || valueKey === "yoy_pct";
-
-          function formatCurrencyCompact(value: number): string {
-          const abs = Math.abs(value);
-          if (!Number.isFinite(value)) return "–";
-
-          if (abs >= 1_000_000) {
-              return `$${(value / 1_000_000).toFixed(1)}B`;
-          }
-          if (abs >= 1_000) {
-              return `$${(value / 1_000).toFixed(0)}M`;
-          }
-          if (abs >= 1) {
-              return `${(value / 1).toFixed(2)}`;
-          }
-              return `$${value.toFixed(2)}`;
-          }
-
-          function formatMoneyTooltip(value: number): string {
-          if (!Number.isFinite(value)) return "–";
-
-              const abs = Math.abs(value);
-              let scaled = value;
-              let suffix = "";
-
-          if (abs >= 1_000_000) {
-               return `$${(value / 1_000_000).toFixed(3)}B`;
-          }
-          if (abs >= 1_000) {
-               return `$${(value / 1_000).toFixed(2)}M`;
-          }
-          if (abs >= 1) {
-               return `${(value / 1).toFixed(2)}K`;
-          }
-               return `$${value.toFixed(1)}`;
-          }
+            valueKey === "mom_pct" || valueKey === "yoy_pct"
 
           let valueAxisLabel: string | undefined;
           switch (card.metricKey) {
