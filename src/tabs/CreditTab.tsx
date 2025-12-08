@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import type { PanelPoint } from "../data/types";
 import { ChartPanel } from "../components/ChartPanel";
 
 type CreditViewKey = "household" | "business";
@@ -34,7 +35,6 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
   {
     metricKey: "household_non_mortgage_loans",
     title: "Non-mortgage loans",
-    // levels make more sense here
     valueKey: "value",
   },
   {
@@ -89,12 +89,76 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
   },
 ];
 
+// Where the backend writes the credit panel.
+// Credit.py currently writes "panel_credit.json" into data/processed. 
+// If you renamed it to "credit.json" in your repo, just change this path.
+const CREDIT_DATA_URL = "/data/panel_credit.json";
+
 // -----------------------------------------------------------------------------
 // CreditTab component
 // -----------------------------------------------------------------------------
 
 export const CreditTab: React.FC = () => {
   const [view, setView] = useState<CreditViewKey>("household");
+
+  const [data, setData] = useState<PanelPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch credit panel JSON once on mount
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const res = await fetch(CREDIT_DATA_URL);
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const json = await res.json();
+        if (!Array.isArray(json)) {
+          throw new Error("Expected an array of panel rows");
+        }
+
+        if (!cancelled) {
+          // panel_credit.json is just a list of PanelRow dicts from Credit.py
+          setData(json as PanelPoint[]);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.message ?? "Failed to load credit data");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Group rows by metric id so each card can pull its own series
+  const seriesByMetric = useMemo(() => {
+    const grouped: Record<string, PanelPoint[]> = {};
+
+    for (const row of data) {
+      const key = (row as any).metric as string | undefined;
+      if (!key) continue;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(row);
+    }
+
+    return grouped;
+  }, [data]);
 
   const cards = view === "household" ? HOUSEHOLD_CARDS : BUSINESS_CARDS;
 
@@ -103,9 +167,9 @@ export const CreditTab: React.FC = () => {
       <header className="tab__header">
         <h1 className="tab__title">Credit</h1>
         <p className="tab__subtitle">
-          Household & business credit, delinquencies, defaults, and stress
+          Household &amp; business credit, delinquencies, defaults, and stress
           indicators (Statistics Canada, Canadian Mortgage and Housing
-          Corporation, & Innovation Science and Economic Development)
+          Corporation, &amp; Innovation Science and Economic Development)
         </p>
       </header>
 
@@ -127,21 +191,41 @@ export const CreditTab: React.FC = () => {
         </div>
       </div>
 
+      {error && (
+        <div className="tab__error">
+          Failed to load credit data: {error}
+        </div>
+      )}
+
       {/* Cards grid – 5 cards side by side on desktop */}
       <div className="tab__charts">
-        {cards.map((card) => (
-          <div key={card.metricKey}>
-            <ChartPanel
-              key={card.metricKey}
-              title={card.title}
-              // TODO: wire up real series for card.metricKey.
-              // For now, pass an empty series so ChartPanel renders its "no data" state.
-              series={[]}
-              valueKey={card.valueKey ?? "value"}
-            />
-          </div>
-        ))}
+        {cards.map((card) => {
+          const series = seriesByMetric[card.metricKey] ?? [];
+
+          return (
+            <div key={card.metricKey}>
+              <ChartPanel
+                title={card.title}
+                series={series}
+                valueKey={card.valueKey ?? "value"}
+                // Treat rates / shares / % changes as percent scales
+                treatAsPercentScale={
+                  card.valueKey === "mom_pct" ||
+                  card.valueKey === "yoy_pct" ||
+                  card.metricKey.includes("rate") ||
+                  card.metricKey.includes("share")
+                }
+                // All of these metrics are non-negative so zero baseline is fine
+                clampYMinToZero
+              />
+            </div>
+          );
+        })}
       </div>
+
+      {loading && !error && data.length === 0 && (
+        <div className="tab__loading">Loading credit data…</div>
+      )}
     </div>
   );
 };
