@@ -54,7 +54,7 @@ function formatRentLevelValue(value: number): string {
 function formatValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "–";
 
-  if (unit === "pct") {
+  if (unit === "pct" || unit === "%") {
     // 2 decimal places for interest rates / percentages
     return `${value.toFixed(2)}%`;
   }
