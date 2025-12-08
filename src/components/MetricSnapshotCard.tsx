@@ -66,18 +66,6 @@ function formatValue(value: number, unit: string): string {
     return `$${inBillions.toFixed(2)}B`;   // 0 decimal places
   }
 
-  // Credit tab loans (unit = "millions")
-  if (unit === "cmillions") {
-    // value is stored in *dollars* (see RatesBonds.py), so convert to billions here
-    const inMillions = value * 1_000;
-    return `$${inMillions.toFixed(0)}`;   // 0 decimal places
-  }
-  // Credit tab default rate (unit = "thousands")
-  if (unit === "defaultRate") {
-    const thousands = value / 1_000;
-    return `${thousands.toFixed(2)}K`;
-  }
-
   if (unit === "cad") {
     const abs = Math.abs(value);
 
