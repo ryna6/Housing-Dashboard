@@ -1,9 +1,6 @@
 import React, { useMemo, useState } from "react";
-import type { PanelPoint, TabSeries } from "../data/types";
-import {
-  MetricSnapshotCard,
-  type MetricSnapshot,
-} from "../components/MetricSnapshotCard";
+import type { PanelPoint, RegionCode } from "../data/types";
+import { MetricSnapshotCard, type MetricSnapshot, } from "../components/MetricSnapshotCard";
 import { ChartPanel } from "../components/ChartPanel";
 import { useTabData } from "./useTabData";
 
@@ -25,7 +22,6 @@ type CreditViewKey = "household" | "business";
 interface CreditViewOption {
   key: CreditViewKey;
   label: string;
-  description: string;
 }
 
 const CREDIT_VIEW_OPTIONS: CreditViewOption[] = [
@@ -220,9 +216,6 @@ export const CreditTab: React.FC = () => {
                   <span className="segmented-control__label">
                     {option.label}
                   </span>
-                  <span className="segmented-control__description">
-                    {option.description}
-                  </span>
                 </button>
               );
             })}
@@ -262,7 +255,6 @@ export const CreditTab: React.FC = () => {
                 ? "Household credit & quality"
                 : "Business credit & quality"
             }
-            description={viewOption.description}
             loading={loading}
             unit={undefined}
             series={series}
