@@ -295,28 +295,23 @@ export const CreditTab: React.FC = () => {
           switch (card.metricKey) {
             case "household_mortgage_share_of_credit":
               treatAsPercentScale = true;
-              valueAxisLabel = "% of household credit";
               break;
 
             case "business_nfc_dsr":
               // DSR is a percent of income
               treatAsPercentScale = true;
-              valueAxisLabel = "% of income";
               break;
 
             case "household_default_rate":
             case "business_default_rate":
               // Use raw counts (no % on axis)
               treatAsPercentScale = false;
-              valueAxisLabel = "Insolvencies (count)";
               break;
 
             case "business_debt_to_equity":
               // Pure ratio – no unit, no percent sign
               treatAsPercentScale = false;
               valueAxisLabel = "";
-              valueFormatter = (v: number) => v.toFixed(2);
-              tooltipValueFormatter = (v: number) => v.toFixed(2);
               break;
 
             default:
