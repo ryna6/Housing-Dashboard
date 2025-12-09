@@ -274,9 +274,12 @@ def load_business_dsr_from_bis(
     """
     Fetch the non-financial corporate debt-service ratio (DSR) from BIS via SDMX.
 
-    BIS publishes DSR data under the WS_DSR dataflow. The SDMX key typically has the
-    structure:
+    BIS publishes DSR data under the WS_DSR dataflow.
 
+    We use the official BIS SDMX REST API:
+        https://stats.bis.org/api/v1/data/WS_DSR
+
+    SDMX key structure:
         <frequency>.<country>.<sector>.<instrument>.<measure>
 
     For this dashboard we want:
@@ -286,43 +289,53 @@ def load_business_dsr_from_bis(
         - total instruments (T)
         - DSR as a percentage of income (A)
 
-    i.e. key: Q.<country>.<sector>.T.A, for example: Q.CA.NFC.T.A
-
-    We request CSV output from the SDMX endpoint and normalise dates to YYYY-MM-01.
+    i.e. key: Q.<country>.<sector>.T.A  → e.g. Q.CA.NFC.T.A
 
     Returns
     -------
     pd.Series
         Index: DatetimeIndex (month-start) 'YYYY-MM-01'
-        Values: float DSR (as provided by BIS, usually in percent of income).
+        Values: float DSR (percent of income).
     """
-    base_url = "https://stats.bis.org/statx/sdmx/data/WS_DSR"
+    # Official API base
+    base_url = "https://stats.bis.org/api/v1/data/WS_DSR"
 
     # frequency.country.sector.instrument.measure
     key = f"Q.{country}.{sector}.T.A"
 
-    query = "detail=dataonly&compressed=false&format=csv"
-    url = f"{base_url}/{key}?{query}"
+    params = {
+        # pull full history; BIS starts around 1999
+        "startPeriod": "1999",
+        "detail": "dataonly",
+        "format": "csv",
+    }
+    url = f"{base_url}/{key}?{urlencode(params)}"
 
     logger.info("[BIS] Fetching non-financial corporate DSR from %s", url)
 
     try:
         df = pd.read_csv(url)
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc:  # defensive: network/HTTP/CSV issues
         logger.warning("[BIS] Failed to load DSR series: %s", exc)
         return pd.Series(dtype=float)
 
-    if "TIME_PERIOD" not in df.columns or "OBS_VALUE" not in df.columns:
+    # Be defensive about column names. In current BIS CSVs the key columns are
+    # TIME_PERIOD and OBS_VALUE, but we resolve case-insensitively.
+    cols_upper = {c.upper(): c for c in df.columns}
+    time_col = cols_upper.get("TIME_PERIOD")
+    value_col = cols_upper.get("OBS_VALUE") or cols_upper.get("VALUE")
+
+    if time_col is None or value_col is None:
         logger.warning(
             "[BIS] Unexpected DSR payload columns: %s", ", ".join(df.columns)
         )
         return pd.Series(dtype=float)
 
-    df = df[["TIME_PERIOD", "OBS_VALUE"]].rename(
-        columns={"TIME_PERIOD": "date", "OBS_VALUE": "value"}
+    df = df[[time_col, value_col]].rename(
+        columns={time_col: "date", value_col: "value"}
     )
 
-    def _normalize_quarter_label(label: str) -> Optional[str]:
+    def _normalize_quarter_label(label: object) -> Optional[str]:
         """
         Convert labels like '2012-Q3' or date-like strings to 'YYYY-MM-01'.
         """
@@ -350,14 +363,13 @@ def load_business_dsr_from_bis(
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     df = df.dropna(subset=["date", "value"])
 
-    # Aggregate in case BIS returns multiple rows per date
-    series = (
-        df.groupby("date")["value"]
-        .mean()
-        .sort_index()
-    )
+    if df.empty:
+        logger.warning("[BIS] No usable DSR observations after cleaning")
+        return pd.Series(dtype=float)
 
-    # series.index is now a proper DatetimeIndex, so trim_to_last_n_years works
+    # Aggregate in case BIS ever returns multiple rows per date
+    series = df.groupby("date")["value"].mean().sort_index()
+
     logger.info("[BIS] Loaded %d DSR observations", len(series))
     return series
 
