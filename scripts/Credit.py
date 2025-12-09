@@ -298,15 +298,13 @@ def load_business_dsr_from_bis(
         Values: float DSR (percent of income).
     """
     # Official API base
-    base_url = "https://stats.bis.org/api/v2/data/dataflow/BIS/WS_DSR"
+    base_url = "https://stats.bis.org/api/v2/data/dataflow/BIS/WS_DSR/1.0"
 
     # frequency.country.sector.instrument.measure
     key = f"Q.{country}.{sector}.T.A"
 
     params = {
-        # pull full history; BIS starts around 1999
-        "startPeriod": "1999",
-        "detail": "dataonly",
+        "startPeriod": "1999-Q1",  # or "2015-Q3" if you want shorter history
         "format": "csv",
     }
     url = f"{base_url}/{key}?{urlencode(params)}"
