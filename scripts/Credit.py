@@ -181,47 +181,66 @@ def load_business_credit_from_statcan() -> Dict[str, pd.Series]:
 # Insolvency (OSB/ISED) – default rate proxy
 # --------------------------------------------------------------------------------------
 
-INSOLVENCY_XLSX = RAW_DATA_DIR / "ISED Insolvency Data 1987-2025.xlsx"
-
+INSOLVENCY_XLSX = RAW_DATA_DIR / "ISED Insolvency Rate 1987-2025.xls"
 
 def load_insolvency_series() -> Dict[str, pd.Series]:
     """
-    Load monthly consumer + business insolvency counts from the ISED/OSB file.
+    Load annual insolvency *rates* (bankruptcy rate) from the ISED file.
 
-    Sheet name is 'Monthly_mensuels' (with capital M).
+    File:
+      data/raw/ISED Insolvency Rate 1987-2025.xls
 
-    Layout:
-    - Canada aggregates are in rows 2–16; consumer row 5, business row 8.
-    - First month: Jan 1987 in column C; Feb 1987 = D; etc.
+    Sheet:
+      "ER - Business Insol. Rates"
 
-    Returns two monthly series indexed by Timestamp:
+    Layout (Canada aggregate):
+      - Years are horizontal:
+          1997 in cell C4, 1998 in D4, etc.
+      - Bankruptcy rates are horizontal:
+          1997 bankruptcy rate in C6, 1998 in D6, etc.
+      - Rates are given as "per 1,000 businesses".
 
-    - household_default_rate (proxy – counts)
-    - business_default_rate (proxy – counts)
+    We convert the per-1000 rate to a true percentage:
+        rate_per_1000 / 1000 * 100  =  rate_per_1000 / 10  (%)
+
+    We still return two series with the existing metric keys so the
+    frontend doesn't need to change:
+        - "household_default_rate"
+        - "business_default_rate"
+
+    For now both use the same annual business bankruptcy rate as a proxy.
     """
     df_raw = pd.read_excel(
         INSOLVENCY_XLSX,
-        sheet_name="Monthly_mensuels",
+        sheet_name="ER - Business Insol. Rates",
         header=None,
     )
 
-    # Row index is 0-based; row 5 -> index 4, row 8 -> index 7
-    consumer_row = df_raw.iloc[4, 2:]  # C5 onwards
-    business_row = df_raw.iloc[7, 2:]  # C8 onwards
+    # Row indices are 0-based:
+    #   - Excel row 4 (years)    -> index 3
+    #   - Excel row 6 (rate)     -> index 5
+    years_row = df_raw.iloc[3, 2:]   # from column C onwards
+    rate_row = df_raw.iloc[5, 2:]    # from column C onwards
 
-    consumer_vals = consumer_row.dropna()
-    business_vals = business_row.iloc[: len(consumer_vals)].dropna()
+    years = pd.to_numeric(years_row, errors="coerce").dropna().astype(int)
 
-    n_months = len(consumer_vals)
-    start_date = pd.Timestamp(year=1987, month=1, day=1)
-    dates = pd.date_range(start=start_date, periods=n_months, freq="MS")
+    # Align rates to the number of valid years
+    rates_per_1000 = (
+        pd.to_numeric(rate_row, errors="coerce")
+        .iloc[: len(years)]
+        .to_numpy(dtype=float)
+    )
 
-    s_household = pd.Series(
-        consumer_vals.to_numpy(dtype=float), index=dates
-    ).sort_index()
-    s_business = pd.Series(
-        business_vals.to_numpy(dtype=float), index=dates
-    ).sort_index()
+    # Convert "per 1000 businesses" to percentage
+    #   rate_per_1000 / 1000 * 100  =  rate_per_1000 / 10
+    rates_pct = (rates_per_1000 / 1000.0) * 100.0
+
+    # Map each year to 1 Jan of that year (annual series)
+    dates = pd.to_datetime(years.astype(str) + "-01-01")
+
+    s_business = pd.Series(rates_pct, index=dates).sort_index()
+    # For now, use the same proxy series for households to keep the metric key.
+    s_household = s_business.copy()
 
     return {
         "household_default_rate": s_household,
@@ -495,27 +514,32 @@ def build_credit_panel() -> List[PanelRow]:
             )
         )
 
-    # --- Insolvencies: household + business default rate (proxy) ---
+    # --- Insolvencies: household + business default rate (annual rates) ---
     insolv = load_insolvency_series()
-    hh_default = trim_to_last_n_years(insolv["household_default_rate"], years=10)
+
+    hh_default = trim_to_last_n_years(
+        insolv["household_default_rate"], years=10
+    )
     rows.extend(
         series_to_panel_rows(
             hh_default,
             metric="household_default_rate",
-            unit="index",
+            unit="%",
             source="OSB/ISED",
-            freq="Q",
+            freq="A",   # annual
         )
     )
 
-    bus_default = trim_to_last_n_years(insolv["business_default_rate"], years=10)
+    bus_default = trim_to_last_n_years(
+        insolv["business_default_rate"], years=10
+    )
     rows.extend(
         series_to_panel_rows(
             bus_default,
             metric="business_default_rate",
-            unit="index",
+            unit="%",
             source="OSB/ISED",
-            freq="M",
+            freq="A",   # annual
         )
     )
 
