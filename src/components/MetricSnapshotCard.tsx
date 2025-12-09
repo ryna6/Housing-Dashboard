@@ -40,6 +40,9 @@ const QUARTERLY_RENTAL_METRICS = new Set<string>([
  */
 const VACANCY_METRICS = new Set<string>(["rental_vacancy_rate"]);
 
+/**
+ * Default-rate metrics – annual; we show YoY on the delta chip.
+ */
 const ANNUAL_DEFAULT_RATE_METRICS = new Set<string>([
   "household_default_rate",
   "business_default_rate",
@@ -66,9 +69,9 @@ function formatValue(value: number, unit: string): string {
 
   // Repo_volume (unit = "billions")
   if (unit === "billions") {
-    // value is stored in *dollars* (see RatesBonds.py), so convert to billions here
+    // value is stored in *dollars*, so convert to billions here
     const inBillions = value / 1_000_000_000;
-    return `$${inBillions.toFixed(2)}B`;   // 0 decimal places
+    return `$${inBillions.toFixed(2)}B`;
   }
 
   if (unit === "cad") {
@@ -119,7 +122,7 @@ function formatValue(value: number, unit: string): string {
 }
 
 function formatDelta(value: number, unit: string): string {
-  if (unit === "pct") {
+  if (unit === "pct" || unit === "%") {
     return `${value.toFixed(2)}%`;
   }
   return formatValue(value, unit);
@@ -197,6 +200,7 @@ export const MetricSnapshotCard: React.FC<Props> = ({
   const useVsPreviousRate = VS_PREVIOUS_RATE_METRICS.has(metric);
   const isQuarterlyRental = QUARTERLY_RENTAL_METRICS.has(metric);
   const isVacancy = VACANCY_METRICS.has(metric);
+  const isAnnualDefault = ANNUAL_DEFAULT_RATE_METRICS.has(metric);
 
   // YoY styling (green up / red down) – not used for vacancy (custom chip).
   const yoyClass =
@@ -250,10 +254,50 @@ export const MetricSnapshotCard: React.FC<Props> = ({
         </div>
       );
     }
+  } else if (useVsPreviousRate) {
+    // For policy_rate & mortgage_5y: "Δ … vs previous rate"
+    if (prev && Number.isFinite(prev.value) && Number.isFinite(latestVal)) {
+      const absDelta = latest.value - prev.value;
+
+      if (absDelta !== 0) {
+        const relPct =
+          prev.value !== 0
+            ? (absDelta / Math.abs(prev.value)) * 100
+            : null;
+
+        const chipClass =
+          "metric-card__delta-chip" +
+          (absDelta > 0
+            ? " metric-card__delta-chip--up"
+            : absDelta < 0
+            ? " metric-card__delta-chip--down"
+            : "");
+
+        deltaNode = (
+          <div className="metric-card__delta-row">
+            <span className={chipClass}>
+              {absDelta > 0 ? "+" : ""}
+              {formatDelta(absDelta, latest.unit)}
+              {relPct != null && (
+                <>
+                  {" "}
+                  (
+                  {relPct > 0 ? "+" : ""}
+                  {relPct.toFixed(1)}%)
+                </>
+              )}
+              <span className="metric-card__delta-label">
+                {" "}
+                vs previous rate
+              </span>
+            </span>
+          </div>
+        );
+      }
+    }
   } else {
     // All other metrics (including rentals & default rates).
     const hasPrev = !!prev && Number.isFinite(prev?.value);
-    const isAnnualDefault = ANNUAL_DEFAULT_RATE_METRICS.has(metric);
 
     let pctChange: number | null = null;
     let label: string;
@@ -306,46 +350,6 @@ export const MetricSnapshotCard: React.FC<Props> = ({
       );
     }
   }
-  } else {
-    // All other metrics (including rentals): generic period-over-period change.
-    const hasPrev = !!prev && Number.isFinite(prev.value);
-    const momPct =
-      latest.mom_pct != null
-        ? latest.mom_pct
-        : hasPrev && prev
-        ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
-        : null;
-
-    if (hasPrev && momPct != null) {
-      const absDelta = latest.value - prev!.value;
-      const chipClass =
-        "metric-card__delta-chip" +
-        (momPct > 0
-          ? " metric-card__delta-chip--up"
-          : momPct < 0
-          ? " metric-card__delta-chip--down"
-          : "");
-
-      const label = isQuarterlyRental ? "QoQ" : "MoM";
-
-      deltaNode = (
-        <div className="metric-card__delta-row">
-          <span className={chipClass}>
-            {absDelta > 0 ? "+" : ""}
-            {formatDelta(absDelta, latest.unit)}{" "}
-            {momPct != null && (
-              <>
-                (
-                {momPct > 0 ? "+" : ""}
-                {momPct.toFixed(1)}%)
-              </>
-            )}
-            <span className="metric-card__delta-label"> {label}</span>
-          </span>
-        </div>
-      );
-    }
-  }
 
   let yoyNode: React.ReactNode = null;
   if (!isVacancy && yoyPct != null) {
@@ -366,10 +370,11 @@ export const MetricSnapshotCard: React.FC<Props> = ({
         {metric === "rent_level" && latest.unit === "cad"
           ? formatRentLevelValue(latestVal)
           : metric === "business_debt_to_equity"
-          ? (Number.isFinite(latestVal) ? latestVal.toFixed(2) : "–")
+          ? Number.isFinite(latestVal)
+            ? latestVal.toFixed(2)
+            : "–"
           : formatValue(latestVal, latest.unit)}
       </div>
-
 
       {deltaNode}
 
