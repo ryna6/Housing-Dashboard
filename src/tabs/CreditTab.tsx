@@ -315,67 +315,102 @@ export const CreditTab: React.FC = () => {
         })}
       </div>
 
-      {/* Charts grid – 5 cards side by side on desktop */}
-      <div className="tab__charts tab__metrics--wide">
-        {cards.map((card) => {
-          const series = seriesByMetric[card.metricKey] ?? [];
-          const valueKey = card.valueKey ?? "value";
+      {/* Cards grid – 5 cards side by side on desktop */}
+    <div
+      className="tab__charts"
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+        gap: "1.5rem",
+      }}
+    >
+    {cards.map((card) => {
+      const series = seriesByMetric[card.metricKey] ?? [];
+      const valueKey = card.valueKey ?? "value";
 
-          // Default percent handling based on key/value
-          let treatAsPercentScale =
-            valueKey === "mom_pct" ||
-            valueKey === "yoy_pct" ||
-            card.metricKey.includes("rate") ||
-            card.metricKey.includes("share");
+      // Default percent handling based on key/value
+      let treatAsPercentScale =
+        valueKey === "mom_pct" ||
+        valueKey === "yoy_pct" ||
+        card.metricKey.includes("rate") ||
+        card.metricKey.includes("share");
 
-          let valueFormatter = formatCurrencyCompact;
-          let tooltipValueFormatter = formatMoneyTooltip;
+      let valueFormatter = formatCurrencyCompact;
+      let tooltipValueFormatter = formatMoneyTooltip;
 
-          // 1) Debt-to-equity ratio: plain ratio, no currency, no %
-          if (card.metricKey === "business_debt_to_equity") {
-           treatAsPercentScale = false;
-           valueFormatter = (v) =>
-              Number.isFinite(v) ? v.toFixed(2) : "–";
-            tooltipValueFormatter = (v) =>
-              Number.isFinite(v) ? v.toFixed(2) : "–";
-          }
+      // Big dollar series: keep as $
+      if (
+        card.metricKey === "household_non_mortgage_loans" ||
+        card.metricKey === "household_mortgage_loans" ||
+        card.metricKey === "business_total_debt" ||
+        card.metricKey === "business_equity"
+      ) {
+        treatAsPercentScale = false;
+        valueFormatter = formatCurrencyCompact;
+        tooltipValueFormatter = formatMoneyTooltip;
+      }
 
+      // Household default rate – annual %, 2 decimals
+      if (card.metricKey === "household_default_rate") {
+        treatAsPercentScale = false;
+        valueFormatter = (v: number) =>
+          Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+        tooltipValueFormatter = (v: number) =>
+          Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+      }
 
-          // 2) Household default rate: no percentage units
-          if (card.metricKey === "household_default_rate") {
-            treatAsPercentScale = false;
-            valueFormatter = (v) =>
-              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
-            tooltipValueFormatter = (v) =>
-              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
-             }
+      // Business default rate – annual %, 2 decimals
+      if (card.metricKey === "business_default_rate") {
+        treatAsPercentScale = false;
+        valueFormatter = (v: number) =>
+          Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+        tooltipValueFormatter = (v: number) =>
+          Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+      }  
 
-          // 3) Mortgage delinquency rate: small percentages with proper decimals
-          if (card.metricKey === "household_mortgage_delinquency_rate") {
-            treatAsPercentScale = false;
-            valueFormatter = (v) =>
-              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
-            tooltipValueFormatter = (v) =>
-              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
-          }
+      // Mortgage delinquency rate – small %, 2 decimals
+      if (card.metricKey === "household_mortgage_delinquency_rate") {
+        treatAsPercentScale = false;
+        valueFormatter = (v: number) =>
+          Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+        tooltipValueFormatter = (v: number) =>
+          Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+      }
 
-          return (
-            <div key={card.metricKey}>
-              <ChartPanel
-                title={card.title}
-                series={series}
-                valueKey={valueKey}
-                // Treat rates / shares / % changes as percent scales, unless
-                // overridden above for specific metrics.
-                treatAsPercentScale={treatAsPercentScale}
-                valueFormatter={valueFormatter}
-                tooltipValueFormatter={tooltipValueFormatter}
-                clampYMinToZero
-              />
-            </div>
-          );
-        })}
-      </div>
+      // Business debt service ratio – show as %
+      if (card.metricKey === "business_nfc_dsr") {
+        treatAsPercentScale = false;
+        valueFormatter = (v: number) =>
+          Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+        tooltipValueFormatter = (v: number) =>
+          Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+      }
+
+      // Debt-to-equity ratio – plain ratio
+      if (card.metricKey === "business_debt_to_equity") {
+        treatAsPercentScale = false;
+        valueFormatter = (v: number) =>
+          Number.isFinite(v) ? v.toFixed(2) : "–";
+        tooltipValueFormatter = (v: number) =>
+          Number.isFinite(v) ? v.toFixed(2) : "–";
+      }  
+
+      return (
+        <div key={card.metricKey}>
+          <ChartPanel
+            title={card.title}
+            series={series}
+            valueKey={valueKey}
+            treatAsPercentScale={treatAsPercentScale}
+            valueFormatter={valueFormatter}
+            tooltipValueFormatter={tooltipValueFormatter}
+            clampYMinToZero
+          />
+        </div>
+      );
+    })}
+  </div>
+
 
       {loading && !error && data.length === 0 && (
         <div className="tab__loading">Loading credit data…</div>
