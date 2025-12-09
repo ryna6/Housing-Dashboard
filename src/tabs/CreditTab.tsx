@@ -335,9 +335,9 @@ export const CreditTab: React.FC = () => {
           if (card.metricKey === "business_debt_to_equity") {
            treatAsPercentScale = false;
            valueFormatter = (v) =>
-              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+              Number.isFinite(v) ? v.toFixed(2) : "–";
             tooltipValueFormatter = (v) =>
-              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+              Number.isFinite(v) ? v.toFixed(2) : "–";
           }
 
 
