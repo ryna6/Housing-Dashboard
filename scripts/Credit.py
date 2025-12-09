@@ -269,7 +269,7 @@ def load_mortgage_delinquency_series() -> pd.Series:
 
 def load_business_dsr_from_bis(
     country: str = "CA",
-    sector: str = "NFC",
+    sector: str = "N",
 ) -> pd.Series:
     """
     Fetch the non-financial corporate debt-service ratio (DSR) from BIS via SDMX.
@@ -277,7 +277,7 @@ def load_business_dsr_from_bis(
     BIS publishes DSR data under the WS_DSR dataflow.
 
     We use the official BIS SDMX REST API:
-        https://stats.bis.org/api/v1/data/WS_DSR
+        https://stats.bis.org/api/v2/data/dataflow/BIS/WS_DSR
 
     SDMX key structure:
         <frequency>.<country>.<sector>.<instrument>.<measure>
@@ -285,11 +285,11 @@ def load_business_dsr_from_bis(
     For this dashboard we want:
         - quarterly frequency (Q)
         - Canada (CA)
-        - non-financial corporates (NFC)
+        - non-financial corporates (N)
         - total instruments (T)
         - DSR as a percentage of income (A)
 
-    i.e. key: Q.<country>.<sector>.T.A  → e.g. Q.CA.NFC.T.A
+    i.e. key: Q.<country>.<sector>.T.A  → e.g. Q.CA.N.T.A
 
     Returns
     -------
@@ -298,7 +298,7 @@ def load_business_dsr_from_bis(
         Values: float DSR (percent of income).
     """
     # Official API base
-    base_url = "https://stats.bis.org/api/v1/data/WS_DSR"
+    base_url = "https://stats.bis.org/api/v2/data/dataflow/BIS/WS_DSR"
 
     # frequency.country.sector.instrument.measure
     key = f"Q.{country}.{sector}.T.A"
