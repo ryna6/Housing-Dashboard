@@ -183,64 +183,59 @@ def load_business_credit_from_statcan() -> Dict[str, pd.Series]:
 
 INSOLVENCY_XLSX = RAW_DATA_DIR / "ISED Insolvency Rate 1987-2025.xls"
 
+def _load_insolvency_rate_sheet(sheet_name: str) -> pd.Series:
+    """
+    Helper: load annual bankruptcy rate (per 1,000) from a given sheet and
+    convert it to a true percentage series indexed by 1 Jan of each year.
+
+    Common layout for both sheets:
+
+    - Years are horizontal: 1987/1997 etc. in row 4, starting at C4.
+    - Bankruptcy rates are horizontal: row 6, starting at C6.
+    - Values are "per 1,000" businesses or consumers.
+    """
+    df_raw = pd.read_excel(
+        INSOLVENCY_XLSX,
+        sheet_name=sheet_name,
+        header=None,
+    )
+
+    # 0-based indices: row 4 -> index 3, row 6 -> index 5
+    years_row = df_raw.iloc[3, 2:]  # C4 onwards
+    rate_row = df_raw.iloc[5, 2:]   # C6 onwards
+
+    years = pd.to_numeric(years_row, errors="coerce")
+    rates_per_1000 = pd.to_numeric(rate_row, errors="coerce")
+
+    mask = years.notna() & rates_per_1000.notna()
+    years = years[mask].astype(int)
+    rates_per_1000 = rates_per_1000[mask].astype(float)
+
+    # Convert "per 1000" to percentage:
+    #   rate_per_1000 / 1000 * 100 = rate_per_1000 / 10
+    rates_pct = (rates_per_1000 / 1000.0) * 100.0
+
+    dates = pd.to_datetime(years.astype(str) + "-01-01")
+    series = pd.Series(rates_pct.to_numpy(dtype=float), index=dates).sort_index()
+    series.name = sheet_name
+    return series
+
+
 def load_insolvency_series() -> Dict[str, pd.Series]:
     """
-    Load annual insolvency *rates* (bankruptcy rate) from the ISED file.
+    Load annual insolvency (bankruptcy) rates for households and businesses.
 
     File:
       data/raw/ISED Insolvency Rate 1987-2025.xls
 
-    Sheet:
-      "ER - Business Insol. Rates"
+    Sheets:
+      - "ER - Consumer Insol. Rates"  -> household_default_rate
+      - "ER - Business Insol. Rates"  -> business_default_rate
 
-    Layout (Canada aggregate):
-      - Years are horizontal:
-          1997 in cell C4, 1998 in D4, etc.
-      - Bankruptcy rates are horizontal:
-          1997 bankruptcy rate in C6, 1998 in D6, etc.
-      - Rates are given as "per 1,000 businesses".
-
-    We convert the per-1000 rate to a true percentage:
-        rate_per_1000 / 1000 * 100  =  rate_per_1000 / 10  (%)
-
-    We still return two series with the existing metric keys so the
-    frontend doesn't need to change:
-        - "household_default_rate"
-        - "business_default_rate"
-
-    For now both use the same annual business bankruptcy rate as a proxy.
+    Both are "per 1,000"; we convert them into percentages.
     """
-    df_raw = pd.read_excel(
-        INSOLVENCY_XLSX,
-        sheet_name="ER - Business Insol. Rates",
-        header=None,
-    )
-
-    # Row indices are 0-based:
-    #   - Excel row 4 (years)    -> index 3
-    #   - Excel row 6 (rate)     -> index 5
-    years_row = df_raw.iloc[3, 2:]   # from column C onwards
-    rate_row = df_raw.iloc[5, 2:]    # from column C onwards
-
-    years = pd.to_numeric(years_row, errors="coerce").dropna().astype(int)
-
-    # Align rates to the number of valid years
-    rates_per_1000 = (
-        pd.to_numeric(rate_row, errors="coerce")
-        .iloc[: len(years)]
-        .to_numpy(dtype=float)
-    )
-
-    # Convert "per 1000 businesses" to percentage
-    #   rate_per_1000 / 1000 * 100  =  rate_per_1000 / 10
-    rates_pct = (rates_per_1000 / 1000.0) * 100.0
-
-    # Map each year to 1 Jan of that year (annual series)
-    dates = pd.to_datetime(years.astype(str) + "-01-01")
-
-    s_business = pd.Series(rates_pct, index=dates).sort_index()
-    # For now, use the same proxy series for households to keep the metric key.
-    s_household = s_business.copy()
+    s_household = _load_insolvency_rate_sheet("ER - Consumer Insol. Rates")
+    s_business = _load_insolvency_rate_sheet("ER - Business Insol. Rates")
 
     return {
         "household_default_rate": s_household,
@@ -515,6 +510,7 @@ def build_credit_panel() -> List[PanelRow]:
         )
 
     # --- Insolvencies: household + business default rate (annual rates) ---
+        # --- Insolvencies: household + business default rate (annual bankruptcy rate) ---
     insolv = load_insolvency_series()
 
     hh_default = trim_to_last_n_years(
@@ -524,9 +520,9 @@ def build_credit_panel() -> List[PanelRow]:
         series_to_panel_rows(
             hh_default,
             metric="household_default_rate",
-            unit="%",
+            unit="pct",   # true percentage
             source="OSB/ISED",
-            freq="A",   # annual
+            freq="A",     # annual
         )
     )
 
@@ -537,12 +533,12 @@ def build_credit_panel() -> List[PanelRow]:
         series_to_panel_rows(
             bus_default,
             metric="business_default_rate",
-            unit="%",
+            unit="pct",   # true percentage
             source="OSB/ISED",
-            freq="A",   # annual
+            freq="A",     # annual
         )
     )
-
+    
     # --- CMHC mortgage delinquency (quarterly) ---
     hh_delinquency = load_mortgage_delinquency_series()
     hh_delinquency = trim_to_last_n_years(hh_delinquency, years=10)
