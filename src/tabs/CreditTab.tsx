@@ -335,6 +335,16 @@ export const CreditTab: React.FC = () => {
           let valueFormatter = formatCurrencyCompact;
           let tooltipValueFormatter = formatMoneyTooltip;
 
+          // 1) Debt-to-equity ratio: plain ratio, no currency, no %
+          if (card.metricKey === "business_debt_to_equity") {
+           treatAsPercentScale = false;
+           valueFormatter = (v: number) =>
+             Number.isFinite(v) ? v.toFixed(2) : "–";
+           tooltipValueFormatter = (v: number) =>
+             Number.isFinite(v) ? v.toFixed(2) : "–";
+          }
+
+
           // 2) Household default rate: no percentage units
           if (card.metricKey === "household_default_rate") {
             treatAsPercentScale = false;
