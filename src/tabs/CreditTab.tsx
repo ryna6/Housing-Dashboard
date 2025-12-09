@@ -287,13 +287,13 @@ export const CreditTab: React.FC = () => {
       )}
 
       {/* Snapshot cards */}
-      <div 
+      <div
         className="tab__metrics"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
           gap: "1.5rem",
-      >
+      }}
         {cards.map((card) => {
           const snapshot = snapshotsByMetric[card.metricKey];
 
