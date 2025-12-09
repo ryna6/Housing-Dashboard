@@ -46,7 +46,7 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
   },
   {
     metricKey: "household_mortgage_share_of_credit",
-    title: "Mortgage % of household credit",
+    title: "Mortgage % of total credit",
     valueKey: "value",
   },
   {
@@ -195,6 +195,9 @@ export const CreditTab: React.FC = () => {
     if (abs >= 1_000) {
       return `${(value / 1_000).toFixed(2)}K`;
     }
+    if (abs >= 1) {
+      return `${(value / 1).toFixed(2)}`;
+    }
     return `${value.toFixed(1)}`;
   }
 
@@ -331,10 +334,10 @@ export const CreditTab: React.FC = () => {
           // 1) Debt-to-equity ratio: plain ratio, no currency, no %
           if (card.metricKey === "business_debt_to_equity") {
            treatAsPercentScale = false;
-           valueFormatter = (v: number) =>
-             Number.isFinite(v) ? v.toFixed(2) : "–";
-           tooltipValueFormatter = (v: number) =>
-             Number.isFinite(v) ? v.toFixed(2) : "–";
+           valueFormatter = (v) =>
+              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+            tooltipValueFormatter = (v) =>
+              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
           }
 
 
@@ -350,10 +353,10 @@ export const CreditTab: React.FC = () => {
           // 3) Mortgage delinquency rate: small percentages with proper decimals
           if (card.metricKey === "household_mortgage_delinquency_rate") {
             treatAsPercentScale = false;
-            valueFormatter = (v: number) =>
-              Number.isFinite(v) ? v.toFixed(2) : "–";
-            tooltipValueFormatter = (v: number) =>
-              Number.isFinite(v) ? v.toFixed(2) : "–";
+            valueFormatter = (v) =>
+              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+            tooltipValueFormatter = (v) =>
+              Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
           }
 
           return (
