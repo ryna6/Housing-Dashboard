@@ -195,9 +195,6 @@ export const CreditTab: React.FC = () => {
     if (abs >= 1_000) {
       return `${(value / 1_000).toFixed(2)}K`;
     }
-    if (abs >= 1) {
-      return `{(value / 1).toFixed(1)}%`;
-    }
     return `${value.toFixed(2)}`;
   }
 
@@ -287,39 +284,40 @@ export const CreditTab: React.FC = () => {
       )}
 
       {/* Snapshot cards */}
-      <div
-        className="tab__metrics"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-          gap: "1.5rem",
-      }}
-        {cards.map((card) => {
-          const snapshot = snapshotsByMetric[card.metricKey];
+<div
+  className="tab__metrics"
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+    gap: "1.5rem",
+  }}
+>
+  {cards.map((card) => {
+    const snapshot = snapshotsByMetric[card.metricKey];
 
-          if (!snapshot) {
-            return (
-              <div
-                key={card.metricKey}
-                className="metric-card metric-card--empty"
-              >
-                <div className="metric-card__title">{card.title}</div>
-                <div className="metric-card__empty-text">
-                  Not available for this selection.
-                </div>
-              </div>
-            );
-          }
+    if (!snapshot) {
+      return (
+        <div
+          key={card.metricKey}
+          className="metric-card metric-card--empty"
+        >
+          <div className="metric-card__title">{card.title}</div>
+          <div className="metric-card__empty-text">
+            Not available for this selection.
+          </div>
+        </div>
+      );
+    }
 
-          return (
-            <MetricSnapshotCard
-              key={card.metricKey}
-              snapshot={snapshot}
-              titleOverride={card.title}
-            />
-          );
-        })}
-      </div>
+    return (
+      <MetricSnapshotCard
+        key={card.metricKey}
+        snapshot={snapshot}
+        titleOverride={card.title}
+      />
+    );
+  })}
+</div>
 
       {/* Cards grid – 5 cards side by side on desktop */}
     <div
