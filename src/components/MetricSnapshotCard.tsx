@@ -40,6 +40,11 @@ const QUARTERLY_RENTAL_METRICS = new Set<string>([
  */
 const VACANCY_METRICS = new Set<string>(["rental_vacancy_rate"]);
 
+const ANNUAL_DEFAULT_RATE_METRICS = new Set<string>([
+  "household_default_rate",
+  "business_default_rate",
+]);
+
 // More detailed formatting for rent-level metrics (e.g. "$2.45k")
 function formatRentLevelValue(value: number): string {
   const abs = Math.abs(value);
@@ -245,44 +250,62 @@ export const MetricSnapshotCard: React.FC<Props> = ({
         </div>
       );
     }
-  } else if (useVsPreviousRate) {
-    // For policy_rate & mortgage_5y: "Δ … vs previous rate"
-    if (prev && Number.isFinite(prev.value) && Number.isFinite(latestVal)) {
-      const absDelta = latest.value - prev.value;
+  } else {
+    // All other metrics (including rentals & default rates).
+    const hasPrev = !!prev && Number.isFinite(prev?.value);
+    const isAnnualDefault = ANNUAL_DEFAULT_RATE_METRICS.has(metric);
 
-      if (absDelta !== 0) {
-        const relPct =
-          prev.value !== 0
-            ? (absDelta / Math.abs(prev.value)) * 100
-            : null;
+    let pctChange: number | null = null;
+    let label: string;
 
-        const chipClass =
-          "metric-card__delta-chip" +
-          (absDelta > 0
-            ? " metric-card__delta-chip--up"
-            : " metric-card__delta-chip--down");
-
-        deltaNode = (
-          <div className="metric-card__delta-row">
-            <span className={chipClass}>
-              {absDelta > 0 ? "+" : ""}
-              {formatDelta(absDelta, latest.unit)}{" "}
-              {relPct != null && (
-                <>
-                  (
-                  {relPct > 0 ? "+" : ""}
-                  {relPct.toFixed(1)}%)
-                </>
-              )}
-              <span className="metric-card__delta-label">
-                {" "}
-                vs previous
-              </span>
-            </span>
-          </div>
-        );
-      }
+    if (isAnnualDefault) {
+      // Annual default rates: use YoY for the chip
+      label = "YoY";
+      pctChange =
+        yoyPct != null
+          ? yoyPct
+          : hasPrev && prev
+          ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
+          : null;
+    } else {
+      // Normal behaviour: MoM or QoQ
+      label = isQuarterlyRental ? "QoQ" : "MoM";
+      pctChange =
+        latest.mom_pct != null
+          ? latest.mom_pct
+          : hasPrev && prev
+          ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
+          : null;
     }
+
+    if (hasPrev && pctChange != null) {
+      const absDelta = latest.value - prev!.value;
+      const chipClass =
+        "metric-card__delta-chip" +
+        (pctChange > 0
+          ? " metric-card__delta-chip--up"
+          : pctChange < 0
+          ? " metric-card__delta-chip--down"
+          : "");
+
+      deltaNode = (
+        <div className="metric-card__delta-row">
+          <span className={chipClass}>
+            {absDelta > 0 ? "+" : ""}
+            {formatDelta(absDelta, latest.unit)}{" "}
+            {pctChange != null && (
+              <>
+                (
+                {pctChange > 0 ? "+" : ""}
+                {pctChange.toFixed(1)}%)
+              </>
+            )}
+            <span className="metric-card__delta-label"> {label}</span>
+          </span>
+        </div>
+      );
+    }
+  }
   } else {
     // All other metrics (including rentals): generic period-over-period change.
     const hasPrev = !!prev && Number.isFinite(prev.value);
