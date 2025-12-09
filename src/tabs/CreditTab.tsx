@@ -196,9 +196,9 @@ export const CreditTab: React.FC = () => {
       return `${(value / 1_000).toFixed(2)}K`;
     }
     if (abs >= 1) {
-      return `${(value / 1).toFixed(2)}`;
+      return `{(value / 1).toFixed(1)}%`;
     }
-    return `${value.toFixed(1)}`;
+    return `${value.toFixed(2)}`;
   }
 
   // Group rows by metric id so each card can pull its own series
