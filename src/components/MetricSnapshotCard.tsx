@@ -342,8 +342,11 @@ export const MetricSnapshotCard: React.FC<Props> = ({
       <div className="metric-card__value">
         {metric === "rent_level" && latest.unit === "cad"
           ? formatRentLevelValue(latestVal)
+          : metric === "business_debt_to_equity"
+          ? (Number.isFinite(latestVal) ? latestVal.toFixed(2) : "–")
           : formatValue(latestVal, latest.unit)}
       </div>
+
 
       {deltaNode}
 
