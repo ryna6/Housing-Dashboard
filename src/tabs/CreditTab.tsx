@@ -287,7 +287,13 @@ export const CreditTab: React.FC = () => {
       )}
 
       {/* Snapshot cards */}
-      <div className="tab__metrics">
+      <div 
+        className="tab__metrics"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+          gap: "1.5rem",
+      >
         {cards.map((card) => {
           const snapshot = snapshotsByMetric[card.metricKey];
 
@@ -381,7 +387,7 @@ export const CreditTab: React.FC = () => {
       if (card.metricKey === "business_nfc_dsr") {
         treatAsPercentScale = false;
         valueFormatter = (v: number) =>
-          Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
+          Number.isFinite(v) ? `${v.toFixed(0)}%` : "–";
         tooltipValueFormatter = (v: number) =>
           Number.isFinite(v) ? `${v.toFixed(2)}%` : "–";
       }
