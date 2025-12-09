@@ -283,15 +283,8 @@ export const CreditTab: React.FC = () => {
         </div>
       )}
 
-      {/* Snapshot cards row – force horizontal layout with wrapping */}
-      <div
-        className="tab__metrics tab__metrics--wide"
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "1.5rem",
-        }}
-      >
+      {/* Snapshot cards */}
+      <div className="tab__metrics">
         {cards.map((card) => {
           const snapshot = snapshotsByMetric[card.metricKey];
 
