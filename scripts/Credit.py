@@ -267,41 +267,24 @@ def load_mortgage_delinquency_series() -> pd.Series:
 # BIS non-financial corporate DSR – business NFC DSR (quarterly)
 # --------------------------------------------------------------------------------------
 
-def load_business_dsr_from_bis(
-    country: str = "CA",
-    sector: str = "N",
-) -> pd.Series:
+from urllib.parse import urlencode
+import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
+
+def load_business_dsr_from_bis(country: str = "CA") -> pd.Series:
     """
-    Fetch the non-financial corporate debt-service ratio (DSR) from BIS via SDMX.
-
-    BIS publishes DSR data under the WS_DSR dataflow.
-
-    We use the official BIS SDMX REST API:
-        https://stats.bis.org/api/v2/data/dataflow/BIS/WS_DSR
-
-    SDMX key structure:
-        <frequency>.<country>.<sector>.<instrument>.<measure>
-
-    For this dashboard we want:
-        - quarterly frequency (Q)
-        - Canada (CA)
-        - non-financial corporates (N)
-        - total instruments (T)
-        - DSR as a percentage of income (A)
-
-    i.e. key: Q.<country>.<sector>.T.A  → e.g. Q.CA.N.T.A
-
-    Returns
-    -------
-    pd.Series
-        Index: DatetimeIndex (month-start) 'YYYY-MM-01'
-        Values: float DSR (percent of income).
+    Fetch the non-financial corporates debt service ratio (DSR) from BIS.
+    Data flow: WS_DSR (BIS debt service ratio).
+    Series key for NFCs is Q.<country>.N, e.g. Q.CA.N for Canada NFCs.
+    Returns a quarterly series (percent of income).
     """
-    # Official API base
+    # Official v2 SDMX REST path for WS_DSR, version 1.0
     base_url = "https://stats.bis.org/api/v2/data/dataflow/BIS/WS_DSR/1.0"
 
-    # frequency.country.sector.instrument.measure
-    key = f"Q.{country}.{sector}.T.A"
+    # Key: frequency.country.sector → NFC = 'N'
+    key = f"Q.{country}.N"
 
     params = {
         "startPeriod": "1999-Q1",  # or "2015-Q3" if you want shorter history
@@ -309,16 +292,15 @@ def load_business_dsr_from_bis(
     }
     url = f"{base_url}/{key}?{urlencode(params)}"
 
-    logger.info("[BIS] Fetching non-financial corporate DSR from %s", url)
+    logger.info("[BIS] Fetching NFC DSR from %s", url)
 
     try:
         df = pd.read_csv(url)
-    except Exception as exc:  # defensive: network/HTTP/CSV issues
+    except Exception as exc:
         logger.warning("[BIS] Failed to load DSR series: %s", exc)
         return pd.Series(dtype=float)
 
-    # Be defensive about column names. In current BIS CSVs the key columns are
-    # TIME_PERIOD and OBS_VALUE, but we resolve case-insensitively.
+    # BIS CSVs use TIME_PERIOD + OBS_VALUE for time series
     cols_upper = {c.upper(): c for c in df.columns}
     time_col = cols_upper.get("TIME_PERIOD")
     value_col = cols_upper.get("OBS_VALUE") or cols_upper.get("VALUE")
@@ -333,12 +315,9 @@ def load_business_dsr_from_bis(
         columns={time_col: "date", value_col: "value"}
     )
 
-    def _normalize_quarter_label(label: object) -> Optional[str]:
-        """
-        Convert labels like '2012-Q3' or date-like strings to 'YYYY-MM-01'.
-        """
+    def normalize_quarter(label):
+        # Handle labels like '2015-Q3'
         if isinstance(label, str) and "Q" in label:
-            # '2012-Q3' → 2012-07-01 (first month of the quarter)
             try:
                 year_str, q_str = label.split("-Q")
                 q = int(q_str)
@@ -346,29 +325,26 @@ def load_business_dsr_from_bis(
                 return f"{int(year_str):04d}-{month:02d}-01"
             except Exception:
                 return None
-
-        # Fallback: let pandas parse whatever comes back
+        # Fallback: date-like strings
         try:
             dt = pd.to_datetime(label)
             return dt.strftime("%Y-%m-01")
         except Exception:
             return None
 
-    # Normalise labels, then convert to real datetimes + numeric values
-    df["date"] = df["date"].map(_normalize_quarter_label)
+    df["date"] = df["date"].map(normalize_quarter)
     df = df.dropna(subset=["date"])
     df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     df = df.dropna(subset=["date", "value"])
 
     if df.empty:
-        logger.warning("[BIS] No usable DSR observations after cleaning")
+        logger.warning("[BIS] No usable NFC DSR observations after cleaning")
         return pd.Series(dtype=float)
 
-    # Aggregate in case BIS ever returns multiple rows per date
     series = df.groupby("date")["value"].mean().sort_index()
-
-    logger.info("[BIS] Loaded %d DSR observations", len(series))
+    series.name = "business_nfc_dsr"
+    logger.info("[BIS] Loaded %d NFC DSR observations", len(series))
     return series
 
 # --------------------------------------------------------------------------------------
