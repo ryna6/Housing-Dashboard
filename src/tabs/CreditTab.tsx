@@ -50,14 +50,14 @@ const HOUSEHOLD_CARDS: CreditCardConfig[] = [
     valueKey: "value",
   },
   {
-    metricKey: "household_default_rate",
-    title: "Household default rate",
-    // show level (not percentage)
+    metricKey: "household_mortgage_delinquency_rate",
+    title: "Mortgage delinquency rate",
     valueKey: "value",
   },
   {
-    metricKey: "household_mortgage_delinquency_rate",
-    title: "Mortgage delinquency rate",
+    metricKey: "household_default_rate",
+    title: "Household default rate",
+    // show level (not percentage)
     valueKey: "value",
   },
 ];
@@ -80,13 +80,13 @@ const BUSINESS_CARDS: CreditCardConfig[] = [
     valueKey: "value",
   },
   {
-    metricKey: "business_default_rate",
-    title: "Business default rate",
+    metricKey: "business_nfc_dsr",
+    title: "Business debt service ratio",
     valueKey: "value",
   },
   {
-    metricKey: "business_nfc_dsr",
-    title: "Business debt service ratio",
+    metricKey: "business_default_rate",
+    title: "Business default rate",
     valueKey: "value",
   },
 ];
